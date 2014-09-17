@@ -14,6 +14,7 @@ import Data.Word
 
 import Colors
 import Format
+import Transaction
 import RLP
 
 data TransactionReceipt = TransactionReceipt deriving (Show)
@@ -65,12 +66,14 @@ data Peer = Peer {
 instance Format Peer where
   format peer = format (ipAddr peer) ++ ":" ++ show (peerPort peer)
 
+
 data Message =
   Hello { version::Int, clientId::String, capability::[Capability], port::Int, nodeId::String } |
   Ping |
   Pong |
   GetPeers |
   Peers [Peer] |
+  Transactions [Transaction] | 
   Blocks [Block] |
   GetChain { parentSHAs::[String], numChildItems::Int } |
   GetTransactions deriving (Show)
@@ -146,3 +149,22 @@ wireMessage2Obj Hello { version = v,
     RLPNumber p,
     RLPString nId
     ]
+
+wireMessage2Obj (Transactions transactions) =
+  RLPArray [
+    RLPNumber 0x12,
+    RLPArray $ transaction2RLP <$> transactions
+    ]
+  where
+    transaction2RLP t =
+      RLPArray [
+        RLPNumber $ tNonce t,
+        rlpNumber $ gasPrice t,
+        RLPNumber $ tGasLimit t,
+        rlpNumber $ to t,
+        rlpNumber $ value t,
+        RLPNumber $ tInit t,
+        RLPNumber $ v t,
+        RLPString $ r t,
+        RLPString $ s t
+        ]

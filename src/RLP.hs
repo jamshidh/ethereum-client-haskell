@@ -2,7 +2,8 @@
 module RLP (
   RLPObject(..),
   rlpSplit,
-  rlp2Bytes
+  rlp2Bytes,
+  rlpNumber
   ) where
 
 import Control.Monad
@@ -94,3 +95,12 @@ rlp2Bytes (RLPArray innerObjects) =
   where
     innerBytes = concat $ rlp2Bytes <$> innerObjects
 rlp2Bytes obj = error ("Missing case in rlp2Bytes: " ++ show obj)
+
+getIntegerBytes::Integer->[Word8]
+getIntegerBytes 0 = []
+getIntegerBytes val = getIntegerBytes (val `quot` 256) ++ [fromIntegral $ val .&. 0xFF]
+
+rlpNumber::Integer->RLPObject
+rlpNumber x | x < 128 = RLPNumber $ fromIntegral x
+rlpNumber x = RLPString $ w2c <$> getIntegerBytes x
+
