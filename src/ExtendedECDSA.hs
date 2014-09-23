@@ -1,5 +1,6 @@
 
 module ExtendedECDSA (
+  ExtendedSignature(..),
   extSignMsg,
   getPubKeyFromSignature 
   ) where

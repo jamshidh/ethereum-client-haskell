@@ -4,18 +4,22 @@ module Main (
   ) where
 
 import Control.Monad
-import Crypto.Hash.SHA256
+import Crypto.Hash.SHA3
 import Data.Binary.Get
 import Data.Binary.Put
 import Data.Bits
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.ByteString.Internal
+import Data.ByteString.Base16
 import Data.Functor
+import Data.Maybe
 import Data.Time.Clock.POSIX
 import Data.Word
 import Data.String
 import Network.Haskoin.Crypto
+import Network.Haskoin.Internals hiding (Ping, version)
+import Numeric
 
 import Network.Simple.TCP
 
@@ -113,7 +117,12 @@ transaction = [
   0xd9, 0x66, 0x77, 0x5e, 0xcb, 0xa2, 0x89, 0x71,
   0xf3, 0xdf]
 
-main = connect "127.0.0.1" "44090" $ \(socket, remoteAddr) -> do
+getAddress prvKey =
+  let PubKey point = derivePubKey prvKey in
+  drop 24 $ concat $ map (flip showHex "") $ B.unpack $ hash 256 $ fst $ decode $ B.pack $ map c2w $ showHex (fromJust $ getX point) "" ++ showHex (fromJust $ getY point) ""
+
+
+main = connect "127.0.0.1" "41393" $ \(socket, remoteAddr) -> do
 --main = connect "54.72.69.180" "30303" $ \(socket, remoteAddr) -> do
 --main = connect "54.76.56.74" "30303" $ \(socket, remoteAddr) -> do
   putStrLn "Connected"
@@ -143,79 +152,35 @@ clientId = "Ethereum(G)/v0.6.4//linux/Go",
 
   sendCommand socket $ B.pack payload
 
-
-  sendCommand socket $ B.pack $ rlp2Bytes $
-    RLPArray [RLPNumber 0x12,
-              RLPArray[
-                RLPNumber 0, --nonce
-                RLPString "\t\CANNr\160\NUL", --gas
-                RLPNumber 510,--gas
-                RLPString "[B\189\SOH\255{6\140\216\nG|\177\207\r@~+\FS\190", --to
-                RLPNumber 1,--amount
-                RLPNumber 0,--init
-                RLPNumber 27,
-                RLPString "\137h`\187\153\205\209\169G\157\245\&9\187/\242(\222\NULQ\t\181Y\130R\226\134\170\230\167p\252\212",
-                RLPString "}\147F\215\187\128\149\181\251\NAK-\128i\GS\176\143\244\229\ETX\223p\135\217fw^\203\162\137q\243\223"
-                ]
-             ]
-
-  readAndOutput socket []
-
-
-main2 = do
-  {-
-  print $ rlp2Bytes $
-    wireMessage2Obj $
-    Transactions [
-      signTransaction 1 $
-        Transaction {
-          tNonce = 0,
-          gasPrice = 1, -- "\t\CANNr\160\NUL", --gas
-          tGasLimit = 510,
-          to = "[B\189\SOH\255{6\140\216\nG|\177\207\r@~+\FS\190", --to,
-          value = 1,
-          tInit = 0,
-          v = 27,
-          r = "\137h`\187\153\205\209\169G\157\245\&9\187/\242(\222\NULQ\t\181Y\130R\226\134\170\230\167p\252\212",
-          s = "}\147F\215\187\128\149\181\251\NAK-\128i\GS\176\143\244\229\ETX\223p\135\217fw^\203\162\137q\243\223"
-          }
-      ]
-  -}
-
   let Just prvKey = makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
   
-  putStrLn $ format $ B.pack $ rlp2Bytes $
-    wireMessage2Obj $
-    Transactions [
-      signTransaction prvKey $
-        Transaction {
-          tNonce = 0,
-          gasPrice = 0x9184e72a000,
-          tGasLimit = 510,
-          to = 0x5b42bd01ff7b368cd80a477cb1cf0d407e2b1cbe,
-          value = 1,
-          tInit = 0,
-          v = 0,
-          r = "",
-          s = ""
-          }
-      ]
+  print $ getAddress prvKey
+
+  let tx = Transaction {
+         tNonce = 7,
+         gasPrice = 0x9184e72a000,
+         tGasLimit = 510,
+         --tGasLimit = 1,
+         to = 0x5b42bd01ff7b368cd80a477cb1cf0d407e2b1cbe,
+         value = 3,
+         tInit = 0,
+         v = 0,
+         r = 0,
+         s = 0
+         }
+
+  signedTx <- withSource devURandom $
+                   signTransaction prvKey tx
+
+  let commandBytes = 
+       B.pack $ rlp2Bytes $ 
+           wireMessage2Obj $
+               Transactions [signedTx]
+
+  putStrLn $ format commandBytes
+
+  sendCommand socket commandBytes
 
 
-  putStrLn $ format $ B.pack $ rlp2Bytes $
-    wireMessage2Obj $
-    Transactions [
-      signTransaction prvKey $
-        Transaction {
-          tNonce = 0,
-          gasPrice = 0x09184e72a000, --gas
-          tGasLimit = 0x4255,
-          to = 0x79b08ad8787060333663d19704909ee7b1903e58, --to,
-          value = 1000000000000000000000,
-          tInit = 0,
-          v = 0,
-          r = "",
-          s = ""
-          }
-      ]
+  readAndOutput socket []
 

@@ -3,7 +3,8 @@ module RLP (
   RLPObject(..),
   rlpSplit,
   rlp2Bytes,
-  rlpNumber
+  rlpNumber,
+  getNumber
   ) where
 
 import Control.Monad
@@ -19,6 +20,8 @@ import Data.Functor
 import Data.Time.Clock.POSIX
 import Data.Word
 import Data.String
+
+import Util
 
 data RLPObject = RLPNumber Int | RLPString String | RLPArray [RLPObject] deriving (Show)
 
@@ -104,3 +107,6 @@ rlpNumber::Integer->RLPObject
 rlpNumber x | x < 128 = RLPNumber $ fromIntegral x
 rlpNumber x = RLPString $ w2c <$> getIntegerBytes x
 
+getNumber::RLPObject->Integer
+getNumber (RLPNumber n) = fromIntegral n
+getNumber (RLPString s) = byteString2Integer $ B.pack $ map c2w s

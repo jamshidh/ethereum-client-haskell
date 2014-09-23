@@ -9,7 +9,7 @@ extra-source-files: ""
 executable ethereumH
     build-depends: base -any, cryptohash, binary, bytestring, time, 
                    network-simple, utf8-string, haskoin,
-                   base16-bytestring
+                   base16-bytestring, mtl
     main-is: Main.hs
     buildable: True
     hs-source-dirs: src

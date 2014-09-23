@@ -106,7 +106,20 @@ rlpArray2Peer (RLPArray [RLPString [c1, c2, c3, c4], RLPNumber p, RLPString id])
     }
 rlpArray2Peer x = error ("rlpArray2Peer called on non block object: " ++ show x)
 
-
+rlpArray2Transaction::RLPObject->Transaction
+rlpArray2Transaction (RLPArray [n, gp, gl, to, val, i, v, r, s]) =
+  Transaction {
+    tNonce = fromIntegral $ getNumber n,
+    gasPrice = fromIntegral $ getNumber gp,
+    tGasLimit = fromIntegral $ getNumber gl,
+    to = fromIntegral $ getNumber to,
+    value = fromIntegral $ getNumber val,
+    tInit = fromIntegral $ getNumber i,
+    v = fromIntegral $ getNumber v,
+    r = fromIntegral $ getNumber r,
+    s = fromIntegral $ getNumber s
+    }
+rlpArray2Transaction x = error ("rlpArray2Transaction called on non block object: " ++ show x)
 
 obj2WireMessage::RLPObject->Message
 obj2WireMessage (RLPArray (RLPNumber 0x00:RLPNumber v:RLPNumber 0:RLPString cId:RLPNumber cap:RLPNumber p:RLPString nId:[])) =
@@ -120,6 +133,8 @@ obj2WireMessage (RLPArray [RLPNumber 0x02]) = Ping
 obj2WireMessage (RLPArray [RLPNumber 0x03]) = Pong
 obj2WireMessage (RLPArray [RLPNumber 0x10]) = GetPeers
 obj2WireMessage (RLPArray (RLPNumber 0x11:peers)) = Peers $ rlpArray2Peer <$> peers
+obj2WireMessage (RLPArray (RLPNumber 0x12:transactions)) =
+  Transactions $ rlpArray2Transaction <$> transactions
 obj2WireMessage (RLPArray (RLPNumber 0x13:blocks)) =
   Blocks $ getBlockFromRLP <$> blocks
 
@@ -151,20 +166,17 @@ wireMessage2Obj Hello { version = v,
     ]
 
 wireMessage2Obj (Transactions transactions) =
-  RLPArray [
-    RLPNumber 0x12,
-    RLPArray $ transaction2RLP <$> transactions
-    ]
+  RLPArray (RLPNumber 0x12:(transaction2RLP <$> transactions))
   where
     transaction2RLP t =
       RLPArray [
-        RLPNumber $ tNonce t,
+        rlpNumber $ tNonce t,
         rlpNumber $ gasPrice t,
         RLPNumber $ tGasLimit t,
         rlpNumber $ to t,
         rlpNumber $ value t,
         RLPNumber $ tInit t,
-        RLPNumber $ v t,
-        RLPString $ r t,
-        RLPString $ s t
+        RLPNumber $ fromIntegral $ v t,
+        rlpNumber $ r t,
+        rlpNumber $ s t
         ]

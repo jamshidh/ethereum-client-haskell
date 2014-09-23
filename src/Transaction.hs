@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 
 module Transaction (
   Transaction(..),
@@ -7,12 +8,18 @@ module Transaction (
 import Crypto.Hash.SHA3
 import Data.Bits
 import qualified Data.ByteString as B
+import Data.ByteString.Base16
+import Data.ByteString.Internal
 import Data.Word
-import Network.Haskoin.Crypto
+import Network.Haskoin.Internals
+import Numeric
+
+import ExtendedECDSA
 
 import Format
 import PrettyBytes
 import RLP
+import Util
 
 import Debug.Trace
 
@@ -22,46 +29,45 @@ data Word160 = Word160 Word32 Word32 Word32 Word32 Word32 deriving (Show)
 
 data Transaction =
   Transaction {
-    tNonce::Int,
+    tNonce::Integer,
     gasPrice::Integer,
     tGasLimit::Int,
     to::Integer,
     value::Integer,
     tInit::Int,
-    v::Int,
-    r::String,
-    s::String
+    v::Word8,
+    r::Integer,
+    s::Integer
     } deriving (Show)
 
---I hate this, it is an ugly way to create an Integer from its component bytes.
---There should be an easier way....
---See http://stackoverflow.com/questions/25854311/efficient-packing-bytes-into-integers
-stupidConvert::B.ByteString->Integer
-stupidConvert x = stupidConvert' $ B.unpack x
-  where
-    stupidConvert'::[Word8]->Integer
-    stupidConvert' [] = 0
-    stupidConvert' (x:rest) = fromIntegral x `shift` (8 * length rest) + stupidConvert' rest
+addLeadingZerosTo64::String->String
+addLeadingZerosTo64 x = replicate (64 - length x) '0' ++ x
 
-
-signTransaction::PrvKey->Transaction->Transaction
-signTransaction privKey t =
+signTransaction::Monad m=>PrvKey->Transaction->SecretT m Transaction
+signTransaction privKey t = 
   trace ("data: " ++ format (B.pack theData) ++ "\n") $
-  trace ("hash: " ++ show theHash ++ "\n") $
-  t {
-    v = 0x1c,
-    r = show $ sigR signature,
-    s = show $ sigS signature
+  trace ("hash: " ++ show theHash ++ "\n") $ do
+  ExtendedSignature signature yIsOdd <- extSignMsg theHash privKey
+
+  return $ t {
+    v = if yIsOdd then 0x1c else 0x1b,
+    r =
+      case decode $ B.pack $ map c2w $ addLeadingZerosTo64 $ showHex (sigR signature) "" of
+        (val, "") -> byteString2Integer val
+        _ -> error ("error: sigR is: " ++ showHex (sigR signature) ""),
+    s = 
+      case decode $ B.pack $ map c2w $ addLeadingZerosTo64 $ showHex (sigS signature) "" of
+        (val, "") -> byteString2Integer val
+        _ -> error ("error: sigS is: " ++ showHex (sigS signature) "")
     }
   where
     theData = rlp2Bytes $
               RLPArray [
-                RLPNumber $ tNonce t,
+                rlpNumber $ tNonce t,
                 rlpNumber $ gasPrice t,
                 RLPNumber $ tGasLimit t,
                 rlpNumber $ to t,
                 rlpNumber $ value t,
                 RLPNumber $ tInit t
                 ]
-    theHash = fromInteger $ stupidConvert $ hash 256 $ B.pack theData
-    signature = detSignMsg theHash privKey
+    theHash = fromInteger $ byteString2Integer $ hash 256 $ B.pack theData
