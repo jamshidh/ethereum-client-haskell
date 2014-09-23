@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wall #-}
 
 module Wire (
   Message(..),
@@ -10,35 +11,20 @@ import Data.Bits
 import Data.ByteString.Internal
 import Data.Functor
 import Data.List
+import Data.Time.Clock.POSIX
 import Data.Word
 
+import Block
 import Colors
 import Format
 import Transaction
 import RLP
+import Debug.Trace
 
-data TransactionReceipt = TransactionReceipt deriving (Show)
 
-data BlockData = BlockData {
-  parentHash::String,
-  unclesHash::String,
-  coinbase::String,
-  stateRoot::String,
-  transactionsTrie::String,
-  difficulty::Int,
-  number::Int,
-  minGasPrice::Int,
-  gasLimit::Int,
-  gasUsed::Int,
-  timestamp::String,
-  extraData::String,
-  nonce::String
-} deriving (Show)
 
-data Block = Block BlockData [BlockData] [TransactionReceipt]
-
-instance Show Block where
-  show x = "<BLOCK>"
+--instance Show Block where
+--  show x = "<BLOCK>"
 
 data Capability =
   ProvidesPeerDiscoveryService | 
@@ -83,17 +69,33 @@ instance Format Message where
   format x = show x
 
 getStringFromRLP::RLPObject->String
-getStringFromRLP (RLPString s) = s
+getStringFromRLP (RLPString theString) = theString
 getStringFromRLP x = error ("getStringFromRLP called on non string object: " ++ show x)
 
 getBlockDataFromRLP::RLPObject->BlockData
-getBlockDataFromRLP (RLPArray [d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13]) = BlockData {}
+getBlockDataFromRLP (RLPArray [v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13]) =
+  BlockData {
+    parentHash = fromIntegral $ getNumber v1,
+    unclesHash = fromIntegral $ getNumber v2,
+    coinbase = fromIntegral $ getNumber v3,
+    stateRoot = fromIntegral $ getNumber v4,
+    transactionsTrie = fromIntegral $ getNumber v5,
+    difficulty = fromIntegral $ getNumber v6,
+    number = fromIntegral $ getNumber v7,
+    minGasPrice = fromIntegral $ getNumber v8,
+    gasLimit = fromIntegral $ getNumber v9,
+    gasUsed = fromIntegral $ getNumber v10,
+    timestamp = posixSecondsToUTCTime $ fromIntegral $ getNumber v11,
+    extraData = fromIntegral $ getNumber v12,
+    nonce =fromIntegral $ getNumber v13
+    }  
 getBlockDataFromRLP (RLPArray arr) = error ("getBlockDataFromRLP called on object with wrong amount of data, length arr = " ++ show (length arr))
 getBlockDataFromRLP x = error ("getBlockDataFromRLP called on non block object: " ++ show x)
 
-
 getBlockFromRLP::RLPObject->Block
-getBlockFromRLP (RLPArray [d1, d2, d3]) = Block {}
+getBlockFromRLP (RLPArray [blockData, RLPArray uncles, transactionReceipt]) =
+  trace (show transactionReceipt) $
+  Block (getBlockDataFromRLP blockData) (getBlockDataFromRLP <$> uncles) []
 getBlockFromRLP (RLPArray arr) = error ("getBlockFromRLP called on object with wrong amount of data, length arr = " ++ show (length arr))
 getBlockFromRLP x = error ("getBlockFromRLP called on non block object: " ++ show x)
 
