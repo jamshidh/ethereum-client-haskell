@@ -42,9 +42,7 @@ addLeadingZerosTo64::String->String
 addLeadingZerosTo64 x = replicate (64 - length x) '0' ++ x
 
 signTransaction::Monad m=>PrvKey->Transaction->SecretT m Transaction
-signTransaction privKey t = 
-  trace ("data: " ++ format (B.pack theData) ++ "\n") $
-  trace ("hash: " ++ show theHash ++ "\n") $ do
+signTransaction privKey t = do
   ExtendedSignature signature yIsOdd <- extSignMsg theHash privKey
 
   return $ t {
