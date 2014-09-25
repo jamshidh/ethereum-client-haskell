@@ -2,8 +2,8 @@
 module Address (
   Address(..),
   prvKey2Address,
-  rlpAddress,
-  getAddress
+  rlp2Address,
+  address2RLP
   ) where
 
 import Crypto.Hash.SHA3
@@ -17,9 +17,16 @@ import Network.Haskoin.Crypto hiding (Address)
 import Network.Haskoin.Internals hiding (Address)
 import Numeric
 
+import Colors
+import Format
 import RLP
+import Util
 
 newtype Address = Address Word160 deriving (Show, Eq)
+
+instance Format Address where
+  format (Address x) = yellow $ padZeros 20 $ showHex x ""
+
 
 --TODO- fix the signature of this to create an Address
 prvKey2Address::PrvKey->ByteString
@@ -37,8 +44,8 @@ prvKey2Address prvKey =
         _ -> error "getY failed in prvKey2Address"
 
 
-rlpAddress::Address->RLPObject
-rlpAddress (Address a) = RLPString $ BLC.unpack $ encode a
+address2RLP::Address->RLPObject
+address2RLP (Address a) = RLPString $ BLC.unpack $ encode a
 
-getAddress::RLPObject->Address
-getAddress (RLPString s) = Address $ decode $ BLC.pack s
+rlp2Address::RLPObject->Address
+rlp2Address (RLPString s) = Address $ decode $ BLC.pack s

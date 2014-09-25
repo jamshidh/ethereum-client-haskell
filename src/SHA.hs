@@ -17,11 +17,9 @@ import Numeric
 
 import Format
 import RLP
+import Util
 
 newtype SHA = SHA Word256 deriving (Show)
-
-padZeros::Int->String->String
-padZeros n s = replicate (n - length s) '0' ++ s
 
 instance Format SHA where
   format (SHA x) = padZeros 32 $ showHex x ""

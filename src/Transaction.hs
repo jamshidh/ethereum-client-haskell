@@ -2,7 +2,8 @@
 
 module Transaction (
   Transaction(..),
-  signTransaction
+  signTransaction,
+  rlp2Transaction
   ) where
 
 import Crypto.Hash.SHA3
@@ -62,8 +63,24 @@ signTransaction privKey t = do
                 rlpNumber $ tNonce t,
                 rlpNumber $ gasPrice t,
                 RLPNumber $ tGasLimit t,
-                rlpAddress $ to t,
+                address2RLP $ to t,
                 rlpNumber $ value t,
                 rlpNumber $ tInit t
                 ]
     theHash = fromInteger $ byteString2Integer $ hash 256 $ B.pack theData
+
+rlp2Transaction::RLPObject->Transaction
+rlp2Transaction (RLPArray [n, gp, gl, to, val, i, v, r, s]) =
+  Transaction {
+    tNonce = fromIntegral $ getNumber n,
+    gasPrice = fromIntegral $ getNumber gp,
+    tGasLimit = fromIntegral $ getNumber gl,
+    to = rlp2Address to,
+    value = fromIntegral $ getNumber val,
+    tInit = fromIntegral $ getNumber i,
+    v = fromIntegral $ getNumber v,
+    r = fromIntegral $ getNumber r,
+    s = fromIntegral $ getNumber s
+    }
+rlp2Transaction x = error ("rlp2Transaction called on non block object: " ++ show x)
+
