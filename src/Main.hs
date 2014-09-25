@@ -18,13 +18,15 @@ import Data.Time.Clock.POSIX
 import Data.Word
 import Data.String
 import Network.Haskoin.Crypto
-import Network.Haskoin.Internals hiding (Ping, version)
+import Network.Haskoin.Internals hiding (Ping, Pong, version, Message)
 import Numeric
 
 import Network.Simple.TCP
 
+import Address
 import Format
 import RLP
+import SHA
 import Transaction
 import Wire
 
@@ -60,6 +62,11 @@ sendCommand socket payload = do
   let theData2 = runPut $ ethereumHeader payload
   send socket $ B.concat $ BL.toChunks theData2
 
+sendMessage::Socket->Message->IO ()
+sendMessage socket msg = sendCommand socket $ B.pack $ rlp2Bytes $ wireMessage2Obj msg
+  
+
+
 
 printData::Socket->[Word8]->IO [Word8]
 printData socket (0x22:0x40:0x08:0x91:s1:s2:s3:s4:remainder) | payloadLength <= length remainder = do
@@ -72,13 +79,13 @@ printData socket (0x22:0x40:0x08:0x91:s1:s2:s3:s4:remainder) | payloadLength <= 
   putStrLn ("Message: " ++ format msg)
   --let payloadString = runGet (BL.pack $ take payloadLength remainder)
   case msg of
-    Ping -> sendCommand socket $ B.pack $ rlp2Bytes $ RLPArray [RLPNumber 0x03]
+    Ping -> sendMessage socket Pong
     GetPeers -> do
-      sendCommand socket $ B.pack $ rlp2Bytes $ RLPArray [RLPNumber 0x11]
-      sendCommand socket $ B.pack $ rlp2Bytes $ RLPArray [RLPNumber 0x10]
+      sendMessage socket $ Peers []
+      sendMessage socket $ GetPeers
     GetTransactions -> do
-      sendCommand socket $ B.pack $ rlp2Bytes $ RLPArray [RLPNumber 0x12]
-      sendCommand socket $ B.pack $ rlp2Bytes $ RLPArray [RLPNumber 0x16]
+      sendMessage socket $ Transactions []
+      sendMessage socket $ GetTransactions
     _-> return ()
   printData socket $ drop payloadLength remainder
     where
@@ -100,40 +107,16 @@ ethereumHeader payload = do
   putWord32be $ fromIntegral $ B.length payload
   putByteString payload
 
-transaction = [
-  --0x22, 0x40, 0x08, 0x91, 0x00, 0x00, 0x00, 0x6a,
-  0xf8, 0x68, 0x12, 0xf8, 0x65, 0x80, 0x86, 0x09,
-  0x18, 0x4e, 0x72, 0xa0, 0x00, 0x82, 0x01, 0xfe,
-  0x94, 0x5b, 0x42, 0xbd, 0x01, 0xff, 0x7b, 0x36,
-  0x8c, 0xd8, 0x0a, 0x47, 0x7c, 0xb1, 0xcf, 0x0d,
-  0x40, 0x7e, 0x2b, 0x1c, 0xbe, 0x01, 0x80, 0x1b,
-  0xa0, 0x89, 0x68, 0x60, 0xbb, 0x99, 0xcd, 0xd1,
-  0xa9, 0x47, 0x9d, 0xf5, 0x39, 0xbb, 0x2f, 0xf2,
-  0x28, 0xde, 0x00, 0x51, 0x09, 0xb5, 0x59, 0x82,
-  0x52, 0xe2, 0x86, 0xaa, 0xe6, 0xa7, 0x70, 0xfc,
-  0xd4, 0xa0, 0x7d, 0x93, 0x46, 0xd7, 0xbb, 0x80,
-  0x95, 0xb5, 0xfb, 0x15, 0x2d, 0x80, 0x69, 0x1d,
-  0xb0, 0x8f, 0xf4, 0xe5, 0x03, 0xdf, 0x70, 0x87,
-  0xd9, 0x66, 0x77, 0x5e, 0xcb, 0xa2, 0x89, 0x71,
-  0xf3, 0xdf]
-
-getAddress prvKey =
-  let PubKey point = derivePubKey prvKey in
-  drop 24 $ concat $ map (flip showHex "") $ B.unpack $ hash 256 $ fst $ decode $ B.pack $ map c2w $ showHex (fromJust $ getX point) "" ++ showHex (fromJust $ getY point) ""
-
-
-main = connect "127.0.0.1" "41393" $ \(socket, remoteAddr) -> do
---main = connect "54.72.69.180" "30303" $ \(socket, remoteAddr) -> do
+--main = connect "127.0.0.1" "41393" $ \(socket, remoteAddr) -> do
+main = connect "127.0.0.1" "30303" $ \(socket, remoteAddr) -> do
 --main = connect "54.76.56.74" "30303" $ \(socket, remoteAddr) -> do
   putStrLn "Connected"
-
-  putStrLn $ show $ rlpSplit transaction
 
   timestamp1 <- round `fmap` getPOSIXTime
 
   let msg = Hello {
         version = 23,
-clientId = "Ethereum(G)/v0.6.4//linux/Go",
+        clientId = "Ethereum(G)/v0.6.4//linux/Go",
         capability = [ProvidesPeerDiscoveryService,
                       ProvidesTransactionRelayingService,
                       ProvidesBlockChainQueryingService],
@@ -142,28 +125,20 @@ clientId = "Ethereum(G)/v0.6.4//linux/Go",
 
         }
 
-  let obj = wireMessage2Obj msg
-  
-  let payload = rlp2Bytes obj
-
-  let (obj', remainder) = rlpSplit payload
-  putStrLn ("obj: " ++ show obj')
-  putStrLn ("remainder: " ++ show remainder)
-
-  sendCommand socket $ B.pack payload
+  sendMessage socket $ msg
 
   let Just prvKey = makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
   
-  print $ getAddress prvKey
+  putStrLn $ "Using prvKey: " ++ show (prvKey2Address prvKey)
 
   let tx = Transaction {
-         tNonce = 7,
+         tNonce = 18,
          gasPrice = 0x9184e72a000,
-         tGasLimit = 510,
+         tGasLimit = 550,
          --tGasLimit = 1,
-         to = 0x5b42bd01ff7b368cd80a477cb1cf0d407e2b1cbe,
+         to = Address 0, --0x5b42bd01ff7b368cd80a477cb1cf0d407e2b1cbe,
          value = 3,
-         tInit = 0,
+         tInit = 0x600260005460206000f2,
          v = 0,
          r = 0,
          s = 0
@@ -172,15 +147,14 @@ clientId = "Ethereum(G)/v0.6.4//linux/Go",
   signedTx <- withSource devURandom $
                    signTransaction prvKey tx
 
-  let commandBytes = 
-       B.pack $ rlp2Bytes $ 
-           wireMessage2Obj $
-               Transactions [signedTx]
 
-  putStrLn $ format commandBytes
+  sendMessage socket $ Transactions [signedTx]
 
-  sendCommand socket commandBytes
+  sendMessage socket $ GetChain [SHA 0x3281f4b79941b15e2fd78eb851fddee144cd7d5f8169beaf0b58fbba7fedea32] 0x100
 
+
+  putStrLn "Transaction has been sent"
 
   readAndOutput socket []
 
+--Transaction message bytes: f8-5e-12-f8-5b-80-86-09-18-4e-72-a0-00-82-02-27-80-03-8a-60-02-60-00-54-60-20-60-00-f2-1c-a0-09-63-39-24-4d-c4-93-bd-94-9e-92-6e-dc-2e-8e-d4-4d-97-26-d0-33-ff-67-00-30-69-3d-d1-09-5e-3a-61-a0-26-60-79-5e-0f-27-73-6f-5d-13-8a-db-2e-8d-0b-a6-18-ec-b7-57-fb-6c-0f-72-22-63-b4-9a-3c-0b-22-bd

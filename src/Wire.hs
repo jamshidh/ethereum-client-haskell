@@ -14,11 +14,15 @@ import Data.List
 import Data.Time.Clock.POSIX
 import Data.Word
 
+import Address
 import Block
 import Colors
 import Format
 import Transaction
+import TransactionReceipt
 import RLP
+import SHA
+
 import Debug.Trace
 
 
@@ -61,11 +65,17 @@ data Message =
   Peers [Peer] |
   Transactions [Transaction] | 
   Blocks [Block] |
-  GetChain { parentSHAs::[String], numChildItems::Int } |
+  GetChain { parentSHAs::[SHA], numChildItems::Integer } |
   GetTransactions deriving (Show)
 
 instance Format Message where
+  format Ping = blue "Ping"
+  format Pong = blue "Pong"
   format (Peers peers) = blue "Peers: " ++ intercalate ", " (format <$> peers)
+  format (GetChain pSHAs numChild) =
+    blue "GetChain" ++ " (max: " ++ show numChild ++ "):\n    " ++
+    intercalate ",\n    " (format <$> pSHAs)
+  format GetTransactions = blue "GetTransactions"
   format x = show x
 
 getStringFromRLP::RLPObject->String
@@ -89,14 +99,23 @@ getBlockDataFromRLP (RLPArray [v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12
     extraData = fromIntegral $ getNumber v12,
     nonce =fromIntegral $ getNumber v13
     }  
-getBlockDataFromRLP (RLPArray arr) = error ("getBlockDataFromRLP called on object with wrong amount of data, length arr = " ++ show (length arr))
+getBlockDataFromRLP (RLPArray arr) = error ("getBlockDataFromRLP called on object with wrong amount of data, length arr = " ++ show arr)
 getBlockDataFromRLP x = error ("getBlockDataFromRLP called on non block object: " ++ show x)
 
+getTransactionReceiptFromRLP::RLPObject->TransactionReceipt
+getTransactionReceiptFromRLP (RLPArray [t, pts, gasUsed]) =
+  TransactionReceipt {
+    theTransaction = rlpArray2Transaction t,
+    postTransactionState = PostTransactionState,
+    cumulativeGasUsed = getNumber gasUsed
+    }
+
+
 getBlockFromRLP::RLPObject->Block
-getBlockFromRLP (RLPArray [blockData, RLPArray uncles, transactionReceipt]) =
-  trace (show transactionReceipt) $
-  Block (getBlockDataFromRLP blockData) (getBlockDataFromRLP <$> uncles) []
-getBlockFromRLP (RLPArray arr) = error ("getBlockFromRLP called on object with wrong amount of data, length arr = " ++ show (length arr))
+getBlockFromRLP (RLPArray [blockData, RLPArray transactionReceipts, RLPArray uncles]) =
+  trace (show transactionReceipts) $
+  Block (getBlockDataFromRLP blockData) (getTransactionReceiptFromRLP <$> transactionReceipts) []
+getBlockFromRLP (RLPArray arr) = error ("getBlockFromRLP called on object with wrong amount of data, length arr = " ++ show arr)
 getBlockFromRLP x = error ("getBlockFromRLP called on non block object: " ++ show x)
 
 rlpArray2Peer::RLPObject->Peer
@@ -114,7 +133,7 @@ rlpArray2Transaction (RLPArray [n, gp, gl, to, val, i, v, r, s]) =
     tNonce = fromIntegral $ getNumber n,
     gasPrice = fromIntegral $ getNumber gp,
     tGasLimit = fromIntegral $ getNumber gl,
-    to = fromIntegral $ getNumber to,
+    to = getAddress to,
     value = fromIntegral $ getNumber val,
     tInit = fromIntegral $ getNumber i,
     v = fromIntegral $ getNumber v,
@@ -141,10 +160,10 @@ obj2WireMessage (RLPArray (RLPNumber 0x13:blocks)) =
   Blocks $ getBlockFromRLP <$> blocks
 
 obj2WireMessage (RLPArray (RLPNumber 0x14:items)) =
-  GetChain parentSHAs numChildren
+  GetChain parentSHAs $ fromIntegral numChildren
   where
     RLPNumber numChildren = last items
-    parentSHAs = getStringFromRLP <$> init items
+    parentSHAs = rlp2SHA <$> init items
 
 obj2WireMessage (RLPArray [RLPNumber 0x16]) = GetTransactions
 
@@ -152,6 +171,8 @@ obj2WireMessage (RLPArray x) = error ("Missing message: " ++ show x)
 
 
 wireMessage2Obj::Message->RLPObject
+wireMessage2Obj Ping = RLPArray $ [RLPNumber 0x2]
+wireMessage2Obj Pong = RLPArray $ [RLPNumber 0x3]
 wireMessage2Obj Hello { version = v,
                         clientId = cId,
                         capability = cap,
@@ -175,10 +196,18 @@ wireMessage2Obj (Transactions transactions) =
         rlpNumber $ tNonce t,
         rlpNumber $ gasPrice t,
         RLPNumber $ tGasLimit t,
-        rlpNumber $ to t,
+        rlpAddress $ to t,
         rlpNumber $ value t,
-        RLPNumber $ tInit t,
+        rlpNumber $ tInit t,
         RLPNumber $ fromIntegral $ v t,
         rlpNumber $ r t,
         rlpNumber $ s t
         ]
+
+wireMessage2Obj (GetChain pSHAs numChildren) = 
+  RLPArray $ [RLPNumber 0x14] ++
+  (sha2RLP <$> pSHAs) ++
+  [rlpNumber numChildren]
+wireMessage2Obj GetTransactions = RLPArray [RLPNumber 0x16]
+
+    

@@ -11,11 +11,12 @@ import qualified Data.ByteString as B
 import Data.ByteString.Base16
 import Data.ByteString.Internal
 import Data.Word
-import Network.Haskoin.Internals
+import Network.Haskoin.Internals hiding (Address)
 import Numeric
 
 import ExtendedECDSA
 
+import Address
 import Format
 import PrettyBytes
 import RLP
@@ -23,18 +24,15 @@ import Util
 
 import Debug.Trace
 
-data Word160 = Word160 Word32 Word32 Word32 Word32 Word32 deriving (Show)
-
-
 
 data Transaction =
   Transaction {
     tNonce::Integer,
     gasPrice::Integer,
     tGasLimit::Int,
-    to::Integer,
+    to::Address,
     value::Integer,
-    tInit::Int,
+    tInit::Integer,
     v::Word8,
     r::Integer,
     s::Integer
@@ -66,8 +64,8 @@ signTransaction privKey t =
                 rlpNumber $ tNonce t,
                 rlpNumber $ gasPrice t,
                 RLPNumber $ tGasLimit t,
-                rlpNumber $ to t,
+                rlpAddress $ to t,
                 rlpNumber $ value t,
-                RLPNumber $ tInit t
+                rlpNumber $ tInit t
                 ]
     theHash = fromInteger $ byteString2Integer $ hash 256 $ B.pack theData

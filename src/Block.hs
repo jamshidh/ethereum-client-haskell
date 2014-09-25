@@ -19,11 +19,11 @@ import ExtendedECDSA
 import Format
 import PrettyBytes
 import RLP
+import Transaction
+import TransactionReceipt
 import Util
 
 import Debug.Trace
-
-data TransactionReceipt = TransactionReceipt deriving (Show)
 
 data BlockData = BlockData {
   parentHash::Integer,
@@ -41,4 +41,8 @@ data BlockData = BlockData {
   nonce::Integer
 } deriving (Show)
 
-data Block = Block BlockData [BlockData] [TransactionReceipt] deriving (Show)
+data Block = Block {
+  blockData::BlockData,
+  receiptTransactions::[TransactionReceipt],
+  blockUncles::[BlockData]
+  } deriving (Show)
