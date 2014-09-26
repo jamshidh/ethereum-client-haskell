@@ -6,7 +6,6 @@ module Block (
   getBlockFromRLP
   ) where
 
-import Crypto.Hash.SHA3
 import Data.Bits
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
@@ -56,9 +55,11 @@ data Block = Block {
 
 instance Format Block where
   format b@Block{blockData=bd, receiptTransactions=[], blockUncles=[]} =
-    blue ("Block #" ++ show (number bd) ++ " (no transactions, no uncles): ") ++
-    BC.unpack (encode (hash 256 (B.pack $ rlp2Bytes $ rlpEncode b))) ++
-    format bd
+    blue ("Block #" ++ show (number bd)) ++ " " ++
+    format (hash (B.pack $ rlp2Bytes $ rlpEncode b)) ++ "\n" ++
+    --BC.unpack (encode (hash 256 (B.pack $ rlp2Bytes $ rlpEncode b))) ++ "\n" ++
+    format bd ++
+    "        (no transactions, no uncles)"
 
 instance RLPSerializable Block where
   rlpDecode (RLPArray [blockData, RLPArray transactionReceipts, RLPArray uncles]) =

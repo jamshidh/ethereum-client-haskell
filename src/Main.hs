@@ -4,7 +4,6 @@ module Main (
   ) where
 
 import Control.Monad
-import Crypto.Hash.SHA3
 import Data.Binary.Get
 import Data.Binary.Put
 import Data.Bits
@@ -137,15 +136,4 @@ main = connect "127.0.0.1" "30303" $ \(socket, remoteAddr) -> do
   putStrLn "Transaction has been sent"
 
   readAndOutput socket
-
-main2 = do
-  let bytes = [248,183,248,179,160,11,245,9,22,218,43,135,138,4,114,225,163,235,236,138,158,246,62,195,180,171,97,188,180,50,201,205,215,68,229,224,97,160,29,204,77,232,222,199,93,122,171,133,181,103,182,204,212,26,211,18,69,27,148,138,116,19,240,161,66,253,64,212,147,71,148,108,207,107,92,51,174,32,23,166,199,107,135,145,202,97,39,106,105,171,142,160,101,198,63,17,219,190,89,68,9,114,151,18,156,75,239,89,209,217,248,148,97,89,7,72,152,87,59,163,198,99,112,47,128,131,199,167,60,130,71,64,134,9,24,78,114,160,0,131,1,232,72,128,132,84,36,177,229,128,160,208,75,195,104,225,120,86,175,0,223,4,187,59,241,126,101,151,241,13,241,113,141,80,4,196,189,251,177,41,74,40,72,192,192]
-  print $ encode $ hash 256 $ B.pack bytes
-  let (rlp, []) = rlpSplit bytes
-  print rlp
-  let block = (rlpDecode rlp)::Block
-  let rlp2 = rlpEncode block
-  let bytes2 = rlp2Bytes rlp2
-  print rlp2
-  print $ encode $ hash 256 $ B.pack bytes2
 

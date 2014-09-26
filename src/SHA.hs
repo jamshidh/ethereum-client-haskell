@@ -1,11 +1,13 @@
 
 module SHA (
   SHA(..),
+  hash,
   rlp2Word512,
   word5122RLP,
   padZeros
   ) where
 
+import qualified Crypto.Hash.SHA3 as C
 import Data.Binary
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8 as BC
@@ -29,6 +31,9 @@ instance RLPSerializable SHA where
   rlpDecode x = error ("Missing case in rlpDecode for SHA: " ++ show x)
   rlpEncode (SHA 0) = RLPNumber 0
   rlpEncode (SHA val) = RLPString $ BLC.unpack $ encode val
+
+hash::BC.ByteString->SHA
+hash = SHA . fromIntegral . byteString2Integer . C.hash 256
 
 --------------------- Word512 stuff
 
