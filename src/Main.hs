@@ -117,7 +117,7 @@ main = connect "127.0.0.1" "30303" $ \(socket, remoteAddr) -> do
   let Just prvKey = makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
   
   let tx = Transaction {
-         tNonce = 18,
+         tNonce = 27,
          gasPrice = 0x9184e72a000,
          tGasLimit = 550,
          to = Address 0, --0x5b42bd01ff7b368cd80a477cb1cf0d407e2b1cbe,
@@ -131,8 +131,8 @@ main = connect "127.0.0.1" "30303" $ \(socket, remoteAddr) -> do
   signedTx <- withSource devURandom $
                    signTransaction prvKey tx
 
-  --sendMessage socket $ Transactions [signedTx]
-  sendMessage socket $ GetChain [SHA 0x3281f4b79941b15e2fd78eb851fddee144cd7d5f8169beaf0b58fbba7fedea32] 0x40
+  sendMessage socket $ Transactions [signedTx]
+  --sendMessage socket $ GetChain [SHA 0x3281f4b79941b15e2fd78eb851fddee144cd7d5f8169beaf0b58fbba7fedea32] 0x40
   putStrLn "Transaction has been sent"
 
   readAndOutput socket

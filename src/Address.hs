@@ -25,7 +25,7 @@ import Util
 newtype Address = Address Word160 deriving (Show, Eq)
 
 instance Format Address where
-  format (Address x) = yellow $ padZeros 20 $ showHex x ""
+  format (Address x) = yellow $ padZeros 40 $ showHex x ""
 
 
 --TODO- fix the signature of this to create an Address

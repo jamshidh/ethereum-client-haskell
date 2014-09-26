@@ -20,7 +20,7 @@ import Format
 import RLP
 import Util
 
-newtype SHA = SHA Word256 deriving (Show)
+newtype SHA = SHA Word256 deriving (Show, Eq)
 
 instance Format SHA where
   format (SHA x) = yellow $ padZeros 64 $ showHex x ""

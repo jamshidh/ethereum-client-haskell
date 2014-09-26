@@ -21,10 +21,11 @@ import Block
 import Colors
 import Format
 import Peer
-import Transaction
-import TransactionReceipt
 import RLP
 import SHA
+import Transaction
+import TransactionReceipt
+import Util
 
 --import Debug.Trace
 
@@ -62,7 +63,9 @@ instance Format Message where
   format Pong = blue "Pong"
   format GetPeers = blue "GetPeers"
   format (Peers peers) = blue "Peers: " ++ intercalate ", " (format <$> peers)
-  format (Blocks blocks) = blue "Blocks:\n    " ++ intercalate "\n    " (format <$> blocks)
+  format (Transactions transactions) =
+    blue "Transactions:\n    " ++ tab (intercalate "\n    " (format <$> transactions))
+  format (Blocks blocks) = blue "Blocks:" ++ tab("\n" ++ intercalate "\n    " (format <$> blocks))
   format (GetChain pSHAs numChild) =
     blue "GetChain" ++ " (max: " ++ show numChild ++ "):\n    " ++
     intercalate ",\n    " (format <$> pSHAs)
@@ -83,7 +86,7 @@ obj2WireMessage (RLPArray [RLPNumber 0x03]) = Pong
 obj2WireMessage (RLPArray [RLPNumber 0x10]) = GetPeers
 obj2WireMessage (RLPArray (RLPNumber 0x11:peers)) = Peers $ rlp2Peer <$> peers
 obj2WireMessage (RLPArray (RLPNumber 0x12:transactions)) =
-  Transactions $ rlp2Transaction <$> transactions
+  Transactions $ rlpDecode <$> transactions
 obj2WireMessage (RLPArray (RLPNumber 0x13:blocks)) =
   Blocks $ getBlockFromRLP <$> blocks
 
@@ -118,20 +121,7 @@ wireMessage2Obj Pong = RLPArray $ [RLPNumber 0x3]
 wireMessage2Obj GetPeers = RLPArray $ [RLPNumber 0x10]
 wireMessage2Obj (Peers peers) = RLPArray $ (RLPNumber 0x11:(peer2RLP <$> peers))
 wireMessage2Obj (Transactions transactions) =
-  RLPArray (RLPNumber 0x12:(transaction2RLP <$> transactions))
-  where
-    transaction2RLP t =
-      RLPArray [
-        rlpNumber $ tNonce t,
-        rlpNumber $ gasPrice t,
-        RLPNumber $ tGasLimit t,
-        address2RLP $ to t,
-        rlpNumber $ value t,
-        rlpNumber $ tInit t,
-        RLPNumber $ fromIntegral $ v t,
-        rlpNumber $ r t,
-        rlpNumber $ s t
-        ]
+  RLPArray (RLPNumber 0x12:(rlpEncode <$> transactions))
 wireMessage2Obj (Blocks blocks) = error "Blocks missing in wireMessage2Obj"
 wireMessage2Obj (GetChain pSHAs numChildren) = 
   RLPArray $ [RLPNumber 0x14] ++

@@ -12,6 +12,7 @@ import qualified Data.ByteString.Char8 as BC
 import Data.ByteString.Base16
 import Data.ByteString.Internal
 import Data.Functor
+import Data.List
 import Data.Time
 import Data.Time.Clock.POSIX
 import Data.Word
@@ -54,27 +55,48 @@ data Block = Block {
   } deriving (Show)
 
 instance Format Block where
-  format b@Block{blockData=bd, receiptTransactions=[], blockUncles=[]} =
+  format b@Block{blockData=bd, receiptTransactions=r, blockUncles=[]} =
     blue ("Block #" ++ show (number bd)) ++ " " ++
-    format (hash (B.pack $ rlp2Bytes $ rlpEncode b)) ++ "\n" ++
-    --BC.unpack (encode (hash 256 (B.pack $ rlp2Bytes $ rlpEncode b))) ++ "\n" ++
-    format bd ++
-    "        (no transactions, no uncles)"
-
+    tab (format (hash (B.pack $ rlp2Bytes $ rlpEncode b)) ++ "\n" ++
+         format bd ++
+         (if null r
+          then "        (no transactions, no uncles)"
+          else tab (intercalate "\n    " (format <$> r))))
+              
 instance RLPSerializable Block where
   rlpDecode (RLPArray [blockData, RLPArray transactionReceipts, RLPArray uncles]) =
-    Block (rlp2BlockData blockData) (getTransactionReceiptFromRLP <$> transactionReceipts) []
+    Block (rlpDecode blockData) (rlpDecode <$> transactionReceipts) []
   rlpDecode (RLPArray arr) = error ("getBlockFromRLP called on object with wrong amount of data, length arr = " ++ show arr)
   rlpDecode x = error ("getBlockFromRLP called on non block object: " ++ show x)
-  rlpEncode Block{blockData=bd, receiptTransactions=[], blockUncles=[]} =
-    RLPArray [rlpEncode bd, RLPArray [], RLPArray []]
+
+  rlpEncode Block{blockData=bd, receiptTransactions=r, blockUncles=[]} =
+    RLPArray [rlpEncode bd, RLPArray (rlpEncode <$> r), RLPArray []]
 
 --TODO remove this
 getBlockFromRLP::RLPObject->Block
 getBlockFromRLP = rlpDecode
 
 instance RLPSerializable BlockData where
-  rlpDecode = undefined
+  rlpDecode (RLPArray [v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13]) =
+    BlockData {
+      parentHash = rlpDecode v1,
+      unclesHash = rlpDecode v2,
+      coinbase = rlp2Address v3,
+      stateRoot = rlpDecode v4,
+      transactionsTrie = rlpDecode v5,
+      difficulty = fromIntegral $ getNumber v6,
+      number = fromIntegral $ getNumber v7,
+      minGasPrice = fromIntegral $ getNumber v8,
+      gasLimit = fromIntegral $ getNumber v9,
+      gasUsed = fromIntegral $ getNumber v10,
+      timestamp = posixSecondsToUTCTime $ fromIntegral $ getNumber v11,
+      extraData = fromIntegral $ getNumber v12,
+      nonce = rlpDecode v13
+      }  
+  rlpDecode (RLPArray arr) = error ("rlp2BlockData called on object with wrong amount of data, length arr = " ++ show arr)
+  rlpDecode x = error ("rlp2BlockData called on non block object: " ++ show x)
+
+
   rlpEncode bd =
     RLPArray [
       rlpEncode $ parentHash bd,
@@ -95,44 +117,18 @@ instance RLPSerializable BlockData where
 
 instance Format BlockData where
   format b = 
-    "        parentHash: " ++ format (parentHash b) ++ "\n" ++
-    "        unclesHash: " ++ format (unclesHash b) ++ "\n" ++
-    "        coinbase: " ++ format (coinbase b) ++ "\n" ++
-    "        stateRoot: " ++ format (stateRoot b) ++ "\n" ++
-    "        transactionsTrie: " ++ format (transactionsTrie b) ++ "\n" ++
-    "        difficulty: " ++ show (difficulty b) ++ "\n" ++
-    "        minGasPrice: " ++ show (minGasPrice b) ++ "\n" ++
-    "        gasLimit: " ++ show (gasLimit b) ++ "\n" ++
-    "        gasUsed: " ++ show (gasUsed b) ++ "\n" ++
-    "        timestamp: " ++ show (timestamp b) ++ "\n" ++
-    "        extraData: " ++ show (extraData b) ++ "\n" ++
-    "        nonce: " ++ format (nonce b) ++ "\n"
+    "parentHash: " ++ format (parentHash b) ++ "\n" ++
+    "unclesHash: " ++ format (unclesHash b) ++ 
+    (if unclesHash b == hash (B.pack [0xc0]) then " (the empty array)\n" else "\n") ++
+    "coinbase: " ++ format (coinbase b) ++ "\n" ++
+    "stateRoot: " ++ format (stateRoot b) ++ "\n" ++
+    "transactionsTrie: " ++ format (transactionsTrie b) ++ "\n" ++
+    "difficulty: " ++ show (difficulty b) ++ "\n" ++
+    "minGasPrice: " ++ show (minGasPrice b) ++ "\n" ++
+    "gasLimit: " ++ show (gasLimit b) ++ "\n" ++
+    "gasUsed: " ++ show (gasUsed b) ++ "\n" ++
+    "timestamp: " ++ show (timestamp b) ++ "\n" ++
+    "extraData: " ++ show (extraData b) ++ "\n" ++
+    "nonce: " ++ format (nonce b) ++ "\n"
 
-rlp2BlockData::RLPObject->BlockData
-rlp2BlockData (RLPArray [v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13]) =
-  BlockData {
-    parentHash = rlpDecode v1,
-    unclesHash = rlpDecode v2,
-    coinbase = rlp2Address v3,
-    stateRoot = rlpDecode v4,
-    transactionsTrie = rlpDecode v5,
-    difficulty = fromIntegral $ getNumber v6,
-    number = fromIntegral $ getNumber v7,
-    minGasPrice = fromIntegral $ getNumber v8,
-    gasLimit = fromIntegral $ getNumber v9,
-    gasUsed = fromIntegral $ getNumber v10,
-    timestamp = posixSecondsToUTCTime $ fromIntegral $ getNumber v11,
-    extraData = fromIntegral $ getNumber v12,
-    nonce = rlpDecode v13
-    }  
-rlp2BlockData (RLPArray arr) = error ("rlp2BlockData called on object with wrong amount of data, length arr = " ++ show arr)
-rlp2BlockData x = error ("rlp2BlockData called on non block object: " ++ show x)
-
-getTransactionReceiptFromRLP::RLPObject->TransactionReceipt
-getTransactionReceiptFromRLP (RLPArray [t, pts, gasUsed]) =
-  TransactionReceipt {
-    theTransaction = rlp2Transaction t,
-    postTransactionState = PostTransactionState,
-    cumulativeGasUsed = getNumber gasUsed
-    }
 

@@ -2,8 +2,7 @@
 
 module Transaction (
   Transaction(..),
-  signTransaction,
-  rlp2Transaction
+  signTransaction
   ) where
 
 import Crypto.Hash.SHA3
@@ -18,6 +17,7 @@ import Numeric
 import ExtendedECDSA
 
 import Address
+import Colors
 import Format
 import PrettyBytes
 import RLP
@@ -38,6 +38,21 @@ data Transaction =
     r::Integer,
     s::Integer
     } deriving (Show)
+
+instance Format Transaction where
+  format x =
+    blue "Transaction" ++
+    tab (
+      "\n" ++
+      "tNonce: " ++ show (tNonce x) ++ "\n" ++
+      "gasPrice: " ++ show (gasPrice x) ++ "\n" ++
+      "tGasLimit: " ++ show (tGasLimit x) ++ "\n" ++
+      "to: " ++ format (to x) ++ "\n" ++
+      "value: " ++ show (value x) ++ "\n" ++
+      "tInit: " ++ show (tInit x) ++ "\n" ++
+      "v: " ++ show (v x) ++ "\n" ++
+      "r: " ++ show (r x) ++ "\n" ++
+      "s: " ++ show (s x) ++ "\n")
 
 addLeadingZerosTo64::String->String
 addLeadingZerosTo64 x = replicate (64 - length x) '0' ++ x
@@ -69,18 +84,31 @@ signTransaction privKey t = do
                 ]
     theHash = fromInteger $ byteString2Integer $ hash 256 $ B.pack theData
 
-rlp2Transaction::RLPObject->Transaction
-rlp2Transaction (RLPArray [n, gp, gl, to, val, i, v, r, s]) =
-  Transaction {
-    tNonce = fromIntegral $ getNumber n,
-    gasPrice = fromIntegral $ getNumber gp,
-    tGasLimit = fromIntegral $ getNumber gl,
-    to = rlp2Address to,
-    value = fromIntegral $ getNumber val,
-    tInit = fromIntegral $ getNumber i,
-    v = fromIntegral $ getNumber v,
-    r = fromIntegral $ getNumber r,
-    s = fromIntegral $ getNumber s
-    }
-rlp2Transaction x = error ("rlp2Transaction called on non block object: " ++ show x)
 
+instance RLPSerializable Transaction where
+  rlpDecode (RLPArray [n, gp, gl, to, val, i, v, r, s]) =
+    Transaction {
+      tNonce = fromIntegral $ getNumber n,
+      gasPrice = fromIntegral $ getNumber gp,
+      tGasLimit = fromIntegral $ getNumber gl,
+      to = rlp2Address to,
+      value = fromIntegral $ getNumber val,
+      tInit = fromIntegral $ getNumber i,
+      v = fromIntegral $ getNumber v,
+      r = fromIntegral $ getNumber r,
+      s = fromIntegral $ getNumber s
+      }
+  rlpDecode x = error ("rlpDecode for Transaction called on non block object: " ++ show x)
+
+  rlpEncode t =
+      RLPArray [
+        rlpNumber $ tNonce t,
+        rlpNumber $ gasPrice t,
+        RLPNumber $ tGasLimit t,
+        address2RLP $ to t,
+        rlpNumber $ value t,
+        rlpNumber $ tInit t,
+        RLPNumber $ fromIntegral $ v t,
+        rlpNumber $ r t,
+        rlpNumber $ s t
+        ]
