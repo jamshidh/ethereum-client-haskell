@@ -1,8 +1,6 @@
 
 module SHA (
   SHA(..),
-  rlp2SHA,
-  sha2RLP,
   rlp2Word512,
   word5122RLP,
   padZeros
@@ -15,6 +13,7 @@ import qualified Data.ByteString.Lazy.Char8 as BLC
 import Network.Haskoin.Internals
 import Numeric
 
+import Colors
 import Format
 import RLP
 import Util
@@ -22,13 +21,14 @@ import Util
 newtype SHA = SHA Word256 deriving (Show)
 
 instance Format SHA where
-  format (SHA x) = padZeros 32 $ showHex x ""
+  format (SHA x) = yellow $ padZeros 64 $ showHex x ""
 
-rlp2SHA::RLPObject->SHA
-rlp2SHA (RLPString s) | length s == 32 = SHA $ decode $ BLC.pack s
-
-sha2RLP::SHA->RLPObject
-sha2RLP (SHA val) = RLPString $ BLC.unpack $ encode val
+instance RLPSerializable SHA where
+  rlpDecode (RLPString s) | length s == 32 = SHA $ decode $ BLC.pack s
+  rlpDecode (RLPNumber 0) = SHA 0 --special case seems to be allowed, even if length of zeros is wrong
+  rlpDecode x = error ("Missing case in rlpDecode for SHA: " ++ show x)
+  rlpEncode (SHA 0) = RLPNumber 0
+  rlpEncode (SHA val) = RLPString $ BLC.unpack $ encode val
 
 --------------------- Word512 stuff
 

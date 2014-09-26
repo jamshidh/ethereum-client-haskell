@@ -1,6 +1,7 @@
 
 module RLP (
   RLPObject(..),
+  RLPSerializable(..),
   rlpSplit,
   rlp2Bytes,
   rlpNumber,
@@ -24,6 +25,10 @@ import Data.String
 import Util
 
 data RLPObject = RLPNumber Int | RLPString String | RLPArray [RLPObject] deriving (Show)
+
+class RLPSerializable a where
+  rlpDecode::RLPObject->a
+  rlpEncode::a->RLPObject
 
 splitAtWithError::Int->[a]->([a], [a])
 splitAtWithError n arr | n > length arr = error "splitAtWithError called with n > length arr"

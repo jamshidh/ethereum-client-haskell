@@ -60,6 +60,7 @@ instance Format Message where
       "    nodeId: " ++ take 20 (padZeros 64 (showHex n "")) ++ "...."
   format Ping = blue "Ping"
   format Pong = blue "Pong"
+  format GetPeers = blue "GetPeers"
   format (Peers peers) = blue "Peers: " ++ intercalate ", " (format <$> peers)
   format (Blocks blocks) = blue "Blocks:\n    " ++ intercalate "\n    " (format <$> blocks)
   format (GetChain pSHAs numChild) =
@@ -90,7 +91,7 @@ obj2WireMessage (RLPArray (RLPNumber 0x14:items)) =
   GetChain parentSHAs $ fromIntegral numChildren
   where
     RLPNumber numChildren = last items
-    parentSHAs = rlp2SHA <$> init items
+    parentSHAs = rlpDecode <$> init items
 
 obj2WireMessage (RLPArray [RLPNumber 0x16]) = GetTransactions
 
@@ -134,7 +135,7 @@ wireMessage2Obj (Transactions transactions) =
 wireMessage2Obj (Blocks blocks) = error "Blocks missing in wireMessage2Obj"
 wireMessage2Obj (GetChain pSHAs numChildren) = 
   RLPArray $ [RLPNumber 0x14] ++
-  (sha2RLP <$> pSHAs) ++
+  (rlpEncode <$> pSHAs) ++
   [rlpNumber numChildren]
 wireMessage2Obj (NotInChain blocks) = error "NotInChain missing in wireMessage2Obj"
 wireMessage2Obj GetTransactions = RLPArray [RLPNumber 0x16]
