@@ -9,10 +9,11 @@ import Format
 import Transaction
 import RLP
 
-data PostTransactionState = PostTransactionState deriving (Show)
+data PostTransactionState = PostTransactionState String deriving (Show)
 
 instance RLPSerializable PostTransactionState where
-  rlpDecode x = PostTransactionState
+  rlpDecode (RLPString x) = PostTransactionState x
+  rlpDecode x = error ("rlpDecode for PostTransactionState missing case: " ++ show x)
   rlpEncode x = RLPArray []
 
 data TransactionReceipt =
@@ -30,7 +31,7 @@ instance RLPSerializable TransactionReceipt where
   rlpDecode (RLPArray [t, pts, gasUsed]) =
     TransactionReceipt {
       theTransaction = rlpDecode t,
-      postTransactionState = PostTransactionState,
+      postTransactionState = rlpDecode pts,
       cumulativeGasUsed = getNumber gasUsed
       }
   rlpEncode TransactionReceipt{
