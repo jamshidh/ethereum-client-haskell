@@ -88,7 +88,7 @@ obj2WireMessage (RLPArray (RLPNumber 0x11:peers)) = Peers $ rlp2Peer <$> peers
 obj2WireMessage (RLPArray (RLPNumber 0x12:transactions)) =
   Transactions $ rlpDecode <$> transactions
 obj2WireMessage (RLPArray (RLPNumber 0x13:blocks)) =
-  Blocks $ getBlockFromRLP <$> blocks
+  Blocks $ rlpDecode <$> blocks
 
 obj2WireMessage (RLPArray (RLPNumber 0x14:items)) =
   GetChain parentSHAs $ fromIntegral numChildren
@@ -122,7 +122,8 @@ wireMessage2Obj GetPeers = RLPArray $ [RLPNumber 0x10]
 wireMessage2Obj (Peers peers) = RLPArray $ (RLPNumber 0x11:(peer2RLP <$> peers))
 wireMessage2Obj (Transactions transactions) =
   RLPArray (RLPNumber 0x12:(rlpEncode <$> transactions))
-wireMessage2Obj (Blocks blocks) = error "Blocks missing in wireMessage2Obj"
+wireMessage2Obj (Blocks blocks) =
+  RLPArray (RLPNumber 0x13:(rlpEncode <$> blocks))
 wireMessage2Obj (GetChain pSHAs numChildren) = 
   RLPArray $ [RLPNumber 0x14] ++
   (rlpEncode <$> pSHAs) ++

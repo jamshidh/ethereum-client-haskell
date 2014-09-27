@@ -12,13 +12,14 @@ import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
 import Data.ByteString.Internal
 import Data.ByteString.Base16
+import Data.Time.Clock
 import Data.Functor
 import Data.Maybe
 import Data.Time.Clock.POSIX
 import Data.Word
 import Data.String
 import Network.Haskoin.Crypto
-import Network.Haskoin.Internals hiding (Ping, Pong, version, Message, Block)
+import Network.Haskoin.Internals hiding (Ping, Pong, version, Message, Block, timestamp)
 import Network.Socket (socketToHandle)
 import Numeric
 import System.IO
@@ -39,6 +40,8 @@ import Wire
 
 data IPAddress = IPV4Address Word8 Word8 Word8 Word8 |
   IPV6Address Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 
+
+Just prvKey = makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
 
 address::IPAddress->Word16->Word64->Put
 address (IPV4Address d1 d2 d3 d4) port flags = do
@@ -65,7 +68,40 @@ sendMessage::Socket->Message->IO ()
 sendMessage socket msg = do
   putStrLn (green "msg>>>>>: " ++ format msg)
   sendCommand socket $ B.pack $ rlp2Bytes $ wireMessage2Obj msg
+
+
   
+--testGetNextBlock::Block->UTCTime->Block
+testGetNextBlock = --b ts =
+  Block{
+    blockData=testGetNextBlockData, -- b ts,
+    receiptTransactions=[],
+    blockUncles=[]
+    }
+  where
+    --testGetNextBlockData::Block->UTCTime->BlockData
+    testGetNextBlockData = --b ts =
+      BlockData {
+        parentHash=SHA 1234, --blockHash b,
+        unclesHash=hash $ B.pack [0xc0],
+        coinbase=prvKey2Address prvKey,
+        stateRoot = SHA 0,
+        transactionsTrie = SHA 0,
+        difficulty = 1000000, --13269813, --difficulty $ blockData b,
+        number = 0,
+        minGasPrice = 10000000000000, --minGasPrice $ blockData b,
+        gasLimit = 125000, --gasLimit $ blockData b,
+        gasUsed = 0,
+        timestamp = posixSecondsToUTCTime $ fromIntegral 1411763223, --ts,
+        extraData = 0,
+        nonce = SHA 5
+        }
+
+
+
+
+
+
 
 handlePayload::Socket->[Word8]->IO ()
 handlePayload socket payload = do
@@ -77,9 +113,15 @@ handlePayload socket payload = do
     GetPeers -> do
       sendMessage socket $ Peers []
       sendMessage socket $ GetPeers
+    Blocks [b] -> do
+      ts <- getCurrentTime
+      let newBlock = testGetNextBlock -- b ts
+      print $ powFunc newBlock
+      sendMessage socket $ Blocks [newBlock]
     GetTransactions -> do
       sendMessage socket $ Transactions []
       sendMessage socket $ GetTransactions
+
     _-> return ()
 
 getPayloads::[Word8]->[[Word8]]
@@ -114,10 +156,8 @@ main = connect "127.0.0.1" "30303" $ \(socket, remoteAddr) -> do
 
         }
 
-  let Just prvKey = makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
-  
   let tx = Transaction {
-         tNonce = 27,
+         tNonce = 28,
          gasPrice = 0x9184e72a000,
          tGasLimit = 550,
          to = Address 0, --0x5b42bd01ff7b368cd80a477cb1cf0d407e2b1cbe,
@@ -131,7 +171,15 @@ main = connect "127.0.0.1" "30303" $ \(socket, remoteAddr) -> do
   signedTx <- withSource devURandom $
                    signTransaction prvKey tx
 
-  sendMessage socket $ Transactions [signedTx]
+  let newBlock = testGetNextBlock -- b ts
+  --let powVal = byteString2Integer $ BC.pack $ powFunc newBlock
+  --putStrLn $ "powFunc = " ++ show (showHex powVal "")
+  --let passed = powVal * (difficulty $ blockData newBlock) < 2^256
+  --putStrLn (red "Passed: " ++ show passed)
+  sendMessage socket $ Blocks [addNonceToBlock newBlock $ findNonce $ newBlock]
+
+
+  --sendMessage socket $ Transactions [signedTx]
   --sendMessage socket $ GetChain [SHA 0x3281f4b79941b15e2fd78eb851fddee144cd7d5f8169beaf0b58fbba7fedea32] 0x40
   putStrLn "Transaction has been sent"
 

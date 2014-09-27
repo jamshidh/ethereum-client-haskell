@@ -27,11 +27,10 @@ newtype Address = Address Word160 deriving (Show, Eq)
 instance Format Address where
   format (Address x) = yellow $ padZeros 40 $ showHex x ""
 
-
---TODO- fix the signature of this to create an Address
-prvKey2Address::PrvKey->ByteString
+prvKey2Address::PrvKey->Address
 prvKey2Address prvKey =
-  B16.encode $ hash 256 $ BL.toStrict $ encode x `BL.append` encode y
+  Address $ fromInteger $ byteString2Integer $ hash 256 $ BL.toStrict $ encode x `BL.append` encode y
+  --B16.encode $ hash 256 $ BL.toStrict $ encode x `BL.append` encode y
   where
     PubKey point = derivePubKey prvKey
     x =

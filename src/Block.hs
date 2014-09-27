@@ -3,11 +3,17 @@
 module Block (
   BlockData(..),
   Block(..),
-  getBlockFromRLP
+  blockHash,
+  powFunc,
+  addNonceToBlock,
+  findNonce
   ) where
 
+import qualified Crypto.Hash.SHA3 as C
+import qualified Data.Binary as DB
 import Data.Bits
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Char8 as BC
 import Data.ByteString.Base16
 import Data.ByteString.Internal
@@ -30,7 +36,7 @@ import Transaction
 import TransactionReceipt
 import Util
 
-import Debug.Trace
+--import Debug.Trace
 
 data BlockData = BlockData {
   parentHash::SHA,
@@ -57,7 +63,7 @@ data Block = Block {
 instance Format Block where
   format b@Block{blockData=bd, receiptTransactions=r, blockUncles=[]} =
     blue ("Block #" ++ show (number bd)) ++ " " ++
-    tab (format (hash (B.pack $ rlp2Bytes $ rlpEncode b)) ++ "\n" ++
+    tab (format (blockHash b) ++ "\n" ++
          format bd ++
          (if null r
           then "        (no transactions, no uncles)"
@@ -66,15 +72,11 @@ instance Format Block where
 instance RLPSerializable Block where
   rlpDecode (RLPArray [blockData, RLPArray transactionReceipts, RLPArray uncles]) =
     Block (rlpDecode blockData) (rlpDecode <$> transactionReceipts) []
-  rlpDecode (RLPArray arr) = error ("getBlockFromRLP called on object with wrong amount of data, length arr = " ++ show arr)
-  rlpDecode x = error ("getBlockFromRLP called on non block object: " ++ show x)
+  rlpDecode (RLPArray arr) = error ("rlpDecode for Block called on object with wrong amount of data, length arr = " ++ show arr)
+  rlpDecode x = error ("rlpDecode for Block called on non block object: " ++ show x)
 
   rlpEncode Block{blockData=bd, receiptTransactions=r, blockUncles=[]} =
     RLPArray [rlpEncode bd, RLPArray (rlpEncode <$> r), RLPArray []]
-
---TODO remove this
-getBlockFromRLP::RLPObject->Block
-getBlockFromRLP = rlpDecode
 
 instance RLPSerializable BlockData where
   rlpDecode (RLPArray [v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13]) =
@@ -114,6 +116,8 @@ instance RLPSerializable BlockData where
       rlpEncode $ nonce bd
       ]
 
+blockHash::Block->SHA
+blockHash = hash . B.pack . rlp2Bytes . rlpEncode
 
 instance Format BlockData where
   format b = 
@@ -131,4 +135,54 @@ instance Format BlockData where
     "extraData: " ++ show (extraData b) ++ "\n" ++
     "nonce: " ++ format (nonce b) ++ "\n"
 
+--------------------------
 
+--used as part of the powFunc
+noncelessBlockData2RLP bd =
+  RLPArray [
+      rlpEncode $ parentHash bd,
+      rlpEncode $ unclesHash bd,
+      address2RLP $ coinbase bd,
+      rlpEncode $ stateRoot bd,
+      rlpEncode $ transactionsTrie bd,
+      rlpNumber $ difficulty bd,
+      rlpNumber $ number bd,
+      rlpNumber $ minGasPrice bd,
+      rlpNumber $ gasLimit bd,
+      rlpNumber $ gasUsed bd,
+      rlpNumber $ round $ utcTimeToPOSIXSeconds $ timestamp bd,
+      rlpNumber $ extraData bd
+      ]
+
+noncelessBlock2RLP Block{blockData=bd, receiptTransactions=r, blockUncles=[]} =
+  RLPArray [noncelessBlockData2RLP bd, RLPArray (rlpEncode <$> r), RLPArray []]
+
+sha2ByteString::SHA->B.ByteString
+sha2ByteString (SHA val) = BL.toStrict $ DB.encode val
+
+headerHashWithoutNonce::Block->ByteString
+headerHashWithoutNonce b = C.hash 256 $ B.pack $ rlp2Bytes $ noncelessBlockData2RLP $ blockData b
+
+powFunc::Block->Integer
+powFunc b =
+  byteString2Integer $ BC.pack $ 
+  BC.unpack $
+  C.hash 256 (
+    headerHashWithoutNonce b
+    `B.append`
+    sha2ByteString (nonce $ blockData b))
+
+nonceIsValid::Block->Bool
+nonceIsValid b = powFunc b * (difficulty $ blockData b) < 2^256
+
+addNonceToBlock::Block->Integer->Block
+addNonceToBlock b n =
+  b {
+    blockData=(blockData b) {nonce=SHA $ fromInteger n}
+    }
+
+findNonce::Block->Integer
+findNonce b =
+  case find (nonceIsValid . addNonceToBlock b) [1..] of
+    Nothing -> error "Huh?  You ran out of numbers!!!!"
+    Just n -> n
