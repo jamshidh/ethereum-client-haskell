@@ -21,7 +21,6 @@ import Data.ByteString.Base16
 import Data.ByteString.Internal
 import Data.Functor
 import Data.List
-import Data.Primitive.ByteArray
 import Data.Time
 import Data.Time.Clock.POSIX
 import Data.Word
