@@ -1,9 +1,7 @@
 {-# OPTIONS_GHC -Wall #-}
 
 module Peer (
-  Peer(..),
-  peer2RLP,
-  rlp2Peer
+  Peer(..)
   ) where
 
 import Data.ByteString.Internal
@@ -35,15 +33,13 @@ data Peer = Peer {
 instance Format Peer where
   format peer = format (ipAddr peer) ++ ":" ++ show (peerPort peer)
 
+instance RLPSerializable Peer where
+  rlpDecode (RLPArray [RLPString [c1,c2,c3,c4], RLPNumber p, RLPString uid]) =
+    Peer {
+      ipAddr = IPAddr (c2w c1) (c2w c2) (c2w c3) (c2w c4),
+      peerPort = fromIntegral p,
+      uniqueId = uid
+      }
+  rlpDecode x = error ("rlp2Peer called on non block object: " ++ show x)
 
-rlp2Peer::RLPObject->Peer
-rlp2Peer (RLPArray [RLPString [c1, c2, c3, c4], RLPNumber p, RLPString uid]) =
-  Peer {
-    ipAddr = IPAddr (c2w c1) (c2w c2) (c2w c3) (c2w c4),
-    peerPort = fromIntegral p,
-    uniqueId = uid
-    }
-rlp2Peer x = error ("rlp2Peer called on non block object: " ++ show x)
-
-peer2RLP::Peer->RLPObject
-peer2RLP peer = undefined
+  rlpEncode = undefined

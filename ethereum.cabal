@@ -9,8 +9,10 @@ extra-source-files: ""
 executable ethereumH
     build-depends: base -any, cryptohash, binary, bytestring, time, 
                    network-simple, utf8-string, haskoin,
-                   base16-bytestring, mtl, network
+                   base16-bytestring, mtl, network, primitive
     main-is: Main.hs
+    C-sources: fastNonceFinder/nonceFinder.c
+    --ghc-options: -threaded
     buildable: True
     hs-source-dirs: src
     other-modules: RLP Wire

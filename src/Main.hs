@@ -92,7 +92,7 @@ testGetNextBlock b ts =
         minGasPrice = 10000000000000, --minGasPrice $ blockData b,
         gasLimit = 125000, --gasLimit $ blockData b,
         gasUsed = 0,
-        timestamp = posixSecondsToUTCTime $ fromIntegral 1411763223, --ts,
+        timestamp = posixSecondsToUTCTime $ fromIntegral (1411763223::Integer), --ts,
         extraData = 0,
         nonce = SHA 5
         }
@@ -116,9 +116,8 @@ handlePayload socket payload = do
     Blocks [b] -> do
       ts <- getCurrentTime
       let newBlock = testGetNextBlock b ts
-      print $ powFunc newBlock
-      --putStrLn $ show $ noncelessBlockData2RLP newBlock
-      sendMessage socket $ Blocks [addNonceToBlock newBlock $ findNonce $ newBlock]
+      nonce <- fastFindNonce newBlock
+      sendMessage socket $ Blocks [addNonceToBlock newBlock nonce]
     GetTransactions -> do
       sendMessage socket $ Transactions []
       sendMessage socket $ GetTransactions
@@ -171,18 +170,38 @@ main = connect "127.0.0.1" "30303" $ \(socket, remoteAddr) -> do
 
   signedTx <- withSource devURandom $
                    signTransaction prvKey tx
+  let b = Block{blockData=
+                   BlockData {
+                     parentHash=SHA 0,
+                     unclesHash=hash $ B.pack [0xc0],
+                     coinbase=prvKey2Address prvKey,
+                     stateRoot = SHA 1,
+                     transactionsTrie = 0,
+                     difficulty = 13269813,
+                     number = 0,
+                     minGasPrice = 10000000000000,
+                     gasLimit = 125000,
+                     gasUsed = 0,
+                     timestamp = posixSecondsToUTCTime $ fromIntegral (1411763223::Integer), --ts,
+                     extraData = 0,
+                     nonce = SHA 5
+                     },
+                receiptTransactions=[],
+                blockUncles=[]
+               }
+  let ts = 0
 
-  let newBlock = testGetNextBlock -- b ts
+  let newBlock = testGetNextBlock b ts
   --let powVal = byteString2Integer $ BC.pack $ powFunc newBlock
   --putStrLn $ "powFunc = " ++ show (showHex powVal "")
   --let passed = powVal * (difficulty $ blockData newBlock) < 2^256
   --putStrLn (red "Passed: " ++ show passed)
-  --sendMessage socket $ Blocks [addNonceToBlock newBlock $ findNonce $ newBlock]
+  --theNonce <- (fastFindNonce newBlock)::IO Integer
+  --sendMessage socket $ Blocks [addNonceToBlock newBlock theNonce]
 
 
   --sendMessage socket $ Transactions [signedTx]
   sendMessage socket $ GetChain [blockHash genesisBlock] 0x40
-  putStrLn $ format $ B.pack $ rlp2Bytes $ rlpEncode genesisBlock
   putStrLn "Transaction has been sent"
 
   readAndOutput socket

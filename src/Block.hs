@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, ForeignFunctionInterface #-}
 
 module Block (
   BlockData(..),
@@ -7,6 +7,7 @@ module Block (
   powFunc,
   addNonceToBlock,
   findNonce,
+  fastFindNonce,
   genesisBlock
   ) where
 
@@ -20,9 +21,14 @@ import Data.ByteString.Base16
 import Data.ByteString.Internal
 import Data.Functor
 import Data.List
+import Data.Primitive.ByteArray
 import Data.Time
 import Data.Time.Clock.POSIX
 import Data.Word
+import Foreign
+import Foreign.ForeignPtr.Unsafe
+import Foreign.Ptr
+import Foreign.C.Types
 import Numeric
 
 import ExtendedECDSA
@@ -191,8 +197,7 @@ headerHashWithoutNonce b = C.hash 256 $ B.pack $ rlp2Bytes $ noncelessBlockData2
 powFunc::Block->Integer
 powFunc b =
   --trace (show $ headerHashWithoutNonce b) $
-  byteString2Integer $ BC.pack $ 
-  BC.unpack $
+  byteString2Integer $ 
   C.hash 256 (
     headerHashWithoutNonce b
     `B.append`
@@ -212,3 +217,42 @@ findNonce b =
   case find (nonceIsValid . addNonceToBlock b) [1..] of
     Nothing -> error "Huh?  You ran out of numbers!!!!"
     Just n -> n
+
+----------
+
+fastFindNonce::Block->IO Integer
+fastFindNonce b = do
+  let (theData, _, _) = toForeignPtr $ headerHashWithoutNonce b
+  let (theThreshold, _, _) = toForeignPtr threshold
+  let retValue = B.pack [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+  let (retPtr, _, _) = toForeignPtr retValue
+  retInt <- c_fastFindNonce (unsafeForeignPtrToPtr theData) (unsafeForeignPtrToPtr theThreshold) (unsafeForeignPtrToPtr retPtr)
+  return $ byteString2Integer retValue
+  where
+    threshold::B.ByteString
+    threshold = fst $ decode $ BC.pack $ padZeros 64 $ showHex (2^256 `quot` (difficulty $ blockData b)) ""
+
+foreign import ccall "findNonce" c_fastFindNonce::Ptr Word8->Ptr Word8->Ptr Word8->IO Int
+--foreign import ccall "fastFindNonce" c_fastFindNonce::ForeignPtr Word8->ForeignPtr Word8->ForeignPtr Word8
+
+
+{-
+fastFindNonce::Block->Integer
+fastFindNonce b =
+  byteString2Integer $ BC.pack $ 
+  BC.unpack $
+  C.hash 256 (
+    first `B.append` second)
+  where
+    first = headerHashWithoutNonce b
+
+fastPowFunc::Block->Integer
+fastPowFunc b =
+  --trace (show $ headerHashWithoutNonce b) $
+  byteString2Integer $ BC.pack $ 
+  BC.unpack $
+  C.hash 256 (
+    headerHashWithoutNonce b
+    `B.append`
+    sha2ByteString (nonce $ blockData b))
+-}

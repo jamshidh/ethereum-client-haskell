@@ -22,7 +22,7 @@ byteString2Integer x = byteString2Integer' $ B.unpack x
 
 integer2Bytes::Integer->[Word8]
 integer2Bytes 0 = []
-integer2Bytes x = fromInteger (x .&. 256):integer2Bytes (x `shiftR` 8)
+integer2Bytes x = fromInteger (x .&. 255):integer2Bytes (x `shiftR` 8)
 
 
 padZeros::Int->String->String

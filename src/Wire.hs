@@ -8,15 +8,12 @@ module Wire (
   ) where
 
 import Data.Bits
-import Data.ByteString.Internal
 import Data.Functor
 import Data.List
-import Data.Time.Clock.POSIX
 import Data.Word
 import Network.Haskoin.Crypto
 import Numeric
 
-import Address
 import Block
 import Colors
 import Format
@@ -24,7 +21,6 @@ import Peer
 import RLP
 import SHA
 import Transaction
-import TransactionReceipt
 import Util
 
 --import Debug.Trace
@@ -52,9 +48,9 @@ data Message =
   GetTransactions deriving (Show)
 
 instance Format Message where
-  format Hello{version=v, clientId=c, capability=cap, port=p, nodeId=n} =
+  format Hello{version=ver, clientId=c, capability=cap, port=p, nodeId=n} =
     blue "Hello" ++
-      "    version: " ++ show v ++ "\n" ++
+      "    version: " ++ show ver ++ "\n" ++
       "    cliendId: " ++ show c ++ "\n" ++
       "    capability: " ++ intercalate "\n            "  (show <$> cap) ++ "\n" ++
       "    port: " ++ show p ++ "\n" ++
@@ -73,12 +69,11 @@ instance Format Message where
     blue "NotInChain:" ++ 
     tab ("\n" ++ intercalate ",\n    " (format <$> shas))
   format GetTransactions = blue "GetTransactions"
-  format x = show x
 
 
 obj2WireMessage::RLPObject->Message
-obj2WireMessage (RLPArray (RLPNumber 0x00:RLPNumber v:RLPNumber 0:RLPString cId:RLPNumber cap:RLPNumber p:nId:[])) =
-  Hello v cId capList p $ rlp2Word512 nId
+obj2WireMessage (RLPArray (RLPNumber 0x00:RLPNumber ver:RLPNumber 0:RLPString cId:RLPNumber cap:RLPNumber p:nId:[])) =
+  Hello ver cId capList p $ rlp2Word512 nId
   where
     capList = 
       (if cap .&. 1 /= 0 then [ProvidesPeerDiscoveryService] else []) ++
@@ -87,33 +82,32 @@ obj2WireMessage (RLPArray (RLPNumber 0x00:RLPNumber v:RLPNumber 0:RLPString cId:
 obj2WireMessage (RLPArray [RLPNumber 0x02]) = Ping
 obj2WireMessage (RLPArray [RLPNumber 0x03]) = Pong
 obj2WireMessage (RLPArray [RLPNumber 0x10]) = GetPeers
-obj2WireMessage (RLPArray (RLPNumber 0x11:peers)) = Peers $ rlp2Peer <$> peers
+obj2WireMessage (RLPArray (RLPNumber 0x11:peers)) = Peers $ rlpDecode <$> peers
 obj2WireMessage (RLPArray (RLPNumber 0x12:transactions)) =
   Transactions $ rlpDecode <$> transactions
 obj2WireMessage (RLPArray (RLPNumber 0x13:blocks)) =
   Blocks $ rlpDecode <$> blocks
 
 obj2WireMessage (RLPArray (RLPNumber 0x14:items)) =
-  GetChain parentSHAs $ fromIntegral numChildren
+  GetChain (rlpDecode <$> init items) $ fromIntegral numChildren
   where
     RLPNumber numChildren = last items
-    parentSHAs = rlpDecode <$> init items
 obj2WireMessage (RLPArray (RLPNumber 0x15:items)) =
   NotInChain $ rlpDecode <$> items
 obj2WireMessage (RLPArray [RLPNumber 0x16]) = GetTransactions
 
-obj2WireMessage (RLPArray x) = error ("Missing message: " ++ show x)
+obj2WireMessage x = error ("Missing case in obj2WireMessage: " ++ show x)
 
 
 wireMessage2Obj::Message->RLPObject
-wireMessage2Obj Hello { version = v,
+wireMessage2Obj Hello { version = ver,
                         clientId = cId,
                         capability = cap,
                         port = p,
                         nodeId = nId } =
   RLPArray [
     RLPNumber 0x00,
-    RLPNumber v,
+    RLPNumber ver,
     RLPNumber 0,
     RLPString cId,
     RLPNumber $ fromIntegral $ foldl (.|.) 0x00 $ capValue <$> cap,
@@ -123,7 +117,7 @@ wireMessage2Obj Hello { version = v,
 wireMessage2Obj Ping = RLPArray $ [RLPNumber 0x2]
 wireMessage2Obj Pong = RLPArray $ [RLPNumber 0x3]
 wireMessage2Obj GetPeers = RLPArray $ [RLPNumber 0x10]
-wireMessage2Obj (Peers peers) = RLPArray $ (RLPNumber 0x11:(peer2RLP <$> peers))
+wireMessage2Obj (Peers peers) = RLPArray $ (RLPNumber 0x11:(rlpEncode <$> peers))
 wireMessage2Obj (Transactions transactions) =
   RLPArray (RLPNumber 0x12:(rlpEncode <$> transactions))
 wireMessage2Obj (Blocks blocks) =
@@ -132,7 +126,9 @@ wireMessage2Obj (GetChain pSHAs numChildren) =
   RLPArray $ [RLPNumber 0x14] ++
   (rlpEncode <$> pSHAs) ++
   [rlpNumber numChildren]
-wireMessage2Obj (NotInChain blocks) = error "NotInChain missing in wireMessage2Obj"
+wireMessage2Obj (NotInChain shas) = 
+  RLPArray $ [RLPNumber 0x15] ++
+  (rlpEncode <$> shas)
 wireMessage2Obj GetTransactions = RLPArray [RLPNumber 0x16]
 
     
