@@ -69,6 +69,9 @@ instance Format Message where
   format (GetChain pSHAs numChild) =
     blue "GetChain" ++ " (max: " ++ show numChild ++ "):\n    " ++
     intercalate ",\n    " (format <$> pSHAs)
+  format (NotInChain shas) =
+    blue "NotInChain:" ++ 
+    tab ("\n" ++ intercalate ",\n    " (format <$> shas))
   format GetTransactions = blue "GetTransactions"
   format x = show x
 
@@ -95,7 +98,8 @@ obj2WireMessage (RLPArray (RLPNumber 0x14:items)) =
   where
     RLPNumber numChildren = last items
     parentSHAs = rlpDecode <$> init items
-
+obj2WireMessage (RLPArray (RLPNumber 0x15:items)) =
+  NotInChain $ rlpDecode <$> items
 obj2WireMessage (RLPArray [RLPNumber 0x16]) = GetTransactions
 
 obj2WireMessage (RLPArray x) = error ("Missing message: " ++ show x)

@@ -1,6 +1,7 @@
 
 module Util (
   byteString2Integer,
+  integer2Bytes,
   padZeros,
   tab
   ) where
@@ -18,6 +19,10 @@ byteString2Integer x = byteString2Integer' $ B.unpack x
     byteString2Integer'::[Word8]->Integer
     byteString2Integer' [] = 0
     byteString2Integer' (x:rest) = fromIntegral x `shift` (8 * length rest) + byteString2Integer' rest
+
+integer2Bytes::Integer->[Word8]
+integer2Bytes 0 = []
+integer2Bytes x = fromInteger (x .&. 256):integer2Bytes (x `shiftR` 8)
 
 
 padZeros::Int->String->String

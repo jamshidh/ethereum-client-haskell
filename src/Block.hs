@@ -6,7 +6,8 @@ module Block (
   blockHash,
   powFunc,
   addNonceToBlock,
-  findNonce
+  findNonce,
+  genesisBlock
   ) where
 
 import qualified Crypto.Hash.SHA3 as C
@@ -43,7 +44,7 @@ data BlockData = BlockData {
   unclesHash::SHA,
   coinbase::Address,
   stateRoot::SHA,
-  transactionsTrie::SHA,
+  transactionsTrie::Integer,
   difficulty::Integer,
   number::Integer,
   minGasPrice::Integer,
@@ -85,7 +86,7 @@ instance RLPSerializable BlockData where
       unclesHash = rlpDecode v2,
       coinbase = rlp2Address v3,
       stateRoot = rlpDecode v4,
-      transactionsTrie = rlpDecode v5,
+      transactionsTrie = fromIntegral $ getNumber v5,
       difficulty = fromIntegral $ getNumber v6,
       number = fromIntegral $ getNumber v7,
       minGasPrice = fromIntegral $ getNumber v8,
@@ -105,7 +106,7 @@ instance RLPSerializable BlockData where
       rlpEncode $ unclesHash bd,
       address2RLP $ coinbase bd,
       rlpEncode $ stateRoot bd,
-      rlpEncode $ transactionsTrie bd,
+      rlpNumber $ transactionsTrie bd,
       rlpNumber $ difficulty bd,
       rlpNumber $ number bd,
       rlpNumber $ minGasPrice bd,
@@ -126,7 +127,7 @@ instance Format BlockData where
     (if unclesHash b == hash (B.pack [0xc0]) then " (the empty array)\n" else "\n") ++
     "coinbase: " ++ format (coinbase b) ++ "\n" ++
     "stateRoot: " ++ format (stateRoot b) ++ "\n" ++
-    "transactionsTrie: " ++ format (transactionsTrie b) ++ "\n" ++
+    "transactionsTrie: " ++ show (transactionsTrie b) ++ "\n" ++
     "difficulty: " ++ show (difficulty b) ++ "\n" ++
     "minGasPrice: " ++ show (minGasPrice b) ++ "\n" ++
     "gasLimit: " ++ show (gasLimit b) ++ "\n" ++
@@ -135,8 +136,32 @@ instance Format BlockData where
     "extraData: " ++ show (extraData b) ++ "\n" ++
     "nonce: " ++ format (nonce b) ++ "\n"
 
---------------------------
+genesisBlock =
+  Block {
+    blockData = 
+       BlockData {
+         parentHash = SHA 0,
+         unclesHash = hash (B.pack [0xc0]), 
+         coinbase = Address 0,
+         stateRoot = SHA 0x8dbd704eb38d1c2b73ee4788715ea5828a030650829703f077729b2b613dd206,
+         transactionsTrie = 0,
+         difficulty = 0x400000, --2^22,
+         number = 0,
+         minGasPrice = 0,
+         gasLimit = 1000000,
+         gasUsed = 0,
+         timestamp = posixSecondsToUTCTime 0,
+         extraData = 0,
+         nonce = hash $ B.pack [42]
+         },
+    receiptTransactions=[],
+    blockUncles=[]
+    }
 
+--------------------------
+--Mining stuff
+
+  
 --used as part of the powFunc
 noncelessBlockData2RLP bd =
   RLPArray [
@@ -144,7 +169,7 @@ noncelessBlockData2RLP bd =
       rlpEncode $ unclesHash bd,
       address2RLP $ coinbase bd,
       rlpEncode $ stateRoot bd,
-      rlpEncode $ transactionsTrie bd,
+      rlpNumber $ transactionsTrie bd,
       rlpNumber $ difficulty bd,
       rlpNumber $ number bd,
       rlpNumber $ minGasPrice bd,
@@ -165,6 +190,7 @@ headerHashWithoutNonce b = C.hash 256 $ B.pack $ rlp2Bytes $ noncelessBlockData2
 
 powFunc::Block->Integer
 powFunc b =
+  --trace (show $ headerHashWithoutNonce b) $
   byteString2Integer $ BC.pack $ 
   BC.unpack $
   C.hash 256 (

@@ -72,21 +72,21 @@ sendMessage socket msg = do
 
   
 --testGetNextBlock::Block->UTCTime->Block
-testGetNextBlock = --b ts =
+testGetNextBlock b ts =
   Block{
-    blockData=testGetNextBlockData, -- b ts,
+    blockData=testGetNextBlockData b ts,
     receiptTransactions=[],
     blockUncles=[]
     }
   where
     --testGetNextBlockData::Block->UTCTime->BlockData
-    testGetNextBlockData = --b ts =
+    testGetNextBlockData b ts =
       BlockData {
-        parentHash=SHA 1234, --blockHash b,
+        parentHash=blockHash b,
         unclesHash=hash $ B.pack [0xc0],
         coinbase=prvKey2Address prvKey,
-        stateRoot = SHA 0,
-        transactionsTrie = SHA 0,
+        stateRoot = SHA 1,
+        transactionsTrie = 0,
         difficulty = 1000000, --13269813, --difficulty $ blockData b,
         number = 0,
         minGasPrice = 10000000000000, --minGasPrice $ blockData b,
@@ -115,9 +115,10 @@ handlePayload socket payload = do
       sendMessage socket $ GetPeers
     Blocks [b] -> do
       ts <- getCurrentTime
-      let newBlock = testGetNextBlock -- b ts
+      let newBlock = testGetNextBlock b ts
       print $ powFunc newBlock
-      sendMessage socket $ Blocks [newBlock]
+      --putStrLn $ show $ noncelessBlockData2RLP newBlock
+      sendMessage socket $ Blocks [addNonceToBlock newBlock $ findNonce $ newBlock]
     GetTransactions -> do
       sendMessage socket $ Transactions []
       sendMessage socket $ GetTransactions
@@ -176,11 +177,12 @@ main = connect "127.0.0.1" "30303" $ \(socket, remoteAddr) -> do
   --putStrLn $ "powFunc = " ++ show (showHex powVal "")
   --let passed = powVal * (difficulty $ blockData newBlock) < 2^256
   --putStrLn (red "Passed: " ++ show passed)
-  sendMessage socket $ Blocks [addNonceToBlock newBlock $ findNonce $ newBlock]
+  --sendMessage socket $ Blocks [addNonceToBlock newBlock $ findNonce $ newBlock]
 
 
   --sendMessage socket $ Transactions [signedTx]
-  --sendMessage socket $ GetChain [SHA 0x3281f4b79941b15e2fd78eb851fddee144cd7d5f8169beaf0b58fbba7fedea32] 0x40
+  sendMessage socket $ GetChain [blockHash genesisBlock] 0x40
+  putStrLn $ format $ B.pack $ rlp2Bytes $ rlpEncode genesisBlock
   putStrLn "Transaction has been sent"
 
   readAndOutput socket
