@@ -14,7 +14,7 @@
 pthread_mutex_t     mutex = PTHREAD_MUTEX_INITIALIZER;
 
 uint8_t savedNonce[32];
-volatile int nonceFound;
+volatile bool nonceFound;
 
 void saveNonce(uint8_t *val) {
 
@@ -24,7 +24,7 @@ void saveNonce(uint8_t *val) {
 
   memcpy(savedNonce, val, 32);
 
-  nonceFound=1;
+  nonceFound=true;
 
   pthread_mutex_unlock(&mutex);
 
@@ -119,7 +119,7 @@ int findNonce(uint8_t data[32], uint8_t threshold[32], uint8_t *out) {
 
   int i;
 
-  nonceFound=0;
+  nonceFound=false;
 
   for(thread_num = 0; thread_num < NUMTHREADS-1; thread_num++) {
     
