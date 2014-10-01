@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
@@ -72,7 +73,7 @@ void *calculateHashes(void *x) {
 
   struct ThreadData *threadData = (struct ThreadData *) x;
 
-  //printf("%d, #### starting thread\n", threadData->thread_num);
+  printf("%d, #### starting thread\n", threadData->thread_num);
   
 
   memcpy(dataAndNonce, threadData->data, 32);
@@ -81,24 +82,38 @@ void *calculateHashes(void *x) {
 
 
   *(dataAndNonce + 32) = threadData->thread_num;
-  for(i = 0LL; i < 13269813/NUMTHREADS; i++) {
+  while(true){
     //No mutex needed, because this is just a bool, it is only flipped to true in one place, and 
     //even if I read while writing, the worst case is that I calculate one extra sha hash.
     if (nonceFound) return NULL;
     increment256(dataAndNonce+32);
     getHash(dataAndNonce, out);
     if (compare256(out, threadData->threshold) == -1) {
+      printf("data: ");
+      print256(dataAndNonce);
+      printf("nonce: ");
+      print256(dataAndNonce+32);
+      printf("out: ");
+      print256(out);
+      printf("done\n");
       saveNonce(dataAndNonce+32);
       return NULL;
     }
   }
 
-  return 0;
+  printf("shouldn't be here\n");
+
+  exit(1);
 }
 
 int findNonce(uint8_t data[32], uint8_t threshold[32], uint8_t *out) {
   pthread_t inc_x_thread[NUMTHREADS];
   struct ThreadData threadData[NUMTHREADS];
+
+  printf("data:      ");
+  print256(data);
+  printf("threshold: ");
+  print256(threshold);
 
   int thread_num;
 
@@ -126,6 +141,9 @@ int findNonce(uint8_t data[32], uint8_t threshold[32], uint8_t *out) {
   }
 
   assert(nonceFound);
+
+  printf("savedNonce: ");
+  print256(savedNonce);
 
   memcpy(out, savedNonce, 32);
 

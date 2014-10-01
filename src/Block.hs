@@ -5,6 +5,7 @@ module Block (
   Block(..),
   blockHash,
   powFunc,
+  headerHashWithoutNonce,
   addNonceToBlock,
   findNonce,
   fastFindNonce,
@@ -25,9 +26,10 @@ import Data.Time
 import Data.Time.Clock.POSIX
 import Data.Word
 import Foreign
-import Foreign.ForeignPtr.Unsafe
-import Foreign.Ptr
 import Foreign.C.Types
+import Foreign.ForeignPtr.Unsafe
+import Foreign.Marshal.Array
+import Foreign.Ptr
 import Numeric
 
 import ExtendedECDSA
@@ -223,10 +225,11 @@ fastFindNonce::Block->IO Integer
 fastFindNonce b = do
   let (theData, _, _) = toForeignPtr $ headerHashWithoutNonce b
   let (theThreshold, _, _) = toForeignPtr threshold
-  let retValue = B.pack [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-  let (retPtr, _, _) = toForeignPtr retValue
-  retInt <- c_fastFindNonce (unsafeForeignPtrToPtr theData) (unsafeForeignPtrToPtr theThreshold) (unsafeForeignPtrToPtr retPtr)
-  return $ byteString2Integer retValue
+  retValue <- mallocArray 32
+  retInt <- c_fastFindNonce (unsafeForeignPtrToPtr theData) (unsafeForeignPtrToPtr theThreshold) retValue
+  print retInt
+  retData <- peekArray 32 retValue
+  return $ byteString2Integer $ B.pack retData
   where
     threshold::B.ByteString
     threshold = fst $ decode $ BC.pack $ padZeros 64 $ showHex (2^256 `quot` (difficulty $ blockData b)) ""

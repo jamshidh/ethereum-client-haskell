@@ -4,6 +4,7 @@ module Main (
   ) where
 
 import Control.Monad
+import qualified Crypto.Hash.SHA3 as C
 import Data.Binary.Get
 import Data.Binary.Put
 import Data.Bits
@@ -23,6 +24,9 @@ import Network.Haskoin.Internals hiding (Ping, Pong, version, Message, Block, ti
 import Network.Socket (socketToHandle)
 import Numeric
 import System.IO
+
+--remove this
+import Data.Time
 
 import Network.Simple.TCP
 
@@ -79,7 +83,7 @@ testGetNextBlock b ts =
     blockUncles=[]
     }
   where
-    --testGetNextBlockData::Block->UTCTime->BlockData
+    testGetNextBlockData::Block->UTCTime->BlockData
     testGetNextBlockData b ts =
       BlockData {
         parentHash=blockHash b,
@@ -87,15 +91,22 @@ testGetNextBlock b ts =
         coinbase=prvKey2Address prvKey,
         stateRoot = SHA 1,
         transactionsTrie = 0,
-        difficulty = 1000000, --13269813, --difficulty $ blockData b,
+        difficulty =
+          if (round (utcTimeToPOSIXSeconds ts)) >=
+             (round (utcTimeToPOSIXSeconds (timestamp bd)) + 42)
+          then difficulty bd - difficulty bd `shiftR` 10
+          else difficulty bd + difficulty bd `shiftR` 10,
+        --20000000, --13269813,
         number = 0,
-        minGasPrice = 10000000000000, --minGasPrice $ blockData b,
-        gasLimit = 125000, --gasLimit $ blockData b,
+        minGasPrice = 10000000000000, --minGasPrice bd,
+        gasLimit = 125000, --gasLimit bd,
         gasUsed = 0,
         timestamp = posixSecondsToUTCTime $ fromIntegral (1411763223::Integer), --ts,
         extraData = 0,
         nonce = SHA 5
         }
+      where 
+        bd = blockData b
 
 
 
@@ -116,7 +127,14 @@ handlePayload socket payload = do
     Blocks [b] -> do
       ts <- getCurrentTime
       let newBlock = testGetNextBlock b ts
+      print newBlock
       nonce <- fastFindNonce newBlock
+
+      print $ showHex (powFunc $ addNonceToBlock newBlock nonce) ""
+      let theBytes = headerHashWithoutNonce newBlock `B.append` B.pack (integer2Bytes nonce)
+      print $ format theBytes
+      print $ format $ C.hash 256 theBytes
+      
       sendMessage socket $ Blocks [addNonceToBlock newBlock nonce]
     GetTransactions -> do
       sendMessage socket $ Transactions []
@@ -189,9 +207,9 @@ main = connect "127.0.0.1" "30303" $ \(socket, remoteAddr) -> do
                 receiptTransactions=[],
                 blockUncles=[]
                }
-  let ts = 0
+  --let ts = 0
 
-  let newBlock = testGetNextBlock b ts
+  --let newBlock = testGetNextBlock b ts
   --let powVal = byteString2Integer $ BC.pack $ powFunc newBlock
   --putStrLn $ "powFunc = " ++ show (showHex powVal "")
   --let passed = powVal * (difficulty $ blockData newBlock) < 2^256
@@ -206,3 +224,28 @@ main = connect "127.0.0.1" "30303" $ \(socket, remoteAddr) -> do
 
   readAndOutput socket
 
+main2 = do
+  let b = 
+        Block {
+          blockData = BlockData {
+             parentHash = SHA (BigWord {getBigWordInteger = 877290184733011228355131318509245476995638757136170869201259140273173077028}),
+             unclesHash = SHA (BigWord {getBigWordInteger = 13478047122767188135818125966132228187941283477090363246179690878162135454535}),
+             coinbase = Address (BigWord {getBigWordInteger = 521006474229988785287787995209817519331962723518}),
+             stateRoot = SHA (BigWord {getBigWordInteger = 1}), transactionsTrie = 0,
+             difficulty = 12917270,
+             number = 0,
+             minGasPrice = 10000000000000,
+             gasLimit = 125000,
+             gasUsed = 0,
+             timestamp = read "2014-09-26 20:27:03 UTC",
+             extraData = 0,
+             nonce = SHA (BigWord {getBigWordInteger = 5})},
+          receiptTransactions = [],
+          blockUncles = []
+          }
+  print b
+  nonce <- fastFindNonce b
+  print $ showHex nonce ""
+  let final = headerHashWithoutNonce b `B.append` B.pack (integer2Bytes nonce)
+  print $ format final
+  print $ format $ C.hash 256 final
