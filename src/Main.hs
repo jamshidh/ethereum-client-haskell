@@ -97,11 +97,11 @@ testGetNextBlock b ts =
           then difficulty bd - difficulty bd `shiftR` 10
           else difficulty bd + difficulty bd `shiftR` 10,
         --20000000, --13269813,
-        number = 0,
+        number = number bd + 1,
         minGasPrice = 10000000000000, --minGasPrice bd,
         gasLimit = 125000, --gasLimit bd,
         gasUsed = 0,
-        timestamp = posixSecondsToUTCTime $ fromIntegral (1411763223::Integer), --ts,
+        timestamp = ts,  
         extraData = 0,
         nonce = SHA 5
         }
@@ -114,9 +114,9 @@ testGetNextBlock b ts =
 
 
 
-handlePayload::Socket->[Word8]->IO ()
+handlePayload::Socket->B.ByteString->IO ()
 handlePayload socket payload = do
-  let (rlpObject, []) = rlpSplit payload
+  let rlpObject = rlpDeserialize payload
   let msg = obj2WireMessage rlpObject
   putStrLn (red "msg<<<<: " ++ format msg)
   case msg of
@@ -157,7 +157,7 @@ readAndOutput socket = do
   where
     handleAllPayloads [] = error "Server has closed the connection"
     handleAllPayloads (pl:rest) = do
-      handlePayload socket pl
+      handlePayload socket $ B.pack pl
       handleAllPayloads rest
 
 main = connect "127.0.0.1" "30303" $ \(socket, remoteAddr) -> do

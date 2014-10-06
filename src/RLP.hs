@@ -1,30 +1,33 @@
+{-# LANGUAGE FlexibleInstances #-}
 
 module RLP (
   RLPObject(..),
   RLPSerializable(..),
-  rlpSplit,
+  rlpDeserialize,
   rlp2Bytes,
   rlpNumber,
   getNumber
   ) where
 
-import Control.Monad
-import Crypto.Hash.SHA256
-import Data.Binary.Get
-import Data.Binary.Put
 import Data.Bits
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Base16 as B16
+import qualified Data.ByteString.Char8 as BC
 import Data.ByteString.Internal
-import qualified Data.ByteString.UTF8 as B
 import Data.Functor
-import Data.Time.Clock.POSIX
+import Data.List
 import Data.Word
-import Data.String
 
+import Format
 import Util
 
 data RLPObject = RLPNumber Int | RLPString String | RLPArray [RLPObject] deriving (Show)
+
+instance Format RLPObject where
+  format (RLPArray objects) = "[" ++ intercalate ", " (format <$> objects) ++ "]"
+  format (RLPNumber n) = "0x" ++ show n
+  format (RLPString s) = "0x" ++ (BC.unpack $ B16.encode $ BC.pack s)
+
 
 class RLPSerializable a where
   rlpDecode::RLPObject->a
@@ -115,3 +118,16 @@ rlpNumber x = RLPString $ w2c <$> getIntegerBytes x
 getNumber::RLPObject->Integer
 getNumber (RLPNumber n) = fromIntegral n
 getNumber (RLPString s) = byteString2Integer $ B.pack $ map c2w s
+
+rlpDeserialize::B.ByteString->RLPObject
+rlpDeserialize s =
+  case rlpSplit $ B.unpack s of
+    (o, []) -> o
+    _ -> error ("parse error converting ByteString to an RLP Object: " ++ show s)
+
+
+instance RLPSerializable String where
+  rlpEncode = error("rlpEncode undefined")
+  rlpDecode (RLPString s) = s
+  rlpDecode (RLPNumber n) = [w2c $ fromIntegral n]
+  rlpDecode (RLPArray _) = error "Malformed RLP in call to rlpDecode for String: RLPObject is an array."
