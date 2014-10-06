@@ -1,24 +1,27 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wall #-}
 
 module Main (
   main
   ) where
 
-import Control.Monad
+import Control.Monad.IO.Class
+import Control.Monad.Trans.Resource
 import qualified Crypto.Hash.SHA3 as C
-import Data.Binary.Get
 import Data.Binary.Put
 import Data.Bits
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
 import Data.ByteString.Internal
-import Data.ByteString.Base16
-import Data.Time.Clock
+import qualified Data.ByteString.Base16 as B16
+import Data.Default
 import Data.Functor
-import Data.Maybe
+import Data.List
+import Data.Time.Clock
 import Data.Time.Clock.POSIX
 import Data.Word
-import Data.String
+import qualified Database.LevelDB as DB
 import Network.Haskoin.Crypto
 import Network.Haskoin.Internals hiding (Ping, Pong, version, Message, Block, timestamp)
 import Network.Socket (socketToHandle)
@@ -26,27 +29,32 @@ import Numeric
 import System.IO
 
 --remove this
-import Data.Time
+--import Data.Time
 
 import Network.Simple.TCP
 
 import Address
 import Block
 import Colors
+import EthDB
 import Format
 import RLP
 import SHA
-import Transaction
+--import Transaction
 import Util
 import Wire
 
 --import Debug.Trace
 
+{-
 data IPAddress = IPV4Address Word8 Word8 Word8 Word8 |
   IPV6Address Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 
+-}
 
+prvKey::PrvKey
 Just prvKey = makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
 
+{-
 address::IPAddress->Word16->Word64->Put
 address (IPV4Address d1 d2 d3 d4) port flags = do
   putWord64le flags
@@ -56,7 +64,8 @@ address (IPV4Address d1 d2 d3 d4) port flags = do
   putWord8 d3
   putWord8 d4
   putWord16le port
-  
+-}
+
 ethereumHeader::ByteString->Put
 ethereumHeader payload = do
   putWord32be 0x22400891
@@ -75,16 +84,16 @@ sendMessage socket msg = do
 
 
   
---testGetNextBlock::Block->UTCTime->Block
+testGetNextBlock::Block->UTCTime->Block
 testGetNextBlock b ts =
   Block{
-    blockData=testGetNextBlockData b ts,
+    blockData=testGetNextBlockData,
     receiptTransactions=[],
     blockUncles=[]
     }
   where
-    testGetNextBlockData::Block->UTCTime->BlockData
-    testGetNextBlockData b ts =
+    testGetNextBlockData::BlockData
+    testGetNextBlockData =
       BlockData {
         parentHash=blockHash b,
         unclesHash=hash $ B.pack [0xc0],
@@ -93,7 +102,7 @@ testGetNextBlock b ts =
         transactionsTrie = 0,
         difficulty =
           if (round (utcTimeToPOSIXSeconds ts)) >=
-             (round (utcTimeToPOSIXSeconds (timestamp bd)) + 42)
+             (round (utcTimeToPOSIXSeconds (timestamp bd)) + 42::Integer)
           then difficulty bd - difficulty bd `shiftR` 10
           else difficulty bd + difficulty bd `shiftR` 10,
         --20000000, --13269813,
@@ -128,14 +137,14 @@ handlePayload socket payload = do
       ts <- getCurrentTime
       let newBlock = testGetNextBlock b ts
       print newBlock
-      nonce <- fastFindNonce newBlock
+      n <- fastFindNonce newBlock
 
-      print $ showHex (powFunc $ addNonceToBlock newBlock nonce) ""
-      let theBytes = headerHashWithoutNonce newBlock `B.append` B.pack (integer2Bytes nonce)
+      print $ showHex (powFunc $ addNonceToBlock newBlock n) ""
+      let theBytes = headerHashWithoutNonce newBlock `B.append` B.pack (integer2Bytes n)
       print $ format theBytes
       print $ format $ C.hash 256 theBytes
       
-      sendMessage socket $ Blocks [addNonceToBlock newBlock nonce]
+      sendMessage socket $ Blocks [addNonceToBlock newBlock n]
     GetTransactions -> do
       sendMessage socket $ Transactions []
       sendMessage socket $ GetTransactions
@@ -148,6 +157,7 @@ getPayloads (0x22:0x40:0x08:0x91:s1:s2:s3:s4:remainder) =
   take payloadLength remainder:getPayloads (drop payloadLength remainder)
   where
     payloadLength = shift (fromIntegral s1) 24 + shift (fromIntegral s2) 16 + shift (fromIntegral s3) 8 + fromIntegral s4
+getPayloads _ = error "Malformed data sent to getPayloads"
 
 readAndOutput::Socket->IO()
 readAndOutput socket = do
@@ -160,7 +170,8 @@ readAndOutput socket = do
       handlePayload socket $ B.pack pl
       handleAllPayloads rest
 
-main = connect "127.0.0.1" "30303" $ \(socket, remoteAddr) -> do
+main1::IO ()    
+main1 = connect "127.0.0.1" "30303" $ \(socket, _) -> do
   putStrLn "Connected"
 
   sendMessage socket $ Hello {
@@ -174,6 +185,7 @@ main = connect "127.0.0.1" "30303" $ \(socket, remoteAddr) -> do
 
         }
 
+  {-
   let tx = Transaction {
          tNonce = 28,
          gasPrice = 0x9184e72a000,
@@ -188,6 +200,9 @@ main = connect "127.0.0.1" "30303" $ \(socket, remoteAddr) -> do
 
   signedTx <- withSource devURandom $
                    signTransaction prvKey tx
+  -}
+  
+  {-
   let b = Block{blockData=
                    BlockData {
                      parentHash=SHA 0,
@@ -207,15 +222,16 @@ main = connect "127.0.0.1" "30303" $ \(socket, remoteAddr) -> do
                 receiptTransactions=[],
                 blockUncles=[]
                }
-  --let ts = 0
+  let ts = 0
 
-  --let newBlock = testGetNextBlock b ts
-  --let powVal = byteString2Integer $ BC.pack $ powFunc newBlock
-  --putStrLn $ "powFunc = " ++ show (showHex powVal "")
-  --let passed = powVal * (difficulty $ blockData newBlock) < 2^256
-  --putStrLn (red "Passed: " ++ show passed)
-  --theNonce <- (fastFindNonce newBlock)::IO Integer
-  --sendMessage socket $ Blocks [addNonceToBlock newBlock theNonce]
+  let newBlock = testGetNextBlock b ts
+  let powVal = byteString2Integer $ BC.pack $ powFunc newBlock
+  putStrLn $ "powFunc = " ++ show (showHex powVal "")
+  let passed = powVal * (difficulty $ blockData newBlock) < 2^256
+  putStrLn (red "Passed: " ++ show passed)
+  theNonce <- (fastFindNonce newBlock)::IO Integer
+  sendMessage socket $ Blocks [addNonceToBlock newBlock theNonce]
+  -}
 
 
   --sendMessage socket $ Transactions [signedTx]
@@ -224,6 +240,7 @@ main = connect "127.0.0.1" "30303" $ \(socket, remoteAddr) -> do
 
   readAndOutput socket
 
+main2::IO ()    
 main2 = do
   let b = 
         Block {
@@ -244,8 +261,74 @@ main2 = do
           blockUncles = []
           }
   print b
-  nonce <- fastFindNonce b
-  print $ showHex nonce ""
-  let final = headerHashWithoutNonce b `B.append` B.pack (integer2Bytes nonce)
+  n <- fastFindNonce b
+  print $ showHex n ""
+  let final = headerHashWithoutNonce b `B.append` B.pack (integer2Bytes n)
   print $ format final
   print $ format $ C.hash 256 final
+
+-------------------------
+
+  
+
+dbPath::String
+dbPath="/home/jim/.ethereum/state/"
+--"/Users/hutong/Library/Application Support/Ethereum/state/"
+--"/tmp/leveldbtest"
+
+genesisRoot::B.ByteString
+(genesisRoot, "") = B16.decode "8dbd704eb38d1c2b73ee4788715ea5828a030650829703f077729b2b613dd206"
+
+stateRoot1::B.ByteString
+(stateRoot1, "") = B16.decode "8b9a53acdafe82b6247c195035995f892f467fda03d7b44b684dcb3663fb3497"
+
+stateRoot2::B.ByteString
+(stateRoot2, "") = B16.decode "b995f323e0811206ec8ed8cadf334a713413eca003c8cbde75a777a647eb6ec7"
+
+stateRoot3::B.ByteString
+(stateRoot3, "") = B16.decode "f22a63cd45e9560b36f1f5cfb95f917601493650d1f5cc237d3f4893ab45f3b9"
+
+stateRoot4::B.ByteString
+(stateRoot4, "") = B16.decode "5893c00aa5e6fcb867d916207fa8cf7339689b9f85aafa92b81574c6e438f887"
+
+
+main3::IO ()
+main3 = do
+  let options = DB.defaultOptions {
+        DB.createIfMissing=True, DB.cacheSize=1024}
+  runResourceT $ do
+    db <- DB.open dbPath options
+
+    i <- DB.iterOpen db def
+    DB.iterFirst i
+    sequence_ $ replicate 5 $ DB.iterNext i
+    Just key <- DB.iterKey i
+
+    theData1 <- getKeyVals db (SHAPtr key) ""
+    liftIO $ putStrLn $ intercalate "\n" $ kvFormat <$> theData1
+
+    liftIO $ putStrLn "========================"
+    genesisData <- getKeyVals db (SHAPtr genesisRoot) ""
+    liftIO $ putStrLn $ intercalate "\n" $ kvFormat <$> genesisData
+
+    liftIO $ putStrLn "========================"
+    b1Data <- getKeyVals db (SHAPtr stateRoot1) ""
+    liftIO $ putStrLn $ intercalate "\n" $ kvFormat <$> b1Data
+
+    liftIO $ putStrLn "========================"
+    b2Data <- getKeyVals db (SHAPtr stateRoot2) ""
+    liftIO $ putStrLn $ intercalate "\n" $ kvFormat <$> b2Data
+
+    liftIO $ putStrLn "========================"
+    b3Data <- getKeyVals db (SHAPtr stateRoot3) ""
+    liftIO $ putStrLn $ intercalate "\n" $ kvFormat <$> b3Data
+
+    liftIO $ putStrLn "========================"
+    b4Data <- getKeyVals db (SHAPtr stateRoot4) ""
+    liftIO $ putStrLn $ intercalate "\n" $ kvFormat <$> b4Data
+
+main::IO ()    
+main = do
+  main3
+  main2
+  main1

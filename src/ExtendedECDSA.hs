@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wall #-}
 
 module ExtendedECDSA (
   ExtendedSignature(..),
@@ -7,7 +8,7 @@ module ExtendedECDSA (
 
 import Control.Monad
 import qualified Control.Monad.State as S
-import Control.Monad.Trans (MonadTrans, lift)
+import Control.Monad.Trans (lift)
 import Data.Bits
 
 import Network.Haskoin.Constants
@@ -84,6 +85,6 @@ getPubKeyFromSignature (ExtendedSignature sig yIsOdd) msgHash =
   where
     r = sigR sig
     s = sigS sig
-    ys = quadraticResidue $ (fromIntegral r)^3+7
+    ys = quadraticResidue $ (fromIntegral r)^(3::Integer)+7
     correctY = if odd (ys !! 0) == yIsOdd then ys !! 0 else ys !! 1
     Just bigR = makePoint (fromIntegral r) correctY

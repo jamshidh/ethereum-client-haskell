@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# OPTIONS_GHC -Wall #-}
 
 module RLP (
   RLPObject(..),
@@ -85,6 +86,7 @@ int2Bytes val | val < 256 = [fromIntegral val]
 int2Bytes val | val < 65536 = 
   map fromIntegral [0xFF .&. (val16 `shiftR` 8), 0xFF .&. val16]
   where val16 = fromIntegral val::Word16
+int2Bytes _ = error "int2Bytes not defined for val > 65535."
 
 rlp2Bytes::RLPObject->[Word8]
 rlp2Bytes (RLPNumber 0) = [0x80]
@@ -118,6 +120,7 @@ rlpNumber x = RLPString $ w2c <$> getIntegerBytes x
 getNumber::RLPObject->Integer
 getNumber (RLPNumber n) = fromIntegral n
 getNumber (RLPString s) = byteString2Integer $ B.pack $ map c2w s
+getNumber (RLPArray _) = error "Malformed data sent to getNumber"
 
 rlpDeserialize::B.ByteString->RLPObject
 rlpDeserialize s =

@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wall #-}
 
 module Transaction (
   Transaction(..),
@@ -6,7 +7,6 @@ module Transaction (
   ) where
 
 import Crypto.Hash.SHA3
-import Data.Bits
 import qualified Data.ByteString as B
 import Data.ByteString.Base16
 import Data.ByteString.Internal
@@ -19,11 +19,10 @@ import ExtendedECDSA
 import Address
 import Colors
 import Format
-import PrettyBytes
 import RLP
 import Util
 
-import Debug.Trace
+--import Debug.Trace
 
 
 data Transaction =
@@ -86,17 +85,17 @@ signTransaction privKey t = do
 
 
 instance RLPSerializable Transaction where
-  rlpDecode (RLPArray [n, gp, gl, to, val, i, v, r, s]) =
+  rlpDecode (RLPArray [n, gp, gl, toAddr, val, i, vVal, rVal, sVal]) =
     Transaction {
       tNonce = fromIntegral $ getNumber n,
       gasPrice = fromIntegral $ getNumber gp,
       tGasLimit = fromIntegral $ getNumber gl,
-      to = rlp2Address to,
+      to = rlp2Address toAddr,
       value = fromIntegral $ getNumber val,
       tInit = fromIntegral $ getNumber i,
-      v = fromIntegral $ getNumber v,
-      r = fromIntegral $ getNumber r,
-      s = fromIntegral $ getNumber s
+      v = fromIntegral $ getNumber vVal,
+      r = fromIntegral $ getNumber rVal,
+      s = fromIntegral $ getNumber sVal
       }
   rlpDecode x = error ("rlpDecode for Transaction called on non block object: " ++ show x)
 

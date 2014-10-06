@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wall #-}
 
 module Address (
   Address(..),
@@ -8,9 +9,6 @@ module Address (
 
 import Crypto.Hash.SHA3
 import Data.Binary
-import Data.ByteString.Internal
-import qualified Data.ByteString.Base16 as B16
-import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as BLC
 import Network.Haskoin.Crypto hiding (Address)
@@ -48,3 +46,4 @@ address2RLP (Address a) = RLPString $ BLC.unpack $ encode a
 
 rlp2Address::RLPObject->Address
 rlp2Address (RLPString s) = Address $ decode $ BLC.pack s
+rlp2Address x = error ("Malformed rlp object sent to rlp2Address: " ++ show x)

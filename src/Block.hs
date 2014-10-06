@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings, ForeignFunctionInterface #-}
+{-# OPTIONS_GHC -Wall #-}
 
 module Block (
   BlockData(..),
@@ -14,7 +15,6 @@ module Block (
 
 import qualified Crypto.Hash.SHA3 as C
 import qualified Data.Binary as DB
-import Data.Bits
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Char8 as BC
@@ -26,21 +26,14 @@ import Data.Time
 import Data.Time.Clock.POSIX
 import Data.Word
 import Foreign
-import Foreign.C.Types
 import Foreign.ForeignPtr.Unsafe
-import Foreign.Marshal.Array
-import Foreign.Ptr
 import Numeric
-
-import ExtendedECDSA
 
 import Address
 import Colors
 import Format
-import PrettyBytes
 import RLP
 import SHA
-import Transaction
 import TransactionReceipt
 import Util
 
@@ -69,22 +62,27 @@ data Block = Block {
   } deriving (Show)
 
 instance Format Block where
-  format b@Block{blockData=bd, receiptTransactions=r, blockUncles=[]} =
+  format b@Block{blockData=bd, receiptTransactions=receipts, blockUncles=[]} =
     blue ("Block #" ++ show (number bd)) ++ " " ++
     tab (format (blockHash b) ++ "\n" ++
          format bd ++
-         (if null r
+         (if null receipts
           then "        (no transactions, no uncles)"
-          else tab (intercalate "\n    " (format <$> r))))
+          else tab (intercalate "\n    " (format <$> receipts))))
+  format _ = 
+    error "format for Block not defined yet for blockUncles /= []."
               
 instance RLPSerializable Block where
-  rlpDecode (RLPArray [blockData, RLPArray transactionReceipts, RLPArray uncles]) =
-    Block (rlpDecode blockData) (rlpDecode <$> transactionReceipts) []
+  rlpDecode (RLPArray [bd, RLPArray transactionReceipts, RLPArray []]) =
+    Block (rlpDecode bd) (rlpDecode <$> transactionReceipts) []
+  rlpDecode (RLPArray [_, RLPArray _, RLPArray _]) =
+    error "rlpDecode for Block not defined yet for blockUncles /= []."
   rlpDecode (RLPArray arr) = error ("rlpDecode for Block called on object with wrong amount of data, length arr = " ++ show arr)
   rlpDecode x = error ("rlpDecode for Block called on non block object: " ++ show x)
 
-  rlpEncode Block{blockData=bd, receiptTransactions=r, blockUncles=[]} =
-    RLPArray [rlpEncode bd, RLPArray (rlpEncode <$> r), RLPArray []]
+  rlpEncode Block{blockData=bd, receiptTransactions=receipts, blockUncles=[]} =
+    RLPArray [rlpEncode bd, RLPArray (rlpEncode <$> receipts), RLPArray []]
+  rlpEncode _ = error "rlpEncode for Block not defined yet for blockUncles /= []."
 
 instance RLPSerializable BlockData where
   rlpDecode (RLPArray [v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13]) =
@@ -143,6 +141,7 @@ instance Format BlockData where
     "extraData: " ++ show (extraData b) ++ "\n" ++
     "nonce: " ++ format (nonce b) ++ "\n"
 
+genesisBlock::Block
 genesisBlock =
   Block {
     blockData = 
@@ -168,8 +167,8 @@ genesisBlock =
 --------------------------
 --Mining stuff
 
-  
 --used as part of the powFunc
+noncelessBlockData2RLP::BlockData->RLPObject
 noncelessBlockData2RLP bd =
   RLPArray [
       rlpEncode $ parentHash bd,
@@ -186,8 +185,12 @@ noncelessBlockData2RLP bd =
       rlpNumber $ extraData bd
       ]
 
-noncelessBlock2RLP Block{blockData=bd, receiptTransactions=r, blockUncles=[]} =
-  RLPArray [noncelessBlockData2RLP bd, RLPArray (rlpEncode <$> r), RLPArray []]
+{-
+noncelessBlock2RLP::Block->RLPObject
+noncelessBlock2RLP Block{blockData=bd, receiptTransactions=receipts, blockUncles=[]} =
+  RLPArray [noncelessBlockData2RLP bd, RLPArray (rlpEncode <$> receipts), RLPArray []]
+noncelessBlock2RLP _ = error "noncelessBock2RLP not definted for blockUncles /= []"
+-}
 
 sha2ByteString::SHA->B.ByteString
 sha2ByteString (SHA val) = BL.toStrict $ DB.encode val
@@ -205,7 +208,7 @@ powFunc b =
     sha2ByteString (nonce $ blockData b))
 
 nonceIsValid::Block->Bool
-nonceIsValid b = powFunc b * (difficulty $ blockData b) < 2^256
+nonceIsValid b = powFunc b * (difficulty $ blockData b) < (2::Integer)^(256::Integer)
 
 addNonceToBlock::Block->Integer->Block
 addNonceToBlock b n =
@@ -232,7 +235,7 @@ fastFindNonce b = do
   return $ byteString2Integer $ B.pack retData
   where
     threshold::B.ByteString
-    threshold = fst $ decode $ BC.pack $ padZeros 64 $ showHex (2^256 `quot` (difficulty $ blockData b)) ""
+    threshold = fst $ decode $ BC.pack $ padZeros 64 $ showHex ((2::Integer)^(256::Integer) `quot` (difficulty $ blockData b)) ""
 
 foreign import ccall "findNonce" c_fastFindNonce::Ptr Word8->Ptr Word8->Ptr Word8->IO Int
 --foreign import ccall "fastFindNonce" c_fastFindNonce::ForeignPtr Word8->ForeignPtr Word8->ForeignPtr Word8
