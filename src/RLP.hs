@@ -4,6 +4,7 @@
 module RLP (
   RLPObject(..),
   RLPSerializable(..),
+  rlpSerialize,
   rlpDeserialize,
   rlp2Bytes,
   rlpNumber,
@@ -21,6 +22,8 @@ import Data.Word
 
 import Format
 import Util
+
+import Debug.Trace
 
 data RLPObject = RLPNumber Int | RLPString String | RLPArray [RLPObject] deriving (Show)
 
@@ -123,10 +126,14 @@ getNumber (RLPString s) = byteString2Integer $ B.pack $ map c2w s
 getNumber (RLPArray _) = error "Malformed data sent to getNumber"
 
 rlpDeserialize::B.ByteString->RLPObject
-rlpDeserialize s =
+rlpDeserialize s = 
   case rlpSplit $ B.unpack s of
     (o, []) -> o
     _ -> error ("parse error converting ByteString to an RLP Object: " ++ show s)
+
+
+rlpSerialize::RLPObject->B.ByteString
+rlpSerialize o = B.pack $ rlp2Bytes o
 
 
 instance RLPSerializable String where

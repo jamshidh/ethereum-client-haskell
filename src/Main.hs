@@ -22,8 +22,8 @@ import Data.Time.Clock
 import Data.Time.Clock.POSIX
 import Data.Word
 import qualified Database.LevelDB as DB
-import Network.Haskoin.Crypto
-import Network.Haskoin.Internals hiding (Ping, Pong, version, Message, Block, timestamp)
+import Network.Haskoin.Crypto hiding (Address)
+import Network.Haskoin.Internals hiding (Ping, Pong, version, Message, Block, timestamp, Address)
 import Network.Socket (socketToHandle)
 import Numeric
 import System.IO
@@ -34,6 +34,7 @@ import System.IO
 import Network.Simple.TCP
 
 import Address
+import AddressState
 import Block
 import Colors
 import EthDB
@@ -272,9 +273,15 @@ main2 = do
   
 
 dbPath::String
-dbPath="/home/jim/.ethereum/state/"
+dbPath="/home/jim/.ethereumH/state/"
+--"/home/jim/.ethereum/state/"
 --"/Users/hutong/Library/Application Support/Ethereum/state/"
 --"/tmp/leveldbtest"
+
+startingRoot::B.ByteString
+(startingRoot, "") = B16.decode "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+                     --"bc36789e7a1e281436464229828f817d6612f7b477d66591ff96a9e064bcc98a"
+                    
 
 genesisRoot::B.ByteString
 (genesisRoot, "") = B16.decode "8dbd704eb38d1c2b73ee4788715ea5828a030650829703f077729b2b613dd206"
@@ -292,13 +299,8 @@ stateRoot4::B.ByteString
 (stateRoot4, "") = B16.decode "5893c00aa5e6fcb867d916207fa8cf7339689b9f85aafa92b81574c6e438f887"
 
 
-main3::IO ()
-main3 = do
-  let options = DB.defaultOptions {
-        DB.createIfMissing=True, DB.cacheSize=1024}
-  runResourceT $ do
-    db <- DB.open dbPath options
-
+showStuff::DB.DB->ResourceT IO ()
+showStuff db = do
     i <- DB.iterOpen db def
     DB.iterFirst i
     sequence_ $ replicate 5 $ DB.iterNext i
@@ -308,27 +310,92 @@ main3 = do
     liftIO $ putStrLn $ intercalate "\n" $ kvFormat <$> theData1
 
     liftIO $ putStrLn "========================"
-    genesisData <- getKeyVals db (SHAPtr genesisRoot) ""
-    liftIO $ putStrLn $ intercalate "\n" $ kvFormat <$> genesisData
+    genesisData <- getAddressState db (SHAPtr genesisRoot) $ Address 0x51ba59315b3a95761d0863b05ccc7a7f54703d99
+    liftIO $ putStrLn $ format $ genesisData
 
     liftIO $ putStrLn "========================"
-    b1Data <- getKeyVals db (SHAPtr stateRoot1) ""
-    liftIO $ putStrLn $ intercalate "\n" $ kvFormat <$> b1Data
+    b1Data <- getAddressState db (SHAPtr stateRoot1) $ Address 0x6ccf6b5c33ae2017a6c76b8791ca61276a69ab8e
+    liftIO $ putStrLn $ format $ b1Data
 
     liftIO $ putStrLn "========================"
-    b2Data <- getKeyVals db (SHAPtr stateRoot2) ""
-    liftIO $ putStrLn $ intercalate "\n" $ kvFormat <$> b2Data
+    b2Data <- getAddressState db (SHAPtr stateRoot2) $ Address 0x6ccf6b5c33ae2017a6c76b8791ca61276a69ab8e
+    liftIO $ putStrLn $ format $ b2Data
 
     liftIO $ putStrLn "========================"
-    b3Data <- getKeyVals db (SHAPtr stateRoot3) ""
-    liftIO $ putStrLn $ intercalate "\n" $ kvFormat <$> b3Data
+    b3Data <- getAddressState db (SHAPtr stateRoot3) $ Address 0x6ccf6b5c33ae2017a6c76b8791ca61276a69ab8e
+    liftIO $ putStrLn $ format $ b3Data
 
     liftIO $ putStrLn "========================"
-    b4Data <- getKeyVals db (SHAPtr stateRoot4) ""
-    liftIO $ putStrLn $ intercalate "\n" $ kvFormat <$> b4Data
+    b4Data <- getAddressState db (SHAPtr stateRoot4) $ Address 0x6ccf6b5c33ae2017a6c76b8791ca61276a69ab8e
+    liftIO $ putStrLn $ format $ b4Data
+
+startingAddressState =
+      AddressState {
+      addressStateNonce=0,
+      balance= 0x0100000000000000000000000000000000000000000000000000,
+      contractRoot=0,
+      codeHash=hash B.empty
+      }
+
+main3::IO ()
+main3 = do
+  let options = DB.defaultOptions {
+        DB.createIfMissing=True, DB.cacheSize=1024}
+  runResourceT $ do
+    db <- DB.open dbPath options
+    DB.put db def startingRoot B.empty
+
+    --showStuff db
+
+    let addresses = Address <$> [
+          0x51ba59315b3a95761d0863b05ccc7a7f54703d99,
+          0xe6716f9544a56c530d868e4bfbacb172315bdead,
+          0xb9c015918bdaba24b4ff057a92a3873d6eb201be,
+          0x1a26338f0d905e295fccb71fa9ea849ffa12aaf4,
+          0x2ef47100e0787b915105fd5e3f4ff6752079d5cb,
+          0xcd2a3d9f938e13cd947ec05abc7fe734df8dd826,
+          0x6c386a4b26f73c802f34673f7248bb118f97424a,
+          0xe4157b34ea9615cfbde6b4fda419828124b70c78
+          ]
+
+    newStateRoot <- putAddressStates db (SHAPtr startingRoot) addresses startingAddressState
+
+    i <- DB.iterOpen db def
+    DB.iterFirst i
+    valid <- DB.iterValid i
+    if valid
+      then showAllKeyVal db i
+      else liftIO $ putStrLn "no keys"
+
+
+
+
+    liftIO $ putStrLn "========================"
+    liftIO $ putStrLn $ format newStateRoot
+    let SHAPtr x = newStateRoot
+    allData <- getAllAddressStates db newStateRoot
+    liftIO $ putStrLn $ intercalate "\n" $ (\(a, addressState) -> format a ++ tab ("\n" ++ format addressState)) <$> allData
+
+
+
+    return ()
+
+putAddressStates::DB.DB->SHAPtr->[Address]->AddressState->ResourceT IO SHAPtr
+putAddressStates _ stateRoot [] _ = return stateRoot
+putAddressStates db stateRoot (address:rest) addressState = do
+    newStateRoot <- putAddressState db stateRoot address addressState
+    putAddressStates db newStateRoot rest addressState
+
+  {-
+s_ret[Address(fromHex(i))] = 
+AddressState(0, u256(1) << 200, h256(), EmptySHA3);
+
+putKeyVal "1a26338f0d905e295fccb71fa9ea849ffa12aaf4" [0x0, 0x0100000000000000000000000000000000000000000000000000, 0x0, 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470]
+-}
+
 
 main::IO ()    
 main = do
-  main3
-  main2
+  --main3
+  --main2
   main1

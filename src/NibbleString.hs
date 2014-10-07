@@ -1,6 +1,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -Wall #-}
 module NibbleString (
+  Nibble,
   NibbleString(..),
   empty,
   singleton,
@@ -32,7 +33,7 @@ import Format
 
 type Nibble = Word8
 
-data NibbleString = EvenNibbleString B.ByteString | OddNibbleString Nibble B.ByteString deriving (Show)
+data NibbleString = EvenNibbleString B.ByteString | OddNibbleString Nibble B.ByteString deriving (Show, Eq)
 
 formatNibble::Nibble->String
 formatNibble x | x > 0xF = error "format called for nibble greater than 0xF"
