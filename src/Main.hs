@@ -37,6 +37,7 @@ import Address
 import AddressState
 import Block
 import Colors
+import Constants
 import EthDB
 import Format
 import RLP
@@ -99,7 +100,7 @@ testGetNextBlock b ts =
         parentHash=blockHash b,
         unclesHash=hash $ B.pack [0xc0],
         coinbase=prvKey2Address prvKey,
-        stateRoot = SHA 1,
+        stateRoot = SHA 0x9b109189563315bfeb13d4bfd841b129ff3fd5c85f228a8d9d8563b4dde8432e,
         transactionsTrie = 0,
         difficulty =
           if (round (utcTimeToPOSIXSeconds ts)) >=
@@ -109,7 +110,7 @@ testGetNextBlock b ts =
         --20000000, --13269813,
         number = number bd + 1,
         minGasPrice = 10000000000000, --minGasPrice bd,
-        gasLimit = 125000, --gasLimit bd,
+        gasLimit = max 125000 ((gasLimit bd * 1023 + gasUsed bd *6 `quot` 5) `quot` 1024),
         gasUsed = 0,
         timestamp = ts,  
         extraData = 0,
@@ -145,7 +146,7 @@ handlePayload socket payload = do
       print $ format theBytes
       print $ format $ C.hash 256 theBytes
       
-      sendMessage socket $ Blocks [addNonceToBlock newBlock n]
+      --sendMessage socket $ Blocks [addNonceToBlock newBlock n]
     GetTransactions -> do
       sendMessage socket $ Transactions []
       sendMessage socket $ GetTransactions
@@ -203,7 +204,6 @@ main1 = connect "127.0.0.1" "30303" $ \(socket, _) -> do
                    signTransaction prvKey tx
   -}
   
-  {-
   let b = Block{blockData=
                    BlockData {
                      parentHash=SHA 0,
@@ -223,16 +223,17 @@ main1 = connect "127.0.0.1" "30303" $ \(socket, _) -> do
                 receiptTransactions=[],
                 blockUncles=[]
                }
-  let ts = 0
+  --let ts = 0
 
-  let newBlock = testGetNextBlock b ts
-  let powVal = byteString2Integer $ BC.pack $ powFunc newBlock
-  putStrLn $ "powFunc = " ++ show (showHex powVal "")
-  let passed = powVal * (difficulty $ blockData newBlock) < 2^256
-  putStrLn (red "Passed: " ++ show passed)
+  ts <- getCurrentTime
+  
+  let newBlock = testGetNextBlock genesisBlock ts
+  --let powVal = byteString2Integer $ BC.pack $ powFunc newBlock
+  --putStrLn $ "powFunc = " ++ show (showHex powVal "")
+  --let passed = powVal * (difficulty $ blockData newBlock) < 2^256
+  --putStrLn (red "Passed: " ++ show passed)
   theNonce <- (fastFindNonce newBlock)::IO Integer
   sendMessage socket $ Blocks [addNonceToBlock newBlock theNonce]
-  -}
 
 
   --sendMessage socket $ Transactions [signedTx]
@@ -360,12 +361,21 @@ main3 = do
 
     newStateRoot <- putAddressStates db (SHAPtr startingRoot) addresses startingAddressState
 
-    i <- DB.iterOpen db def
-    DB.iterFirst i
-    valid <- DB.iterValid i
-    if valid
-      then showAllKeyVal db i
-      else liftIO $ putStrLn "no keys"
+    --let pubKey = prvKey2Address prvKey 
+
+    let pubKey = Address 0x5b42bd01ff7b368cd80a477cb1cf0d407e2b1cbe
+
+    stateRoot2 <- putAddressState db newStateRoot pubKey
+        AddressState {
+          addressStateNonce=0,
+          balance= fromInteger $ 1500*finney,
+          contractRoot=0,
+          codeHash=hash B.empty
+          }
+
+    liftIO $ putStrLn $ "New stateRoot: " ++ format stateRoot2
+
+    --showAllKeyVal db
 
 
 

@@ -32,19 +32,28 @@ import RLP
 
 --import Debug.Trace
 
-showAllKeyVal::DB->Iterator->ResourceT IO ()
-showAllKeyVal db i = do
-  Just key <- iterKey i
-  val <- getNodeData db (SHAPtr key)
-  --Just byteStringValue <- iterValue i
-  --let val = (rlpDecode $ rlpDeserialize $ byteStringValue)::NodeData
-  liftIO $ putStrLn $ "----------\n" ++ format (SHAPtr key)
-  liftIO $ putStrLn $ format val
-  iterNext i
-  v <- iterValid i
-  if v
-     then showAllKeyVal db i
-     else return ()
+showAllKeyVal::DB->ResourceT IO ()
+showAllKeyVal db = do
+  i <- iterOpen db def
+  iterFirst i
+  valid <- iterValid i
+  if valid
+    then showAllKeyVal' db i
+    else liftIO $ putStrLn "no keys"
+  where
+    showAllKeyVal'::DB->Iterator->ResourceT IO ()
+    showAllKeyVal' db i = do
+      Just key <- iterKey i
+      val <- getNodeData db (SHAPtr key)
+      --Just byteStringValue <- iterValue i
+      --let val = (rlpDecode $ rlpDeserialize $ byteStringValue)::NodeData
+      liftIO $ putStrLn $ "----------\n" ++ format (SHAPtr key)
+      liftIO $ putStrLn $ format val
+      iterNext i
+      v <- iterValid i
+      if v
+        then showAllKeyVal' db i
+        else return ()
 
 getNodeData::DB->SHAPtr->ResourceT IO NodeData
 getNodeData db (SHAPtr p) = do
