@@ -22,6 +22,7 @@ executable ethereumH
                  , resourcet
                  , data-default
                  , leveldb-haskell
+                 , directory
     main-is: Main.hs
     C-sources: fastNonceFinder/nonceFinder.c
     --ghc-options: -threaded

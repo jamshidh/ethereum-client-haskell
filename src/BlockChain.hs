@@ -18,33 +18,34 @@ import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import Data.Functor
 import qualified Database.LevelDB as DB
+import System.Directory
 
 import Block
 import RLP
 import SHA
 
-import Debug.Trace
+--import Debug.Trace
 
 type BlockDB = DB.DB
 type DetailsDB = DB.DB
 
 blockDBPath::String
-blockDBPath="/home/jim/.ethereumH/blocks/"
+blockDBPath="/.ethereumH/blocks/"
 detailsDBPath::String
-detailsDBPath="/home/jim/.ethereumH/details/"
-
+detailsDBPath="/.ethereumH/details/"
 options::DB.Options
 options = DB.defaultOptions {
   DB.createIfMissing=True, DB.cacheSize=1024}
           
 addBlocks::[Block]->IO ()
 addBlocks blocks = runResourceT $ do
-  bdb <- DB.open blockDBPath options
-  ddb <- DB.open detailsDBPath options
+  homeDir <- liftIO $ getHomeDirectory                     
+  bdb <- DB.open (homeDir ++ blockDBPath) options
+  ddb <- DB.open (homeDir ++ detailsDBPath) options
   forM_ blocks (addBlock bdb ddb)
 
 addBlock::BlockDB->DetailsDB->Block->ResourceT IO ()
-addBlock bdb ddb b = trace ("addBlock: " ++ show (number $ blockData b)) $ do
+addBlock bdb ddb b = do
   --TODO- check for block validity, throw away if bad
   let bytes = rlpSerialize $ rlpEncode b
   DB.put bdb def (C.hash 256 bytes) bytes
@@ -66,17 +67,17 @@ getBestBlock bdb ddb = do
     Just h -> getBlock bdb h
 
 replaceBestIfBetter::BlockDB->DetailsDB->Block->ResourceT IO ()
-replaceBestIfBetter bdb ddb b = trace "qqqqqqqqqqqqqqqqqqreplaceBestIfBetter" $ do
+replaceBestIfBetter bdb ddb b = do
   maybeBest <- getBestBlock bdb ddb
   liftIO $ print $ maybeBest
   case maybeBest of
     Just best | number (blockData best) >= number (blockData b) -> return ()
-    Nothing -> runResourceT $ do
+    _ -> runResourceT $ do
       DB.put ddb def "best" (BL.toStrict $ encode $ blockHash b)
-    _ -> return ()
 
 --withBlockDB::(BlockDB->a)->a
 withBlockDB f = do
   runResourceT $ do
-    bdb  <- DB.open detailsDBPath options
+    homeDir <- liftIO $ getHomeDirectory
+    bdb  <- DB.open (homeDir ++ detailsDBPath) options
     f bdb
