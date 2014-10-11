@@ -18,6 +18,7 @@ import Data.ByteString.Internal
 import qualified Data.ByteString.Base16 as B16
 import Data.Default
 import Data.Functor
+import Data.Function
 import Data.List
 import Data.Time.Clock
 import Data.Time.Clock.POSIX
@@ -152,7 +153,7 @@ handlePayload socket payload = do
       sendMessage socket $ Peers []
       sendMessage socket $ GetPeers
     Blocks blocks -> do
-      addBlocks blocks
+      addBlocks $ sortBy (compare `on` number . blockData) blocks
         --submitBlock b
       
       --sendMessage socket $ Blocks [addNonceToBlock newBlock n]
