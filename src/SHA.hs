@@ -26,6 +26,12 @@ newtype SHA = SHA Word256 deriving (Show, Eq)
 instance Format SHA where
   format (SHA x) = yellow $ padZeros 64 $ showHex x ""
 
+instance Binary SHA where
+  put (SHA x) = put (integer2Bytes $ fromIntegral x)
+  get = do
+    x <- get
+    return (SHA $ fromInteger $ byteString2Integer x)
+
 instance RLPSerializable SHA where
   rlpDecode (RLPString s) | length s == 32 = SHA $ decode $ BLC.pack s
   rlpDecode (RLPNumber 0) = SHA 0 --special case seems to be allowed, even if length of zeros is wrong

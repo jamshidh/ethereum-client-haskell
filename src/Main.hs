@@ -5,6 +5,7 @@ module Main (
   main
   ) where
 
+import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import qualified Crypto.Hash.SHA3 as C
@@ -36,6 +37,7 @@ import Network.Simple.TCP
 import Address
 import AddressState
 import Block
+import BlockChain
 import Colors
 import Constants
 import EthDB
@@ -46,15 +48,19 @@ import SHA
 import Util
 import Wire
 
---import Debug.Trace
+import Debug.Trace
 
 {-
 data IPAddress = IPV4Address Word8 Word8 Word8 Word8 |
   IPV6Address Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 
 -}
 
+
 prvKey::PrvKey
 Just prvKey = makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
+--Just prvKey = makePrvKey 0xd69bceff85f3bc2d0a13bcc43b7caf6bd54a21ad0c1997ae623739216710ca19 --cpp client prvKey
+--6ccf6b5c33ae2017a6c76b8791ca61276a69ab8e --cpp coinbase
+
 
 {-
 address::IPAddress->Word16->Word64->Put
@@ -120,7 +126,17 @@ testGetNextBlock b ts =
         bd = blockData b
 
 
+submitBlock::Block->IO()
+submitBlock b = do
+        ts <- getCurrentTime
+        let newBlock = testGetNextBlock b ts
+        print newBlock
+        n <- fastFindNonce newBlock
 
+        print $ showHex (powFunc $ addNonceToBlock newBlock n) ""
+        let theBytes = headerHashWithoutNonce newBlock `B.append` B.pack (integer2Bytes n)
+        print $ format theBytes
+        print $ format $ C.hash 256 theBytes
 
 
 
@@ -135,16 +151,10 @@ handlePayload socket payload = do
     GetPeers -> do
       sendMessage socket $ Peers []
       sendMessage socket $ GetPeers
-    Blocks [b] -> do
-      ts <- getCurrentTime
-      let newBlock = testGetNextBlock b ts
-      print newBlock
-      n <- fastFindNonce newBlock
-
-      print $ showHex (powFunc $ addNonceToBlock newBlock n) ""
-      let theBytes = headerHashWithoutNonce newBlock `B.append` B.pack (integer2Bytes n)
-      print $ format theBytes
-      print $ format $ C.hash 256 theBytes
+    Blocks blocks ->
+      forM_ blocks $ \b -> do 
+        addBlock b
+        --submitBlock b
       
       --sendMessage socket $ Blocks [addNonceToBlock newBlock n]
     GetTransactions -> do
@@ -237,7 +247,9 @@ main1 = connect "127.0.0.1" "30303" $ \(socket, _) -> do
 
 
   --sendMessage socket $ Transactions [signedTx]
-  sendMessage socket $ GetChain [blockHash genesisBlock] 0x40
+  Just bestBlockHash <- getBestBlockHash
+  sendMessage socket $ GetChain [bestBlockHash] 0x40
+  --sendMessage socket $ GetChain [blockHash genesisBlock] 0x40
   putStrLn "Transaction has been sent"
 
   readAndOutput socket
@@ -361,10 +373,12 @@ main3 = do
 
     newStateRoot <- putAddressStates db (SHAPtr startingRoot) addresses startingAddressState
 
-    --let pubKey = prvKey2Address prvKey 
+    let pubKey = prvKey2Address prvKey 
 
-    let pubKey = Address 0x5b42bd01ff7b368cd80a477cb1cf0d407e2b1cbe
+    --let pubKey = Address 0x5b42bd01ff7b368cd80a477cb1cf0d407e2b1cbe
 
+    liftIO $ putStrLn $ "Pub Key: " ++ format pubKey
+    
     stateRoot2 <- putAddressState db newStateRoot pubKey
         AddressState {
           addressStateNonce=0,
