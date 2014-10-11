@@ -27,10 +27,11 @@ instance Format SHA where
   format (SHA x) = yellow $ padZeros 64 $ showHex x ""
 
 instance Binary SHA where
-  put (SHA x) = put (integer2Bytes $ fromIntegral x)
+  put (SHA x) = sequence_ $ fmap put $ (integer2Bytes $ fromIntegral x)
   get = do
-    x <- get
-    return (SHA $ fromInteger $ byteString2Integer x)
+    bytes <- sequence $ replicate 32 get
+    let byteString = B.pack bytes
+    return (SHA $ fromInteger $ byteString2Integer byteString)
 
 instance RLPSerializable SHA where
   rlpDecode (RLPString s) | length s == 32 = SHA $ decode $ BLC.pack s

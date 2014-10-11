@@ -3,10 +3,14 @@
 
 module BlockChain (
   addBlock,
+  addBlocks,
   getBestBlock,
-  getBestBlockHash
-) where
+  getBestBlockHash,
+  withBlockDB
+  ) where
 
+import Control.Monad
+import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import qualified Crypto.Hash.SHA3 as C
 import Data.Binary
@@ -21,6 +25,9 @@ import SHA
 
 import Debug.Trace
 
+type BlockDB = DB.DB
+type DetailsDB = DB.DB
+
 blockDBPath::String
 blockDBPath="/home/jim/.ethereumH/blocks/"
 detailsDBPath::String
@@ -30,38 +37,46 @@ options::DB.Options
 options = DB.defaultOptions {
   DB.createIfMissing=True, DB.cacheSize=1024}
           
-addBlock::Block->IO ()
-addBlock b = trace ("addBlock: " ++ show (number $ blockData b)) $ do
+addBlocks::[Block]->IO ()
+addBlocks blocks = runResourceT $ do
+  bdb <- DB.open blockDBPath options
+  ddb <- DB.open detailsDBPath options
+  forM_ blocks (addBlock bdb ddb)
+
+addBlock::BlockDB->DetailsDB->Block->ResourceT IO ()
+addBlock bdb ddb b = trace ("addBlock: " ++ show (number $ blockData b)) $ do
   --TODO- check for block validity, throw away if bad
-  runResourceT $ do
-    db <- DB.open blockDBPath options
-    let bytes = rlpSerialize $ rlpEncode b
-    DB.put db def (C.hash 256 bytes) bytes
+  let bytes = rlpSerialize $ rlpEncode b
+  DB.put bdb def (C.hash 256 bytes) bytes
+  replaceBestIfBetter bdb ddb b
 
-  replaceBestIfBetter b
+getBestBlockHash::DetailsDB->ResourceT IO (Maybe SHA)
+getBestBlockHash ddb = do
+  fmap (decode . BL.fromStrict) <$> DB.get ddb def "best"
 
-getBestBlockHash::IO (Maybe SHA)
-getBestBlockHash = runResourceT $ do
-  db <- DB.open detailsDBPath options
-  fmap (decode . BL.fromStrict) <$> DB.get db def "best"
+getBlock::BlockDB->SHA->ResourceT IO (Maybe Block)
+getBlock bdb h = runResourceT $ do
+  fmap (rlpDecode . rlpDeserialize) <$> DB.get bdb def (BL.toStrict $ encode h)
 
-getBlock::SHA->IO (Maybe Block)
-getBlock h = runResourceT $ do
-  db <- DB.open blockDBPath options
-  fmap (rlpDecode . rlpDeserialize) <$> DB.get db def (BL.toStrict $ encode h)
-
-getBestBlock::IO (Maybe Block)
-getBestBlock = do
-  maybeH <- getBestBlockHash
+getBestBlock::BlockDB->DetailsDB->ResourceT IO (Maybe Block)
+getBestBlock bdb ddb = do
+  maybeH <- getBestBlockHash ddb
   case maybeH of
     Nothing -> return Nothing
-    Just h -> getBlock h
+    Just h -> getBlock bdb h
 
-replaceBestIfBetter::Block->IO ()
-replaceBestIfBetter b = do
-  maybeBest <- getBestBlock
+replaceBestIfBetter::BlockDB->DetailsDB->Block->ResourceT IO ()
+replaceBestIfBetter bdb ddb b = trace "qqqqqqqqqqqqqqqqqqreplaceBestIfBetter" $ do
+  maybeBest <- getBestBlock bdb ddb
+  liftIO $ print $ maybeBest
   case maybeBest of
     Just best | number (blockData best) >= number (blockData b) -> return ()
-    _ -> runResourceT $ do
-      db <- DB.open detailsDBPath options
-      DB.put db def "best" (BL.toStrict $ encode $ blockHash b)
+    Nothing -> runResourceT $ do
+      DB.put ddb def "best" (BL.toStrict $ encode $ blockHash b)
+    _ -> return ()
+
+--withBlockDB::(BlockDB->a)->a
+withBlockDB f = do
+  runResourceT $ do
+    bdb  <- DB.open detailsDBPath options
+    f bdb

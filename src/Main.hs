@@ -151,9 +151,8 @@ handlePayload socket payload = do
     GetPeers -> do
       sendMessage socket $ Peers []
       sendMessage socket $ GetPeers
-    Blocks blocks ->
-      forM_ blocks $ \b -> do 
-        addBlock b
+    Blocks blocks -> do
+      addBlocks blocks
         --submitBlock b
       
       --sendMessage socket $ Blocks [addNonceToBlock newBlock n]
@@ -247,7 +246,14 @@ main1 = connect "127.0.0.1" "30303" $ \(socket, _) -> do
 
 
   --sendMessage socket $ Transactions [signedTx]
-  Just bestBlockHash <- getBestBlockHash
+  maybeBestBlockHash <- withBlockDB getBestBlockHash
+  bestBlockHash <-
+    case maybeBestBlockHash of
+      Nothing -> do
+        addBlocks [genesisBlock]
+        return $ blockHash genesisBlock
+      Just x -> return x
+  putStrLn $ "Best block hash: " ++ format bestBlockHash
   sendMessage socket $ GetChain [bestBlockHash] 0x40
   --sendMessage socket $ GetChain [blockHash genesisBlock] 0x40
   putStrLn "Transaction has been sent"
