@@ -251,7 +251,7 @@ main1 = connect "127.0.0.1" "30303" $ \(socket, _) -> do
   bestBlockHash <-
     case maybeBestBlockHash of
       Nothing -> do
-        addBlocks [genesisBlock]
+        initializeBlockChain
         return $ blockHash genesisBlock
       Just x -> return x
   putStrLn $ "Best block hash: " ++ format bestBlockHash

@@ -10,6 +10,7 @@ module Block (
   addNonceToBlock,
   findNonce,
   fastFindNonce,
+  nonceIsValid,
   genesisBlock
   ) where
 
