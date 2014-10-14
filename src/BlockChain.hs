@@ -23,10 +23,13 @@ import Data.Functor
 import Data.Time
 import Data.Time.Clock.POSIX
 import qualified Database.LevelDB as DB
+import Numeric
 import System.Directory
 
 import Block
+import Constants
 import Format
+import ModifyStateDB
 import RLP
 import SHA
 
@@ -35,10 +38,6 @@ import SHA
 type BlockDB = DB.DB
 type DetailsDB = DB.DB
 
-blockDBPath::String
-blockDBPath="/.ethereumH/blocks/"
-detailsDBPath::String
-detailsDBPath="/.ethereumH/details/"
 options::DB.Options
 options = DB.defaultOptions {
   DB.createIfMissing=True, DB.cacheSize=1024}
@@ -73,6 +72,16 @@ instance Format BlockValidityError where
     format (BlockDifficultyWrong d expected) = "Block difficulty is wrong, is '" ++ show d ++ "', expected '" ++ show expected ++ "'"
 -}
 
+verifyStateRootExists::Block->IO Bool
+verifyStateRootExists b = do
+  homeDir <- getHomeDirectory
+  runResourceT $ do
+    db <- DB.open (homeDir ++ stateDBPath) options
+    val <- DB.get db def (BL.toStrict $ encode $ stateRoot $ blockData b)
+    case val of
+      Nothing -> return False
+      Just _ -> return True
+
 checkParentChildValidity::(Monad m)=>Block->Block->m ()
 checkParentChildValidity Block{blockData=c} Block{blockData=p} = do
     unless (difficulty c == nextDifficulty (difficulty p) (timestamp p) ( timestamp c))
@@ -91,8 +100,10 @@ checkValidity bdb b = do
           checkParentChildValidity b parentBlock
           unless (nonceIsValid b) $ fail "Block nonce is wrong"
           unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"
+          stateRootExists <- liftIO $ verifyStateRootExists b
+          unless stateRootExists $ fail $ "Block stateRoot does not exist: " ++ format (stateRoot $ blockData b)
           return $ return ()
-    _ -> fail ("Parent Block does not exist" ++ format (parentHash $ blockData b))
+    Nothing -> fail ("Parent Block does not exist: " ++ format (parentHash $ blockData b))
 
 
 {-
@@ -103,7 +114,6 @@ checkValidity bdb b = do
         stateRoot = SHA 0x9b109189563315bfeb13d4bfd841b129ff3fd5c85f228a8d9d8563b4dde8432e,
                     transactionsTrie = 0,
 -}
-
 
 
 
@@ -118,7 +128,11 @@ addBlocks blocks = runResourceT $ do
 
 addBlock::BlockDB->DetailsDB->Block->ResourceT IO ()
 addBlock bdb ddb b = do
-  --TODO- check for block validity, throw away if bad
+  maybeParentBlock <- getBlock bdb $ parentHash $ blockData b
+  let parentBlock = case maybeParentBlock of
+                      Nothing -> error "Missing parent block in addBlock"
+                      Just x -> x
+  liftIO $ addReward (stateRoot $ blockData parentBlock) (coinbase $ blockData b)
   valid <- checkValidity bdb b
   case valid of
      Right () -> return ()
@@ -132,7 +146,7 @@ getBestBlockHash ddb = do
   fmap (decode . BL.fromStrict) <$> DB.get ddb def "best"
 
 getBlock::BlockDB->SHA->ResourceT IO (Maybe Block)
-getBlock bdb h = runResourceT $ do
+getBlock bdb h = 
   fmap (rlpDecode . rlpDeserialize) <$> DB.get bdb def (BL.toStrict $ encode h)
 
 getBestBlock::BlockDB->DetailsDB->ResourceT IO (Maybe Block)

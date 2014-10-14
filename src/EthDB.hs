@@ -12,6 +12,7 @@ module EthDB (
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import qualified Crypto.Hash.SHA3 as C
+import Data.Binary
 import Data.Bits
 import qualified Data.ByteString as B
 import Data.ByteString.Internal
@@ -20,7 +21,7 @@ import Data.Default
 import Data.Function
 import Data.Functor
 import Data.List
-import Database.LevelDB
+import qualified Database.LevelDB as DB
 import Numeric
 
 import Address
@@ -32,40 +33,45 @@ import RLP
 
 --import Debug.Trace
 
-showAllKeyVal::DB->ResourceT IO ()
+showAllKeyVal::DB.DB->ResourceT IO ()
 showAllKeyVal db = do
-  i <- iterOpen db def
-  iterFirst i
-  valid <- iterValid i
+  i <- DB.iterOpen db def
+  DB.iterFirst i
+  valid <- DB.iterValid i
   if valid
     then showAllKeyVal' db i
     else liftIO $ putStrLn "no keys"
   where
-    showAllKeyVal'::DB->Iterator->ResourceT IO ()
+    showAllKeyVal'::DB.DB->DB.Iterator->ResourceT IO ()
     showAllKeyVal' db i = do
-      Just key <- iterKey i
-      val <- getNodeData db (SHAPtr key)
-      --Just byteStringValue <- iterValue i
+      Just key <- DB.iterKey i
+      Just val <- getNodeData db (SHAPtr key)
+      --Just byteStringValue <- DB.iterValue i
       --let val = (rlpDecode $ rlpDeserialize $ byteStringValue)::NodeData
       liftIO $ putStrLn $ "----------\n" ++ format (SHAPtr key)
       liftIO $ putStrLn $ format val
-      iterNext i
-      v <- iterValid i
+      DB.iterNext i
+      v <- DB.iterValid i
       if v
         then showAllKeyVal' db i
         else return ()
 
-getNodeData::DB->SHAPtr->ResourceT IO NodeData
+getNodeData::DB.DB->SHAPtr->ResourceT IO (Maybe NodeData)
 getNodeData db (SHAPtr p) = do
-  maybeBytes <- get db def p
-  case maybeBytes of
-    Just bytes | B.null bytes -> return EmptyNodeData
-    Just bytes -> return $ rlpDecode $ rlpDeserialize bytes
-    Nothing -> error ("getNodeData node not found: " ++ format p)
+  fmap bytes2NodeData <$> DB.get db def p
+        where
+          bytes2NodeData::B.ByteString->NodeData
+          bytes2NodeData bytes | B.null bytes = EmptyNodeData
+          bytes2NodeData bytes = rlpDecode $ rlpDeserialize bytes
 
-getKeyVals::DB->SHAPtr->N.NibbleString->ResourceT IO [(N.NibbleString, B.ByteString)]
+
+
+getKeyVals::DB.DB->SHAPtr->N.NibbleString->ResourceT IO [(N.NibbleString, B.ByteString)]
 getKeyVals db p key = do
-  nodeData <- getNodeData db p
+  maybeNodeData <- getNodeData db p
+  let nodeData =case maybeNodeData of
+                  Nothing -> error $ "Error calling getKeyVals, stateRoot doesn't exist: " ++ format p
+                  Just x -> x
   nextVals <- 
     case nodeData of
       FullNodeData {choices=cs} -> do
@@ -89,11 +95,11 @@ nodeDataSerialize::NodeData->B.ByteString
 nodeDataSerialize EmptyNodeData = B.empty
 nodeDataSerialize x = rlpSerialize $ rlpEncode x
 
-putNodeData::DB->NodeData->ResourceT IO SHAPtr
+putNodeData::DB.DB->NodeData->ResourceT IO SHAPtr
 putNodeData db nd = do
   let bytes = nodeDataSerialize nd
       ptr = C.hash 256 bytes
-  put db def ptr bytes
+  DB.put db def ptr bytes
   return $ SHAPtr ptr
 
 slotIsEmpty::[Maybe SHAPtr]->N.Nibble->Bool
@@ -107,7 +113,7 @@ replace list i newVal = left ++ [newVal] ++ right
             where
               (left, _:right) = splitAt (fromIntegral i) list
 
-getNewNodeDataFromPut::DB->N.NibbleString->B.ByteString->NodeData->ResourceT IO NodeData
+getNewNodeDataFromPut::DB.DB->N.NibbleString->B.ByteString->NodeData->ResourceT IO NodeData
 getNewNodeDataFromPut _ key val EmptyNodeData = return $
   ShortcutNodeData key $ Right val
 getNewNodeDataFromPut db key val (FullNodeData options nodeVal)
@@ -117,7 +123,8 @@ getNewNodeDataFromPut db key val (FullNodeData options nodeVal)
 
 getNewNodeDataFromPut db key val (FullNodeData options nodeVal) = do
   let Just conflictingNode = options!!fromIntegral (N.head key)
-  conflictingNodeData <- getNodeData db conflictingNode
+  --TODO- add nicer error message if stateRoot doesn't exist
+  Just conflictingNodeData <- getNodeData db conflictingNode
   newNodeData <- getNewNodeDataFromPut db (N.tail key) val conflictingNodeData
   newNode <- putNodeData db newNodeData
   return $ FullNodeData (replace options (N.head key) $ Just newNode) nodeVal
@@ -139,12 +146,13 @@ getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) = do
       replicate (fromIntegral $ firstNibble - start) Nothing ++ [Just firstPtr] ++ list2Options (firstNibble+1) rest
 getNewNodeDataFromPut _ key _ nd = error ("Missing case in getNewNodeDataFromPut: " ++ format nd ++ ", " ++ format key)
 
-putKeyVal::DB->SHAPtr->N.NibbleString->B.ByteString->ResourceT IO SHAPtr
+putKeyVal::DB.DB->SHAPtr->N.NibbleString->B.ByteString->ResourceT IO SHAPtr
 putKeyVal db p key val = do
-  curNodeData <- getNodeData db p
+  --TODO- add nicer error message if stateRoot doesn't exist
+  Just curNodeData <- getNodeData db p
   nextNodeData <- getNewNodeDataFromPut db key val curNodeData
   let key = C.hash 256 $ nodeDataSerialize nextNodeData 
-  put db def key $ nodeDataSerialize nextNodeData
+  DB.put db def key $ nodeDataSerialize nextNodeData
   return $ SHAPtr key
 
 prependToKey::N.NibbleString->(N.NibbleString, B.ByteString)->(N.NibbleString, B.ByteString)
@@ -154,6 +162,16 @@ newtype SHAPtr = SHAPtr B.ByteString deriving (Show)
 
 instance Format SHAPtr where
   format (SHAPtr x) = yellow $ format x
+
+instance Binary SHAPtr where
+  put (SHAPtr x) = do
+      sequence_ $ put <$> B.unpack x
+  get = do
+      undefined
+
+instance RLPSerializable SHAPtr where
+    rlpEncode (SHAPtr x) = rlpEncode x
+    rlpDecode x = SHAPtr $ rlpDecode x
 
 data NodeData =
   EmptyNodeData |

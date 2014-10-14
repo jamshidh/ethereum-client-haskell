@@ -46,12 +46,12 @@ instance RLPSerializable AddressState where
 addressAsNibbleString::Address->N.NibbleString
 addressAsNibbleString (Address s) = N.EvenNibbleString $ B.pack $ integer2Bytes $ fromIntegral s
 
-getAddressState::DB->SHAPtr->Address->ResourceT IO AddressState
+getAddressState::DB->SHAPtr->Address->ResourceT IO (Maybe AddressState)
 getAddressState db p address = do
   states <- getKeyVals db p $ addressAsNibbleString address
   case states of
-    [] -> error ("getAddressStates found no state for: " ++ format address)
-    [state] -> return $ rlpDecode $ rlpDeserialize $ snd state
+    [] -> return Nothing
+    [state] -> return $ Just $ rlpDecode $ rlpDeserialize $ snd state
     x -> error ("getAddressStates found multiple states for: " ++ format address)
   
 

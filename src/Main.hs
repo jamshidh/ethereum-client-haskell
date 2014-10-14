@@ -28,6 +28,7 @@ import Network.Haskoin.Crypto hiding (Address)
 import Network.Haskoin.Internals hiding (Ping, Pong, version, Message, Block, timestamp, Address)
 import Network.Socket (socketToHandle)
 import Numeric
+import System.Directory
 import System.IO
 
 --remove this
@@ -43,6 +44,7 @@ import Colors
 import Constants
 import EthDB
 import Format
+import ModifyStateDB
 import RLP
 import SHA
 --import Transaction
@@ -91,23 +93,39 @@ sendMessage socket msg = do
   putStrLn (green "msg>>>>>: " ++ format msg)
   sendCommand socket $ B.pack $ rlp2Bytes $ wireMessage2Obj msg
 
+{-
+addReward::SHAPtr->Address->IO SHAPtr
+addReward stateRoot address = 
+  runResourceT $ do
+    liftIO $ putStrLn "about to open"
+    homeDir <- liftIO $ getHomeDirectory
+    db <- DB.open (homeDir ++ "/" ++ stateDBPath) DB.defaultOptions{DB.createIfMissing=True}
+    liftIO $ putStrLn "opened"
+    DB.put db def startingRoot B.empty
 
+    addressState <- getAddressState db stateRoot address
+
+    putAddressState db stateRoot address (addressState{balance=balance addressState + fromIntegral (1500*finney)})
+-}
   
-testGetNextBlock::Block->UTCTime->Block
-testGetNextBlock b ts =
-  Block{
-    blockData=testGetNextBlockData,
-    receiptTransactions=[],
-    blockUncles=[]
-    }
+getNextBlock::Block->UTCTime->IO Block
+getNextBlock b ts = do
+  let theCoinbase = prvKey2Address prvKey
+  newStateRoot <- addReward (stateRoot bd) theCoinbase
+
+  return $ Block{
+               blockData=testGetNextBlockData newStateRoot,
+               receiptTransactions=[],
+               blockUncles=[]
+             }
   where
-    testGetNextBlockData::BlockData
-    testGetNextBlockData =
+    testGetNextBlockData::SHAPtr->BlockData
+    testGetNextBlockData newStateRoot =
       BlockData {
         parentHash=blockHash b,
         unclesHash=hash $ B.pack [0xc0],
         coinbase=prvKey2Address prvKey,
-        stateRoot = SHA 0x9b109189563315bfeb13d4bfd841b129ff3fd5c85f228a8d9d8563b4dde8432e,
+        stateRoot = newStateRoot,
         transactionsTrie = 0,
         difficulty =
           if (round (utcTimeToPOSIXSeconds ts)) >=
@@ -123,14 +141,13 @@ testGetNextBlock b ts =
         extraData = 0,
         nonce = SHA 5
         }
-      where 
-        bd = blockData b
+    bd = blockData b
 
 
-submitBlock::Block->IO()
-submitBlock b = do
+submitNextBlock::Socket->Block->IO()
+submitNextBlock socket b = do
         ts <- getCurrentTime
-        let newBlock = testGetNextBlock b ts
+        newBlock <- getNextBlock b ts
         print newBlock
         n <- fastFindNonce newBlock
 
@@ -138,7 +155,8 @@ submitBlock b = do
         let theBytes = headerHashWithoutNonce newBlock `B.append` B.pack (integer2Bytes n)
         print $ format theBytes
         print $ format $ C.hash 256 theBytes
-
+        sendMessage socket $ Blocks [addNonceToBlock newBlock n]
+              
 
 
 
@@ -154,7 +172,9 @@ handlePayload socket payload = do
       sendMessage socket $ GetPeers
     Blocks blocks -> do
       addBlocks $ sortBy (compare `on` number . blockData) blocks
-        --submitBlock b
+      case blocks of
+        [b] -> submitNextBlock socket b
+        _ -> return ()
       
       --sendMessage socket $ Blocks [addNonceToBlock newBlock n]
     GetTransactions -> do
@@ -184,6 +204,7 @@ readAndOutput socket = do
 
 main1::IO ()    
 main1 = connect "127.0.0.1" "30303" $ \(socket, _) -> do
+--main1 = connect "192.168.0.2" "30303" $ \(socket, _) -> do
   putStrLn "Connected"
 
   sendMessage socket $ Hello {
@@ -219,7 +240,7 @@ main1 = connect "127.0.0.1" "30303" $ \(socket, _) -> do
                      parentHash=SHA 0,
                      unclesHash=hash $ B.pack [0xc0],
                      coinbase=prvKey2Address prvKey,
-                     stateRoot = SHA 1,
+                     stateRoot = SHAPtr $ B.pack $ integer2Bytes 1,
                      transactionsTrie = 0,
                      difficulty = 13269813,
                      number = 0,
@@ -237,13 +258,13 @@ main1 = connect "127.0.0.1" "30303" $ \(socket, _) -> do
 
   ts <- getCurrentTime
   
-  let newBlock = testGetNextBlock genesisBlock ts
+  --let newBlock = testGetNextBlock genesisBlock ts
   --let powVal = byteString2Integer $ BC.pack $ powFunc newBlock
   --putStrLn $ "powFunc = " ++ show (showHex powVal "")
   --let passed = powVal * (difficulty $ blockData newBlock) < 2^256
   --putStrLn (red "Passed: " ++ show passed)
-  theNonce <- (fastFindNonce newBlock)::IO Integer
-  sendMessage socket $ Blocks [addNonceToBlock newBlock theNonce]
+  --theNonce <- (fastFindNonce newBlock)::IO Integer
+  --sendMessage socket $ Blocks [addNonceToBlock newBlock theNonce]
 
 
   --sendMessage socket $ Transactions [signedTx]
@@ -252,6 +273,7 @@ main1 = connect "127.0.0.1" "30303" $ \(socket, _) -> do
     case maybeBestBlockHash of
       Nothing -> do
         initializeBlockChain
+        initializeStateDB
         return $ blockHash genesisBlock
       Just x -> return x
   putStrLn $ "Best block hash: " ++ format bestBlockHash
@@ -269,7 +291,7 @@ main2 = do
              parentHash = SHA (BigWord {getBigWordInteger = 877290184733011228355131318509245476995638757136170869201259140273173077028}),
              unclesHash = SHA (BigWord {getBigWordInteger = 13478047122767188135818125966132228187941283477090363246179690878162135454535}),
              coinbase = Address (BigWord {getBigWordInteger = 521006474229988785287787995209817519331962723518}),
-             stateRoot = SHA (BigWord {getBigWordInteger = 1}), transactionsTrie = 0,
+             stateRoot = SHAPtr $ B.pack $ integer2Bytes 1, transactionsTrie = 0,
              difficulty = 12917270,
              number = 0,
              minGasPrice = 10000000000000,
@@ -292,8 +314,6 @@ main2 = do
 
   
 
-dbPath::String
-dbPath="/home/jim/.ethereumH/state/"
 --"/home/jim/.ethereum/state/"
 --"/Users/hutong/Library/Application Support/Ethereum/state/"
 --"/tmp/leveldbtest"
@@ -330,23 +350,23 @@ showStuff db = do
     liftIO $ putStrLn $ intercalate "\n" $ kvFormat <$> theData1
 
     liftIO $ putStrLn "========================"
-    genesisData <- getAddressState db (SHAPtr genesisRoot) $ Address 0x51ba59315b3a95761d0863b05ccc7a7f54703d99
+    Just genesisData <- getAddressState db (SHAPtr genesisRoot) $ Address 0x51ba59315b3a95761d0863b05ccc7a7f54703d99
     liftIO $ putStrLn $ format $ genesisData
 
     liftIO $ putStrLn "========================"
-    b1Data <- getAddressState db (SHAPtr stateRoot1) $ Address 0x6ccf6b5c33ae2017a6c76b8791ca61276a69ab8e
+    Just b1Data <- getAddressState db (SHAPtr stateRoot1) $ Address 0x6ccf6b5c33ae2017a6c76b8791ca61276a69ab8e
     liftIO $ putStrLn $ format $ b1Data
 
     liftIO $ putStrLn "========================"
-    b2Data <- getAddressState db (SHAPtr stateRoot2) $ Address 0x6ccf6b5c33ae2017a6c76b8791ca61276a69ab8e
+    Just b2Data <- getAddressState db (SHAPtr stateRoot2) $ Address 0x6ccf6b5c33ae2017a6c76b8791ca61276a69ab8e
     liftIO $ putStrLn $ format $ b2Data
 
     liftIO $ putStrLn "========================"
-    b3Data <- getAddressState db (SHAPtr stateRoot3) $ Address 0x6ccf6b5c33ae2017a6c76b8791ca61276a69ab8e
+    Just b3Data <- getAddressState db (SHAPtr stateRoot3) $ Address 0x6ccf6b5c33ae2017a6c76b8791ca61276a69ab8e
     liftIO $ putStrLn $ format $ b3Data
 
     liftIO $ putStrLn "========================"
-    b4Data <- getAddressState db (SHAPtr stateRoot4) $ Address 0x6ccf6b5c33ae2017a6c76b8791ca61276a69ab8e
+    Just b4Data <- getAddressState db (SHAPtr stateRoot4) $ Address 0x6ccf6b5c33ae2017a6c76b8791ca61276a69ab8e
     liftIO $ putStrLn $ format $ b4Data
 
 startingAddressState =
@@ -362,7 +382,7 @@ main3 = do
   let options = DB.defaultOptions {
         DB.createIfMissing=True, DB.cacheSize=1024}
   runResourceT $ do
-    db <- DB.open dbPath options
+    db <- DB.open stateDBPath options
     DB.put db def startingRoot B.empty
 
     --showStuff db

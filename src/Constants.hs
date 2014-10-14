@@ -1,25 +1,5 @@
 
-module Constants (
-  _Uether,
-  _Vether,
-  _Dether,
-  _Nether,
-  _Yether,
-  _Zether,
-  _Eether,
-  _Pether,
-  _Tether,
-  _Gether,
-  _Mether,
-  _Kether,
-  ether,
-  finney,
-  szabo,
-  _Gwei,
-  _Mwei,
-  _Kwei,
-  wei
-  ) where
+module Constants where
 
 
 _Uether = 1000000000 * 1000000000 * 1000000000 * 1000000000 * 1000000000 * 1000000000;
@@ -41,3 +21,14 @@ _Gwei = 1000000000
 _Mwei = 1000000
 _Kwei = 1000
 wei = 1
+
+
+blockDBPath::String
+blockDBPath="/.ethereumH/blocks/"
+
+detailsDBPath::String
+detailsDBPath="/.ethereumH/details/"
+
+stateDBPath::String
+stateDBPath="/.ethereumH/state/"
+

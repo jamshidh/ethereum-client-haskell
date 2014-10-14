@@ -32,6 +32,7 @@ import Numeric
 
 import Address
 import Colors
+import EthDB
 import Format
 import RLP
 import SHA
@@ -44,7 +45,7 @@ data BlockData = BlockData {
   parentHash::SHA,
   unclesHash::SHA,
   coinbase::Address,
-  stateRoot::SHA,
+  stateRoot::SHAPtr,
   transactionsTrie::Integer,
   difficulty::Integer,
   number::Integer,
@@ -150,7 +151,7 @@ genesisBlock =
          parentHash = SHA 0,
          unclesHash = hash (B.pack [0xc0]), 
          coinbase = Address 0,
-         stateRoot = SHA 0x8dbd704eb38d1c2b73ee4788715ea5828a030650829703f077729b2b613dd206,
+         stateRoot = SHAPtr $ B.pack $ integer2Bytes 0x8dbd704eb38d1c2b73ee4788715ea5828a030650829703f077729b2b613dd206,
          transactionsTrie = 0,
          difficulty = 0x400000, --2^22,
          number = 0,
