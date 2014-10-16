@@ -29,3 +29,13 @@ executable ethereumH
     buildable: True
     hs-source-dirs: src
     other-modules: RLP Wire
+
+Test-Suite test-ethereumH
+  type:               exitcode-stdio-1.0
+  main-is:            Main.hs
+  hs-source-dirs:     test, src
+  build-depends:      base
+                    , test-framework
+                    , test-framework-hunit
+                    , HUnit
+                      --containers == 0.5.*

@@ -132,7 +132,8 @@ addBlock bdb ddb b = do
   let parentBlock = case maybeParentBlock of
                       Nothing -> error "Missing parent block in addBlock"
                       Just x -> x
-  liftIO $ addReward (stateRoot $ blockData parentBlock) (coinbase $ blockData b)
+  newStateRoot <- liftIO $ addReward (stateRoot $ blockData parentBlock) (coinbase $ blockData b)
+  liftIO $ putStrLn $ format newStateRoot
   valid <- checkValidity bdb b
   case valid of
      Right () -> return ()

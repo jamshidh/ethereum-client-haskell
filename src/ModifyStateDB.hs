@@ -2,6 +2,7 @@
 {-# OPTIONS_GHC -Wall #-}
 
 module ModifyStateDB (
+                      initializeBlankStateDB,
                       initializeStateDB,
                       addReward
 ) where
@@ -48,13 +49,18 @@ startingAddressState =
       codeHash=hash B.empty
       }
 
+initializeBlankStateDB::String->ResourceT IO (DB.DB, SHAPtr)
+initializeBlankStateDB dbPath = do
+  homeDir <- liftIO $ getHomeDirectory
+  db <- DB.open dbPath DB.defaultOptions{DB.createIfMissing=True}
+  DB.put db def startingRoot B.empty
+  return (db, SHAPtr startingRoot)
+
 initializeStateDB::IO ()
 initializeStateDB = do
     runResourceT $ do
       homeDir <- liftIO $ getHomeDirectory
-      db <- DB.open (homeDir ++ "/" ++ stateDBPath) DB.defaultOptions{DB.createIfMissing=True}
-
-      DB.put db def startingRoot B.empty
+      (db, startingRoot) <- initializeBlankStateDB (homeDir ++ stateDBPath)
 
       let addresses = Address <$> [
                        0x51ba59315b3a95761d0863b05ccc7a7f54703d99,
@@ -67,7 +73,7 @@ initializeStateDB = do
                        0xe4157b34ea9615cfbde6b4fda419828124b70c78
                       ]
 
-      newStateRoot <- putAddressStates db (SHAPtr startingRoot) addresses startingAddressState
+      newStateRoot <- putAddressStates db startingRoot addresses startingAddressState
 
       return ()
 
