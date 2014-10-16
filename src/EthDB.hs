@@ -24,11 +24,9 @@ import Data.List
 import qualified Database.LevelDB as DB
 import Numeric
 
-import Address
 import Colors
 import Format
 import qualified NibbleString as N
-import Util
 import RLP
 
 --import Debug.Trace
@@ -39,11 +37,11 @@ showAllKeyVal db = do
   DB.iterFirst i
   valid <- DB.iterValid i
   if valid
-    then showAllKeyVal' db i
+    then showAllKeyVal' i
     else liftIO $ putStrLn "no keys"
   where
-    showAllKeyVal'::DB.DB->DB.Iterator->ResourceT IO ()
-    showAllKeyVal' db i = do
+    showAllKeyVal'::DB.Iterator->ResourceT IO ()
+    showAllKeyVal' i = do
       Just key <- DB.iterKey i
       Just val <- getNodeData db (SHAPtr key)
       --Just byteStringValue <- DB.iterValue i
@@ -53,7 +51,7 @@ showAllKeyVal db = do
       DB.iterNext i
       v <- DB.iterValid i
       if v
-        then showAllKeyVal' db i
+        then showAllKeyVal' i
         else return ()
 
 getNodeData::DB.DB->SHAPtr->ResourceT IO (Maybe NodeData)
@@ -82,7 +80,7 @@ getKeyVals db p key = do
           Nothing -> return []
       ShortcutNodeData{nextNibbleString=s,nextVal=Right v} | key `N.isPrefixOf` s ->
         return [(s, v)]
-      ShortcutNodeData{nextNibbleString=s,nextVal=Left nextP} | key `N.isPrefixOf` s ->
+      ShortcutNodeData{nextNibbleString=s,nextVal=Left nextP} | key `N.isPrefixOf` s -> 
         fmap (prependToKey s) <$> getKeyVals db nextP ""
       ShortcutNodeData{nextNibbleString=s,nextVal=Left nextP} | s `N.isPrefixOf` key ->
         fmap (prependToKey s) <$> getKeyVals db nextP (N.drop (N.length s) key)
@@ -113,47 +111,67 @@ replace list i newVal = left ++ [newVal] ++ right
             where
               (left, _:right) = splitAt (fromIntegral i) list
 
+list2Options::N.Nibble->[(N.Nibble, SHAPtr)]->[Maybe SHAPtr]
+list2Options start _ | start > 15 = error $ "value of 'start' in list2Option is greater than 15, it is: " ++ show start
+list2Options start [] = replicate (fromIntegral $ 0x10 - start) Nothing
+list2Options start ((firstNibble, firstPtr):rest) =
+    replicate (fromIntegral $ firstNibble - start) Nothing ++ [Just firstPtr] ++ list2Options (firstNibble+1) rest
+
+getCommonPrefix::Eq a=>[a]->[a]->([a], [a], [a])
+getCommonPrefix (c1:rest1) (c2:rest2) | c1 == c2 = prefixTheCommonPrefix c1 (getCommonPrefix rest1 rest2)
+                                      where
+                                        prefixTheCommonPrefix c (p, x, y) = (c:p, x, y)
+getCommonPrefix x y = ([], x, y)
+
+
 getNewNodeDataFromPut::DB.DB->N.NibbleString->B.ByteString->NodeData->ResourceT IO NodeData
 getNewNodeDataFromPut _ key val EmptyNodeData = return $
   ShortcutNodeData key $ Right val
-getNewNodeDataFromPut db key val (FullNodeData options nodeVal)
+
+
+getNewNodeDataFromPut db key val (FullNodeData options nodeValue)
   | options `slotIsEmpty` N.head key = do
   tailNode <- putNodeData db (ShortcutNodeData (N.tail key) $ Right val)
-  return $ FullNodeData (replace options (N.head key) $ Just tailNode) nodeVal
-
-getNewNodeDataFromPut db key val (FullNodeData options nodeVal) = do
+  return $ FullNodeData (replace options (N.head key) $ Just tailNode) nodeValue
+getNewNodeDataFromPut db key val (FullNodeData options nodeValue) = do
   let Just conflictingNode = options!!fromIntegral (N.head key)
   --TODO- add nicer error message if stateRoot doesn't exist
   Just conflictingNodeData <- getNodeData db conflictingNode
   newNodeData <- getNewNodeDataFromPut db (N.tail key) val conflictingNodeData
   newNode <- putNodeData db newNodeData
-  return $ FullNodeData (replace options (N.head key) $ Just newNode) nodeVal
+  return $ FullNodeData (replace options (N.head key) $ Just newNode) nodeValue
 
 getNewNodeDataFromPut _ key1 val (ShortcutNodeData key2 _) | key1 == key2 = 
   return $ ShortcutNodeData key1 $ Right val
-getNewNodeDataFromPut _ key1 val (ShortcutNodeData key2 _) | N.head key1 == N.head key2 = 
-  return $ ShortcutNodeData key1 $ Right val
+
+getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | N.head key1 == N.head key2 = do
+  node1 <- putNodeData db $ ShortcutNodeData (N.pack $ tail suffix1) $ Right val1
+  node2 <- putNodeData db $ ShortcutNodeData (N.pack $ tail suffix2) val2
+  let options = list2Options 0 (sortBy (compare `on` fst) [(head suffix1, node1), (head suffix2, node2)])
+  midNode <- putNodeData db $ FullNodeData options Nothing
+  return $ ShortcutNodeData (N.pack commonPrefix) $ Left midNode
+      where
+        (commonPrefix, suffix1, suffix2) = getCommonPrefix (N.unpack key1) (N.unpack key2)
+
+
+
 getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) = do
   tailNode1 <- putNodeData db (ShortcutNodeData (N.tail key1) $ Right val1)
   tailNode2 <- putNodeData db (ShortcutNodeData (N.tail key2) val2)
   return $ FullNodeData
       (list2Options 0 (sortBy (compare `on` fst) [(N.head key1, tailNode1), (N.head key2, tailNode2)]))
       Nothing
-  where
-    list2Options::N.Nibble->[(N.Nibble, SHAPtr)]->[Maybe SHAPtr]
-    list2Options start [] = replicate (fromIntegral $ 0x10 - start) Nothing
-    list2Options start ((firstNibble, firstPtr):rest) =
-      replicate (fromIntegral $ firstNibble - start) Nothing ++ [Just firstPtr] ++ list2Options (firstNibble+1) rest
-getNewNodeDataFromPut _ key _ nd = error ("Missing case in getNewNodeDataFromPut: " ++ format nd ++ ", " ++ format key)
+
+--getNewNodeDataFromPut _ key _ nd = error ("Missing case in getNewNodeDataFromPut: " ++ format nd ++ ", " ++ format key)
 
 putKeyVal::DB.DB->SHAPtr->N.NibbleString->B.ByteString->ResourceT IO SHAPtr
 putKeyVal db p key val = do
   --TODO- add nicer error message if stateRoot doesn't exist
   Just curNodeData <- getNodeData db p
   nextNodeData <- getNewNodeDataFromPut db key val curNodeData
-  let key = C.hash 256 $ nodeDataSerialize nextNodeData 
-  DB.put db def key $ nodeDataSerialize nextNodeData
-  return $ SHAPtr key
+  let k = C.hash 256 $ nodeDataSerialize nextNodeData 
+  DB.put db def k $ nodeDataSerialize nextNodeData
+  return $ SHAPtr k
 
 prependToKey::N.NibbleString->(N.NibbleString, B.ByteString)->(N.NibbleString, B.ByteString)
 prependToKey prefix (key, val) = (prefix `N.append` key, val)
@@ -199,7 +217,7 @@ instance Format NodeData where
 
 string2TermNibbleString::String->(Bool, N.NibbleString)
 string2TermNibbleString [] = error "string2TermNibbleString called with empty String"
-string2TermNibbleString (c:rest) = --trace ("string2TermNibbleString: " ++ show (c2w c) ++ ": " ++ show flags) $
+string2TermNibbleString (c:rest) = 
   (terminator, s)
   where
     w = c2w c
@@ -209,18 +227,19 @@ string2TermNibbleString (c:rest) = --trace ("string2TermNibbleString: " ++ show 
     s = if oddLength then N.OddNibbleString extraNibble (BC.pack rest) else N.EvenNibbleString (BC.pack rest)
 
 termNibbleString2String::Bool->N.NibbleString->B.ByteString
-termNibbleString2String terminator s =
+termNibbleString2String terminator s = 
   case s of
     (N.EvenNibbleString s') -> B.singleton (extraNibble `shiftL` 4) `B.append` s'
-    (N.OddNibbleString n rest) -> B.singleton (extraNibble `shiftL` 4 + N.head s) `B.append` rest
+    (N.OddNibbleString n rest) -> B.singleton (extraNibble `shiftL` 4 + n) `B.append` rest
   where
+    {-
     nibbleString2String::N.NibbleString->String
     nibbleString2String (N.OddNibbleString c s) = w2c c:BC.unpack s
     nibbleString2String (N.EvenNibbleString s) = BC.unpack s
+    -}
     extraNibble =
         (if terminator then 2 else 0) +
-        (if oddLength then 1 else 0)
-    oddLength = odd $ N.length s
+        (if odd $ N.length s then 1 else 0)
 
 instance RLPSerializable NodeData where
   rlpEncode EmptyNodeData = error "rlpEncode should never be called on EmptyNodeData.  Use rlpSerialize instead."
@@ -230,23 +249,19 @@ instance RLPSerializable NodeData where
       encodeChoice (Just (SHAPtr x)) = rlpEncode x
       encodeVal Nothing = RLPNumber 0
       encodeVal (Just x) = rlpEncode x
-  rlpEncode (ShortcutNodeData {nextNibbleString=s, nextVal=val}) =
+  rlpEncode (ShortcutNodeData {nextNibbleString=s, nextVal=val}) = 
     RLPArray[RLPString $ BC.unpack $ termNibbleString2String terminator s, encodeVal val] 
     where
-      flags =
-        (if terminator then 2 else 0) +
-        (if oddLength then 1 else 0)
       terminator = 
         case val of
           Left _ -> False
           Right _ -> True
-      oddLength = odd $ N.length s
       encodeVal (Left (SHAPtr x)) = rlpEncode x
       encodeVal (Right x) = rlpEncode x
 
 
 
-  rlpDecode (RLPArray [a, RLPString val]) = --trace ("rlpDecode for NodeData: " ++ hexFormat (BC.pack val)) $
+  rlpDecode (RLPArray [a, RLPString val]) = 
     if terminator
     then ShortcutNodeData s (Right $ BC.pack val)
     else ShortcutNodeData s (Left $ SHAPtr (BC.pack val))

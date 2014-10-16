@@ -19,6 +19,7 @@ import Data.ByteString.Internal
 import Data.Functor
 import Data.List
 import Data.Word
+import Numeric
 
 import Format
 import Util
@@ -29,7 +30,7 @@ data RLPObject = RLPNumber Int | RLPString String | RLPArray [RLPObject] derivin
 
 instance Format RLPObject where
   format (RLPArray objects) = "[" ++ intercalate ", " (format <$> objects) ++ "]"
-  format (RLPNumber n) = "0x" ++ show n
+  format (RLPNumber n) = "0x" ++ showHex n ""
   format (RLPString s) = "0x" ++ (BC.unpack $ B16.encode $ BC.pack s)
 
 
@@ -139,5 +140,7 @@ rlpSerialize o = B.pack $ rlp2Bytes o
 instance RLPSerializable String where
   rlpEncode = error("rlpEncode undefined")
   rlpDecode (RLPString s) = s
+  rlpDecode (RLPNumber n) | n > 0xFFFF = error "number greater than 255"
+  rlpDecode (RLPNumber n) | n > 255 = w2c <$> [fromIntegral (n `shiftR` 8), fromIntegral (n .&. 255)]
   rlpDecode (RLPNumber n) = [w2c $ fromIntegral n]
   rlpDecode (RLPArray _) = error "Malformed RLP in call to rlpDecode for String: RLPObject is an array."

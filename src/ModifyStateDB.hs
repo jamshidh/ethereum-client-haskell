@@ -9,30 +9,17 @@ module ModifyStateDB (
 
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
-import qualified Crypto.Hash.SHA3 as C
-import Data.Binary
-import Data.Bits
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
-import Data.ByteString.Internal
-import qualified Data.ByteString.Char8 as BC
 import Data.Default
-import Data.Function
 import Data.Functor
-import Data.List
 import qualified Database.LevelDB as DB
-import Numeric
 import System.Directory
 
 import Address
 import AddressState
-import Colors
 import Constants
 import EthDB
-import Format
-import qualified NibbleString as N
-import Util
-import RLP
 import SHA
 
 --import Debug.Trace
@@ -41,6 +28,7 @@ startingRoot::B.ByteString
 (startingRoot, "") = B16.decode "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
                      --"bc36789e7a1e281436464229828f817d6612f7b477d66591ff96a9e064bcc98a"                                                                                                                   
 
+startingAddressState::AddressState
 startingAddressState =
       AddressState {
       addressStateNonce=0,
@@ -51,16 +39,15 @@ startingAddressState =
 
 initializeBlankStateDB::String->ResourceT IO (DB.DB, SHAPtr)
 initializeBlankStateDB dbPath = do
-  homeDir <- liftIO $ getHomeDirectory
   db <- DB.open dbPath DB.defaultOptions{DB.createIfMissing=True}
   DB.put db def startingRoot B.empty
   return (db, SHAPtr startingRoot)
 
-initializeStateDB::IO ()
+initializeStateDB::IO SHAPtr
 initializeStateDB = do
     runResourceT $ do
       homeDir <- liftIO $ getHomeDirectory
-      (db, startingRoot) <- initializeBlankStateDB (homeDir ++ stateDBPath)
+      (db, startingRoot2) <- initializeBlankStateDB (homeDir ++ stateDBPath)
 
       let addresses = Address <$> [
                        0x51ba59315b3a95761d0863b05ccc7a7f54703d99,
@@ -73,9 +60,7 @@ initializeStateDB = do
                        0xe4157b34ea9615cfbde6b4fda419828124b70c78
                       ]
 
-      newStateRoot <- putAddressStates db startingRoot addresses startingAddressState
-
-      return ()
+      putAddressStates db startingRoot2 addresses startingAddressState
 
 putAddressStates::DB.DB->SHAPtr->[Address]->AddressState->ResourceT IO SHAPtr
 putAddressStates _ stateRoot [] _ = return stateRoot
