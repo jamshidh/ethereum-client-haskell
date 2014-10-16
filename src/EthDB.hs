@@ -29,7 +29,7 @@ import Format
 import qualified NibbleString as N
 import RLP
 
---import Debug.Trace
+import Debug.Trace
 
 showAllKeyVal::DB.DB->ResourceT IO ()
 showAllKeyVal db = do
@@ -130,10 +130,10 @@ getNewNodeDataFromPut _ key val EmptyNodeData = return $
 
 
 getNewNodeDataFromPut db key val (FullNodeData options nodeValue)
-  | options `slotIsEmpty` N.head key = do
+  | options `slotIsEmpty` N.head key = trace "qqqqqqqqq" $ do
   tailNode <- putNodeData db (ShortcutNodeData (N.tail key) $ Right val)
   return $ FullNodeData (replace options (N.head key) $ Just tailNode) nodeValue
-getNewNodeDataFromPut db key val (FullNodeData options nodeValue) = do
+getNewNodeDataFromPut db key val (FullNodeData options nodeValue) = trace ("getNewNodeDataFromPut: " ++ format key) $ do
   let Just conflictingNode = options!!fromIntegral (N.head key)
   --TODO- add nicer error message if stateRoot doesn't exist
   Just conflictingNodeData <- getNodeData db conflictingNode
@@ -245,9 +245,9 @@ instance RLPSerializable NodeData where
   rlpEncode EmptyNodeData = error "rlpEncode should never be called on EmptyNodeData.  Use rlpSerialize instead."
   rlpEncode (FullNodeData {choices=cs, nodeVal=val}) = RLPArray ((encodeChoice <$> cs) ++ [encodeVal val])
     where
-      encodeChoice Nothing = RLPNumber 0
+      encodeChoice Nothing = RLPScalar 0
       encodeChoice (Just (SHAPtr x)) = rlpEncode x
-      encodeVal Nothing = RLPNumber 0
+      encodeVal Nothing = RLPScalar 0
       encodeVal (Just x) = rlpEncode x
   rlpEncode (ShortcutNodeData {nextNibbleString=s, nextVal=val}) = 
     RLPArray[RLPString $ BC.unpack $ termNibbleString2String terminator s, encodeVal val] 
@@ -268,11 +268,11 @@ instance RLPSerializable NodeData where
     where
       (terminator, s) = string2TermNibbleString $ rlpDecode a
   rlpDecode (RLPArray x) | length x == 17 =
-    FullNodeData (fmap getPtr <$> (\p -> case p of RLPNumber 0 -> Nothing; _ -> Just p) <$> childPointers) val
+    FullNodeData (fmap getPtr <$> (\p -> case p of RLPScalar 0 -> Nothing; _ -> Just p) <$> childPointers) val
     where
       childPointers = init x
       val = case last x of
-        RLPNumber 0 -> Nothing
+        RLPScalar 0 -> Nothing
         RLPString s -> Just $ BC.pack s
         _ -> error "Malformed RLP data in call to rlpDecode for NodeData: value of FullNodeData is a RLPArray"
       getPtr::RLPObject->SHAPtr

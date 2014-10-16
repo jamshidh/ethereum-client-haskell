@@ -5,10 +5,7 @@ module RLP (
   RLPObject(..),
   RLPSerializable(..),
   rlpSerialize,
-  rlpDeserialize,
-  rlp2Bytes,
-  rlpNumber,
-  getNumber
+  rlpDeserialize
   ) where
 
 import Data.Bits
@@ -26,11 +23,11 @@ import Util
 
 import Debug.Trace
 
-data RLPObject = RLPNumber Int | RLPString String | RLPArray [RLPObject] deriving (Show)
+data RLPObject = RLPScalar Word8 | RLPString String | RLPArray [RLPObject] deriving (Show)
 
 instance Format RLPObject where
   format (RLPArray objects) = "[" ++ intercalate ", " (format <$> objects) ++ "]"
-  format (RLPNumber n) = "0x" ++ showHex n ""
+  format (RLPScalar n) = "0x" ++ showHex n ""
   format (RLPString s) = "0x" ++ (BC.unpack $ B16.encode $ BC.pack s)
 
 
@@ -59,13 +56,7 @@ rlpSplit (249:len1:len2:rest) =
   where
     len = (fromIntegral len1) `shift` 8 + fromIntegral len2
     (arrayData, nextRest) = splitAtWithError len rest
-rlpSplit (128:rest) =
-  (RLPNumber 0, rest)
-rlpSplit (129:val:rest) =
-  (RLPNumber $ fromIntegral val, rest)
-rlpSplit (130:val1:val2:rest) =
-  (RLPNumber $ (shift (fromIntegral val1) 8 + fromIntegral val2), rest)
-rlpSplit (x:rest) | x >= 131 && x <= 128+55 =
+rlpSplit (x:rest) | x >= 128 && x <= 128+55 =
   (RLPString $ w2c <$> strList, nextRest)
   where
     strLength = x-128
@@ -76,7 +67,7 @@ rlpSplit (x:len:rest) | x >= 183 && x <= 184 =
     strLength = len
     (strList, nextRest) = splitAtWithError (fromIntegral strLength) rest
 rlpSplit (x:rest) | x < 128 =
-  (RLPNumber $ fromIntegral x, rest)
+  (RLPScalar x, rest)
 rlpSplit x = error ("Missing case in rlpSplit: " ++ show x)
 
 getRLPObjects::[Word8]->[RLPObject]
@@ -93,12 +84,8 @@ int2Bytes val | val < 65536 =
 int2Bytes _ = error "int2Bytes not defined for val > 65535."
 
 rlp2Bytes::RLPObject->[Word8]
-rlp2Bytes (RLPNumber 0) = [0x80]
-rlp2Bytes (RLPNumber val) | val < 128 = [fromIntegral val]
-rlp2Bytes (RLPNumber val) | val < 65536 =
-  0x80 + fromIntegral (length bytes):bytes
-  where
-    bytes = int2Bytes val
+--rlp2Bytes (RLPNumber 0) = [0x80]
+rlp2Bytes (RLPScalar val) = [fromIntegral val]
 rlp2Bytes (RLPString s) | length s <= 55 = (0x80 + fromIntegral (length s):(c2w <$> s))
 rlp2Bytes (RLPString s) | length s < 65536 =
   [0xB7 + fromIntegral (length bytes)] ++ bytes ++ (c2w <$> s)
@@ -117,15 +104,6 @@ getIntegerBytes::Integer->[Word8]
 getIntegerBytes 0 = []
 getIntegerBytes val = getIntegerBytes (val `quot` 256) ++ [fromIntegral $ val .&. 0xFF]
 
-rlpNumber::Integer->RLPObject
-rlpNumber x | x < 128 = RLPNumber $ fromIntegral x
-rlpNumber x = RLPString $ w2c <$> getIntegerBytes x
-
-getNumber::RLPObject->Integer
-getNumber (RLPNumber n) = fromIntegral n
-getNumber (RLPString s) = byteString2Integer $ B.pack $ map c2w s
-getNumber (RLPArray _) = error "Malformed data sent to getNumber"
-
 rlpDeserialize::B.ByteString->RLPObject
 rlpDeserialize s = 
   case rlpSplit $ B.unpack s of
@@ -137,10 +115,16 @@ rlpSerialize::RLPObject->B.ByteString
 rlpSerialize o = B.pack $ rlp2Bytes o
 
 
+instance RLPSerializable Integer where
+  rlpEncode 0 = RLPString []
+  rlpEncode x | x < 128 = RLPScalar $ fromIntegral x
+  rlpEncode x = RLPString $ w2c <$> integer2Bytes x
+  rlpDecode (RLPScalar x) = fromIntegral x
+  rlpDecode (RLPString s) = byteString2Integer $ BC.pack s
+
 instance RLPSerializable String where
-  rlpEncode = error("rlpEncode undefined")
+  rlpEncode [c] | c2w c < 128 = RLPScalar $ c2w c
+  rlpEncode s = RLPString s
   rlpDecode (RLPString s) = s
-  rlpDecode (RLPNumber n) | n > 0xFFFF = error "number greater than 255"
-  rlpDecode (RLPNumber n) | n > 255 = w2c <$> [fromIntegral (n `shiftR` 8), fromIntegral (n .&. 255)]
-  rlpDecode (RLPNumber n) = [w2c $ fromIntegral n]
+  rlpDecode (RLPScalar n) = [w2c $ fromIntegral n]
   rlpDecode (RLPArray _) = error "Malformed RLP in call to rlpDecode for String: RLPObject is an array."

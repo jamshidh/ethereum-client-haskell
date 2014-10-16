@@ -91,7 +91,7 @@ sendCommand socket payload = do
 sendMessage::Socket->Message->IO ()
 sendMessage socket msg = do
   putStrLn (green "msg>>>>>: " ++ format msg)
-  sendCommand socket $ B.pack $ rlp2Bytes $ wireMessage2Obj msg
+  sendCommand socket $ rlpSerialize $ wireMessage2Obj msg
 
 {-
 addReward::SHAPtr->Address->IO SHAPtr

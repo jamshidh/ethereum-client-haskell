@@ -33,13 +33,13 @@ instance Format AddressState where
                  "\ncodeHash: " ++ format (codeHash a))
   
 instance RLPSerializable AddressState where
-  rlpEncode a = RLPArray [rlpNumber $ fromIntegral $ addressStateNonce a, rlpNumber $ fromIntegral $ balance a, rlpNumber $ fromIntegral $ contractRoot a, rlpEncode $ codeHash a]
+  rlpEncode a = RLPArray [rlpEncode $ toInteger $ addressStateNonce a, rlpEncode $ toInteger $ balance a, rlpEncode $ toInteger $ contractRoot a, rlpEncode $ codeHash a]
 
   rlpDecode (RLPArray [n, b, cr, ch]) =
     AddressState {
-      addressStateNonce=fromIntegral $ getNumber n,
-      balance=fromIntegral $ getNumber b,
-      contractRoot=fromIntegral $ getNumber cr,
+      addressStateNonce=fromInteger $ rlpDecode n,
+      balance=fromInteger $ rlpDecode b,
+      contractRoot=fromInteger $ rlpDecode cr,
       codeHash=rlpDecode ch
       } 
 

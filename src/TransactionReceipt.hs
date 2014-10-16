@@ -32,11 +32,11 @@ instance RLPSerializable TransactionReceipt where
     TransactionReceipt {
       theTransaction = rlpDecode t,
       postTransactionState = rlpDecode pts,
-      cumulativeGasUsed = getNumber gasUsed
+      cumulativeGasUsed = rlpDecode gasUsed
       }
   rlpEncode TransactionReceipt{
     theTransaction=t,
     postTransactionState=p,
     cumulativeGasUsed=gasUsed} =
-    RLPArray [rlpEncode t, rlpEncode p, rlpNumber gasUsed]
+    RLPArray [rlpEncode t, rlpEncode p, rlpEncode gasUsed]
 

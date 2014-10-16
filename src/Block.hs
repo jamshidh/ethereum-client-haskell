@@ -93,14 +93,14 @@ instance RLPSerializable BlockData where
       unclesHash = rlpDecode v2,
       coinbase = rlp2Address v3,
       stateRoot = rlpDecode v4,
-      transactionsTrie = fromIntegral $ getNumber v5,
-      difficulty = fromIntegral $ getNumber v6,
-      number = fromIntegral $ getNumber v7,
-      minGasPrice = fromIntegral $ getNumber v8,
-      gasLimit = fromIntegral $ getNumber v9,
-      gasUsed = fromIntegral $ getNumber v10,
-      timestamp = posixSecondsToUTCTime $ fromIntegral $ getNumber v11,
-      extraData = fromIntegral $ getNumber v12,
+      transactionsTrie = rlpDecode v5,
+      difficulty = rlpDecode v6,
+      number = rlpDecode v7,
+      minGasPrice = rlpDecode v8,
+      gasLimit = rlpDecode v9,
+      gasUsed = rlpDecode v10,
+      timestamp = posixSecondsToUTCTime $ fromInteger $ rlpDecode v11,
+      extraData = rlpDecode v12,
       nonce = rlpDecode v13
       }  
   rlpDecode (RLPArray arr) = error ("rlp2BlockData called on object with wrong amount of data, length arr = " ++ show arr)
@@ -113,19 +113,19 @@ instance RLPSerializable BlockData where
       rlpEncode $ unclesHash bd,
       address2RLP $ coinbase bd,
       rlpEncode $ stateRoot bd,
-      rlpNumber $ transactionsTrie bd,
-      rlpNumber $ difficulty bd,
-      rlpNumber $ number bd,
-      rlpNumber $ minGasPrice bd,
-      rlpNumber $ gasLimit bd,
-      rlpNumber $ gasUsed bd,
-      rlpNumber $ round $ utcTimeToPOSIXSeconds $ timestamp bd,
-      rlpNumber $ extraData bd,
+      rlpEncode $ transactionsTrie bd,
+      rlpEncode $ difficulty bd,
+      rlpEncode $ number bd,
+      rlpEncode $ minGasPrice bd,
+      rlpEncode $ gasLimit bd,
+      rlpEncode $ gasUsed bd,
+      rlpEncode $ toInteger $ round $ utcTimeToPOSIXSeconds $ timestamp bd,
+      rlpEncode $ extraData bd,
       rlpEncode $ nonce bd
       ]
 
 blockHash::Block->SHA
-blockHash = hash . B.pack . rlp2Bytes . rlpEncode
+blockHash = hash . rlpSerialize . rlpEncode
 
 instance Format BlockData where
   format b = 
@@ -177,14 +177,14 @@ noncelessBlockData2RLP bd =
       rlpEncode $ unclesHash bd,
       address2RLP $ coinbase bd,
       rlpEncode $ stateRoot bd,
-      rlpNumber $ transactionsTrie bd,
-      rlpNumber $ difficulty bd,
-      rlpNumber $ number bd,
-      rlpNumber $ minGasPrice bd,
-      rlpNumber $ gasLimit bd,
-      rlpNumber $ gasUsed bd,
-      rlpNumber $ round $ utcTimeToPOSIXSeconds $ timestamp bd,
-      rlpNumber $ extraData bd
+      rlpEncode $ transactionsTrie bd,
+      rlpEncode $ difficulty bd,
+      rlpEncode $ number bd,
+      rlpEncode $ minGasPrice bd,
+      rlpEncode $ gasLimit bd,
+      rlpEncode $ gasUsed bd,
+      rlpEncode $ toInteger $ round $ utcTimeToPOSIXSeconds $ timestamp bd,
+      rlpEncode $ extraData bd
       ]
 
 {-
@@ -198,7 +198,7 @@ sha2ByteString::SHA->B.ByteString
 sha2ByteString (SHA val) = BL.toStrict $ DB.encode val
 
 headerHashWithoutNonce::Block->ByteString
-headerHashWithoutNonce b = C.hash 256 $ B.pack $ rlp2Bytes $ noncelessBlockData2RLP $ blockData b
+headerHashWithoutNonce b = C.hash 256 $ rlpSerialize $ noncelessBlockData2RLP $ blockData b
 
 powFunc::Block->Integer
 powFunc b =

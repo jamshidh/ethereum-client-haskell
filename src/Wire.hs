@@ -72,29 +72,27 @@ instance Format Message where
 
 
 obj2WireMessage::RLPObject->Message
-obj2WireMessage (RLPArray (RLPNumber 0x00:RLPNumber ver:RLPNumber 0:RLPString cId:RLPNumber cap:RLPNumber p:nId:[])) =
-  Hello ver cId capList p $ rlp2Word512 nId
+obj2WireMessage (RLPArray (RLPString "":ver:RLPString []:cId:RLPScalar cap:p:nId:[])) =
+  Hello (fromInteger $ rlpDecode ver) (rlpDecode cId) capList (fromInteger $ rlpDecode p) $ rlp2Word512 nId
   where
     capList = 
       (if cap .&. 1 /= 0 then [ProvidesPeerDiscoveryService] else []) ++
       (if cap .&. 2 /= 0 then [ProvidesTransactionRelayingService] else []) ++
       (if cap .&. 3 /= 0 then [ProvidesBlockChainQueryingService] else [])
-obj2WireMessage (RLPArray [RLPNumber 0x02]) = Ping
-obj2WireMessage (RLPArray [RLPNumber 0x03]) = Pong
-obj2WireMessage (RLPArray [RLPNumber 0x10]) = GetPeers
-obj2WireMessage (RLPArray (RLPNumber 0x11:peers)) = Peers $ rlpDecode <$> peers
-obj2WireMessage (RLPArray (RLPNumber 0x12:transactions)) =
+obj2WireMessage (RLPArray [RLPScalar 0x02]) = Ping
+obj2WireMessage (RLPArray [RLPScalar 0x03]) = Pong
+obj2WireMessage (RLPArray [RLPScalar 0x10]) = GetPeers
+obj2WireMessage (RLPArray (RLPScalar 0x11:peers)) = Peers $ rlpDecode <$> peers
+obj2WireMessage (RLPArray (RLPScalar 0x12:transactions)) =
   Transactions $ rlpDecode <$> transactions
-obj2WireMessage (RLPArray (RLPNumber 0x13:blocks)) =
+obj2WireMessage (RLPArray (RLPScalar 0x13:blocks)) =
   Blocks $ rlpDecode <$> blocks
 
-obj2WireMessage (RLPArray (RLPNumber 0x14:items)) =
-  GetChain (rlpDecode <$> init items) $ fromIntegral numChildren
-  where
-    RLPNumber numChildren = last items
-obj2WireMessage (RLPArray (RLPNumber 0x15:items)) =
+obj2WireMessage (RLPArray (RLPScalar 0x14:items)) =
+  GetChain (rlpDecode <$> init items) $ rlpDecode $ last items
+obj2WireMessage (RLPArray (RLPScalar 0x15:items)) =
   NotInChain $ rlpDecode <$> items
-obj2WireMessage (RLPArray [RLPNumber 0x16]) = GetTransactions
+obj2WireMessage (RLPArray [RLPScalar 0x16]) = GetTransactions
 
 obj2WireMessage x = error ("Missing case in obj2WireMessage: " ++ show x)
 
@@ -106,29 +104,29 @@ wireMessage2Obj Hello { version = ver,
                         port = p,
                         nodeId = nId } =
   RLPArray [
-    RLPNumber 0x00,
-    RLPNumber ver,
-    RLPNumber 0,
-    RLPString cId,
-    RLPNumber $ fromIntegral $ foldl (.|.) 0x00 $ capValue <$> cap,
-    RLPNumber p,
+    RLPString [],
+    rlpEncode $ toInteger ver,
+    RLPString [],
+    rlpEncode cId,
+    rlpEncode $ toInteger $ foldl (.|.) 0x00 $ capValue <$> cap,
+    rlpEncode $ toInteger p,
     word5122RLP nId
     ]
-wireMessage2Obj Ping = RLPArray $ [RLPNumber 0x2]
-wireMessage2Obj Pong = RLPArray $ [RLPNumber 0x3]
-wireMessage2Obj GetPeers = RLPArray $ [RLPNumber 0x10]
-wireMessage2Obj (Peers peers) = RLPArray $ (RLPNumber 0x11:(rlpEncode <$> peers))
+wireMessage2Obj Ping = RLPArray $ [RLPScalar 0x2]
+wireMessage2Obj Pong = RLPArray $ [RLPScalar 0x3]
+wireMessage2Obj GetPeers = RLPArray $ [RLPScalar 0x10]
+wireMessage2Obj (Peers peers) = RLPArray $ (RLPScalar 0x11:(rlpEncode <$> peers))
 wireMessage2Obj (Transactions transactions) =
-  RLPArray (RLPNumber 0x12:(rlpEncode <$> transactions))
+  RLPArray (RLPScalar 0x12:(rlpEncode <$> transactions))
 wireMessage2Obj (Blocks blocks) =
-  RLPArray (RLPNumber 0x13:(rlpEncode <$> blocks))
+  RLPArray (RLPScalar 0x13:(rlpEncode <$> blocks))
 wireMessage2Obj (GetChain pSHAs numChildren) = 
-  RLPArray $ [RLPNumber 0x14] ++
+  RLPArray $ [RLPScalar 0x14] ++
   (rlpEncode <$> pSHAs) ++
-  [rlpNumber numChildren]
+  [rlpEncode numChildren]
 wireMessage2Obj (NotInChain shas) = 
-  RLPArray $ [RLPNumber 0x15] ++
+  RLPArray $ [RLPScalar 0x15] ++
   (rlpEncode <$> shas)
-wireMessage2Obj GetTransactions = RLPArray [RLPNumber 0x16]
+wireMessage2Obj GetTransactions = RLPArray [RLPScalar 0x16]
 
     

@@ -48,8 +48,8 @@ testFullNodeDataInsert = do
   verifyDBDataIntegrity
         [
           (N.EvenNibbleString $ BC.pack "abcd", BC.pack "abcd"),
-          (N.EvenNibbleString $ BC.pack "bb", BC.pack "bb"),
-          (N.EvenNibbleString $ BC.pack "aefg", BC.pack "aefg")
+          (N.EvenNibbleString $ BC.pack "bb", BC.pack "bb")
+          --(N.EvenNibbleString $ BC.pack "aefg", BC.pack "aefg")
         ]
 
 

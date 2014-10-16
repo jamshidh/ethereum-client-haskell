@@ -35,7 +35,7 @@ instance Binary SHA where
 
 instance RLPSerializable SHA where
   rlpDecode (RLPString s) | length s == 32 = SHA $ decode $ BLC.pack s
-  rlpDecode (RLPNumber 0) = SHA 0 --special case seems to be allowed, even if length of zeros is wrong
+  rlpDecode (RLPScalar 0) = SHA 0 --special case seems to be allowed, even if length of zeros is wrong
   rlpDecode x = error ("Missing case in rlpDecode for SHA: " ++ show x)
   --rlpEncode (SHA 0) = RLPNumber 0
   rlpEncode (SHA val) = RLPString $ BC.unpack $ fst $ B16.decode $ BC.pack $ padZeros 64 $ showHex val ""

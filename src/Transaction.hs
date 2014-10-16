@@ -72,42 +72,42 @@ signTransaction privKey t = do
         _ -> error ("error: sigS is: " ++ showHex (sigS signature) "")
     }
   where
-    theData = rlp2Bytes $
+    theData = rlpSerialize $
               RLPArray [
-                rlpNumber $ tNonce t,
-                rlpNumber $ gasPrice t,
-                RLPNumber $ tGasLimit t,
+                rlpEncode $ tNonce t,
+                rlpEncode $ gasPrice t,
+                rlpEncode $ toInteger $ tGasLimit t,
                 address2RLP $ to t,
-                rlpNumber $ value t,
-                rlpNumber $ tInit t
+                rlpEncode $ value t,
+                rlpEncode $ tInit t
                 ]
-    theHash = fromInteger $ byteString2Integer $ hash 256 $ B.pack theData
+    theHash = fromInteger $ byteString2Integer $ hash 256 theData
 
 
 instance RLPSerializable Transaction where
   rlpDecode (RLPArray [n, gp, gl, toAddr, val, i, vVal, rVal, sVal]) =
     Transaction {
-      tNonce = fromIntegral $ getNumber n,
-      gasPrice = fromIntegral $ getNumber gp,
-      tGasLimit = fromIntegral $ getNumber gl,
+      tNonce = rlpDecode n,
+      gasPrice = rlpDecode gp,
+      tGasLimit = fromInteger $ rlpDecode gl,
       to = rlp2Address toAddr,
-      value = fromIntegral $ getNumber val,
-      tInit = fromIntegral $ getNumber i,
-      v = fromIntegral $ getNumber vVal,
-      r = fromIntegral $ getNumber rVal,
-      s = fromIntegral $ getNumber sVal
+      value = rlpDecode val,
+      tInit = rlpDecode i,
+      v = fromInteger $ rlpDecode vVal,
+      r = rlpDecode rVal,
+      s = rlpDecode sVal
       }
   rlpDecode x = error ("rlpDecode for Transaction called on non block object: " ++ show x)
 
   rlpEncode t =
       RLPArray [
-        rlpNumber $ tNonce t,
-        rlpNumber $ gasPrice t,
-        RLPNumber $ tGasLimit t,
+        rlpEncode $ tNonce t,
+        rlpEncode $ gasPrice t,
+        rlpEncode $ toInteger $ tGasLimit t,
         address2RLP $ to t,
-        rlpNumber $ value t,
-        rlpNumber $ tInit t,
-        RLPNumber $ fromIntegral $ v t,
-        rlpNumber $ r t,
-        rlpNumber $ s t
+        rlpEncode $ value t,
+        rlpEncode $ tInit t,
+        rlpEncode $ toInteger $ v t,
+        rlpEncode $ r t,
+        rlpEncode $ s t
         ]
