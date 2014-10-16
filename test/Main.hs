@@ -27,13 +27,8 @@ putKeyVals db stateRoot ((k, v):rest) = do
   newStateRoot <- putKeyVal db stateRoot k v
   putKeyVals db newStateRoot rest
 
-prop_testStateDB::Assertion
-prop_testStateDB = do
-  let valuesIn = 
-        [
-          (N.EvenNibbleString $ BC.pack "abcd", BC.pack "abcd"),
-          (N.EvenNibbleString $ BC.pack "aefg", BC.pack "aefg")
-        ]
+verifyDBDataIntegrity::[(N.NibbleString, B.ByteString)]->IO ()
+verifyDBDataIntegrity valuesIn = do
   runResourceT $ do
     (db, stateRoot) <- initializeBlankStateDB "/tmp/tmpDb1"
     stateRoot2 <- putKeyVals db stateRoot valuesIn
@@ -41,10 +36,30 @@ prop_testStateDB = do
     valuesOut <- getKeyVals db stateRoot2 (N.EvenNibbleString B.empty)
     liftIO $ assertEqual "empty db didn't match" valuesIn valuesOut
 
+testShortcutNodeDataInsert::Assertion
+testShortcutNodeDataInsert = do
+  verifyDBDataIntegrity
+        [
+          (N.EvenNibbleString $ BC.pack "abcd", BC.pack "abcd"),
+          (N.EvenNibbleString $ BC.pack "aefg", BC.pack "aefg")
+        ]
+
+testFullNodeDataInsert = do
+  verifyDBDataIntegrity
+        [
+          (N.EvenNibbleString $ BC.pack "abcd", BC.pack "abcd"),
+          (N.EvenNibbleString $ BC.pack "bb", BC.pack "bb"),
+          (N.EvenNibbleString $ BC.pack "aefg", BC.pack "aefg")
+        ]
+
 
 main::IO ()
 main = 
-  defaultMainWithOpts [testCase "qqqq" prop_testStateDB] mempty
+  defaultMainWithOpts 
+  [
+   testCase "ShortcutNodeData Insert" testShortcutNodeDataInsert,
+   testCase "FullNodeData Insert" testFullNodeDataInsert
+  ] mempty
     
 {-
   defaultMain
