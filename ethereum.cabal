@@ -30,6 +30,27 @@ executable ethereumH
     hs-source-dirs: src
     other-modules: RLP Wire
 
+executable stateDBClient
+    build-depends: 
+                   base -any
+                 , cryptohash
+                 , binary
+                 , bytestring
+                 , time
+                 , network-simple
+                 , haskoin
+                 , base16-bytestring
+                 , mtl
+                 , network
+                 , transformers
+                 , resourcet
+                 , data-default
+                 , leveldb-haskell
+                 , directory
+    main-is: Main.hs
+    buildable: True
+    hs-source-dirs: stateDBClient_src, src
+
 Test-Suite test-ethereumH
   type:               exitcode-stdio-1.0
   main-is:            Main.hs
