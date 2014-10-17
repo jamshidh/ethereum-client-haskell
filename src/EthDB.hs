@@ -125,6 +125,7 @@ getCommonPrefix x y = ([], x, y)
 
 
 getNewNodeDataFromPut::DB.DB->N.NibbleString->B.ByteString->NodeData->ResourceT IO NodeData
+getNewNodeDataFromPut _ key val nd | trace ("getNewNodeDataFromPut: " ++ format key ++ ", " ++ format val ++ ", " ++ format nd) False = undefined
 getNewNodeDataFromPut _ key val EmptyNodeData = return $
   ShortcutNodeData key $ Right val
 
@@ -141,10 +142,26 @@ getNewNodeDataFromPut db key val (FullNodeData options nodeValue) = trace ("getN
   newNode <- putNodeData db newNodeData
   return $ FullNodeData (replace options (N.head key) $ Just newNode) nodeValue
 
-getNewNodeDataFromPut _ key1 val (ShortcutNodeData key2 _) | key1 == key2 = 
-  return $ ShortcutNodeData key1 $ Right val
+--getNewNodeDataFromPut _ key1 val (ShortcutNodeData key2 _) | key1 == key2 = trace "here I am" $ 
+--  return $ ShortcutNodeData key1 $ Right val
 
-getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | N.head key1 == N.head key2 = do
+getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | key1 `N.isPrefixOf` key2 = trace "^^^^^^" $ do
+  undefined
+
+getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 (Right val2)) | key2 `N.isPrefixOf` key1 = do
+  node1 <- putNodeData db $ ShortcutNodeData (N.drop (N.length key2) key1) $ Right val1
+  let options = list2Options 0 [(N.head $ N.drop (N.length key2) key1, node1)]
+  midNode <- putNodeData db $ FullNodeData options $ Just val2
+  return $ ShortcutNodeData key2 $ Left midNode
+
+getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 (Left val2)) | key2 `N.isPrefixOf` key1 = do
+  Just nodeData <- getNodeData db val2
+  newNodeData <- getNewNodeDataFromPut db (N.drop (N.length key2) key1) val1 nodeData 
+  newNode <- putNodeData db newNodeData
+  return $ ShortcutNodeData key2 $ Left newNode
+  
+
+getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | N.head key1 == N.head key2 = trace "^^^^^^" $ do
   node1 <- putNodeData db $ ShortcutNodeData (N.pack $ tail suffix1) $ Right val1
   node2 <- putNodeData db $ ShortcutNodeData (N.pack $ tail suffix2) val2
   let options = list2Options 0 (sortBy (compare `on` fst) [(head suffix1, node1), (head suffix2, node2)])

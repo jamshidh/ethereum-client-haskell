@@ -9,6 +9,7 @@ import qualified Data.ByteString.Char8 as BC
 import Data.Default
 import Data.Functor
 import Data.Monoid
+import qualified Data.Set as S
 import Database.LevelDB
 import System.Exit
 import Test.Framework
@@ -32,9 +33,10 @@ verifyDBDataIntegrity valuesIn = do
   runResourceT $ do
     (db, stateRoot) <- initializeBlankStateDB "/tmp/tmpDb1"
     stateRoot2 <- putKeyVals db stateRoot valuesIn
-    return (db, stateRoot2)
+    --return (db, stateRoot2)
     valuesOut <- getKeyVals db stateRoot2 (N.EvenNibbleString B.empty)
-    liftIO $ assertEqual "empty db didn't match" valuesIn valuesOut
+    liftIO $ assertEqual "empty db didn't match" (S.fromList valuesIn) (S.fromList valuesOut)
+    return ()
 
 testShortcutNodeDataInsert::Assertion
 testShortcutNodeDataInsert = do
@@ -48,8 +50,8 @@ testFullNodeDataInsert = do
   verifyDBDataIntegrity
         [
           (N.EvenNibbleString $ BC.pack "abcd", BC.pack "abcd"),
-          (N.EvenNibbleString $ BC.pack "bb", BC.pack "bb")
-          --(N.EvenNibbleString $ BC.pack "aefg", BC.pack "aefg")
+          (N.EvenNibbleString $ BC.pack "bb", BC.pack "bb"),
+          (N.EvenNibbleString $ BC.pack "aefg", BC.pack "aefg")
         ]
 
 
@@ -57,7 +59,7 @@ main::IO ()
 main = 
   defaultMainWithOpts 
   [
-   testCase "ShortcutNodeData Insert" testShortcutNodeDataInsert,
+   --testCase "ShortcutNodeData Insert" testShortcutNodeDataInsert,
    testCase "FullNodeData Insert" testFullNodeDataInsert
   ] mempty
     

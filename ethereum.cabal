@@ -38,4 +38,4 @@ Test-Suite test-ethereumH
                     , test-framework
                     , test-framework-hunit
                     , HUnit
-                      --containers == 0.5.*
+                    , containers

@@ -35,7 +35,7 @@ import Format
 
 type Nibble = Word8
 
-data NibbleString = EvenNibbleString B.ByteString | OddNibbleString Nibble B.ByteString deriving (Show, Eq)
+data NibbleString = EvenNibbleString B.ByteString | OddNibbleString Nibble B.ByteString deriving (Show, Eq, Ord)
 
 formatNibble::Nibble->String
 formatNibble x | x > 0xF = error "format called for nibble greater than 0xF"
