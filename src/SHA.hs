@@ -27,7 +27,9 @@ instance Format SHA where
   format (SHA x) = yellow $ padZeros 64 $ showHex x ""
 
 instance Binary SHA where
-  put (SHA x) = sequence_ $ fmap put $ (integer2Bytes $ fromIntegral x)
+  put (SHA x) = sequence_ $ fmap put $ (padZeros 32 $ integer2Bytes $ fromIntegral x)
+    where
+      padZeros n s = replicate (n - length s) 0 ++ s
   get = do
     bytes <- sequence $ replicate 32 get
     let byteString = B.pack bytes
