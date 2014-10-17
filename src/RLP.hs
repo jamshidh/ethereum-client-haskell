@@ -21,7 +21,7 @@ import Numeric
 import Format
 import Util
 
-import Debug.Trace
+--import Debug.Trace
 
 data RLPObject = RLPScalar Word8 | RLPString String | RLPArray [RLPObject] deriving (Show)
 

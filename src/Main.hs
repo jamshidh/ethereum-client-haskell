@@ -51,7 +51,7 @@ import SHA
 import Util
 import Wire
 
-import Debug.Trace
+--import Debug.Trace
 
 {-
 data IPAddress = IPV4Address Word8 Word8 Word8 Word8 |

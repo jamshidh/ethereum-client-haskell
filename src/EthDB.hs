@@ -29,7 +29,7 @@ import Format
 import qualified NibbleString as N
 import RLP
 
-import Debug.Trace
+--import Debug.Trace
 
 showAllKeyVal::DB.DB->ResourceT IO ()
 showAllKeyVal db = do
@@ -125,16 +125,16 @@ getCommonPrefix x y = ([], x, y)
 
 
 getNewNodeDataFromPut::DB.DB->N.NibbleString->B.ByteString->NodeData->ResourceT IO NodeData
-getNewNodeDataFromPut _ key val nd | trace ("getNewNodeDataFromPut: " ++ format key ++ ", " ++ format val ++ ", " ++ format nd) False = undefined
+--getNewNodeDataFromPut _ key val nd | trace ("getNewNodeDataFromPut: " ++ format key ++ ", " ++ format val ++ ", " ++ format nd) False = undefined
 getNewNodeDataFromPut _ key val EmptyNodeData = return $
   ShortcutNodeData key $ Right val
 
 
 getNewNodeDataFromPut db key val (FullNodeData options nodeValue)
-  | options `slotIsEmpty` N.head key = trace "qqqqqqqqq" $ do
+  | options `slotIsEmpty` N.head key = do
   tailNode <- putNodeData db (ShortcutNodeData (N.tail key) $ Right val)
   return $ FullNodeData (replace options (N.head key) $ Just tailNode) nodeValue
-getNewNodeDataFromPut db key val (FullNodeData options nodeValue) = trace ("getNewNodeDataFromPut: " ++ format key) $ do
+getNewNodeDataFromPut db key val (FullNodeData options nodeValue) = do
   let Just conflictingNode = options!!fromIntegral (N.head key)
   --TODO- add nicer error message if stateRoot doesn't exist
   Just conflictingNodeData <- getNodeData db conflictingNode
@@ -142,11 +142,27 @@ getNewNodeDataFromPut db key val (FullNodeData options nodeValue) = trace ("getN
   newNode <- putNodeData db newNodeData
   return $ FullNodeData (replace options (N.head key) $ Just newNode) nodeValue
 
---getNewNodeDataFromPut _ key1 val (ShortcutNodeData key2 _) | key1 == key2 = trace "here I am" $ 
---  return $ ShortcutNodeData key1 $ Right val
+getNewNodeDataFromPut _ key1 val (ShortcutNodeData key2 (Right _)) | key1 == key2 =
+  return $ ShortcutNodeData key1 $ Right val
 
-getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | key1 `N.isPrefixOf` key2 = trace "^^^^^^" $ do
+getNewNodeDataFromPut _ key1 val (ShortcutNodeData key2 (Left _)) | key1 == key2 =
+  error "getNewNodeDataFromPut not defined for shortcutnodedata with ptr"
+
+getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | N.null key1 = do
   undefined
+  {-
+  node1 <- putNodeData db $ ShortcutNodeData (N.drop (N.length key1) key2) val2
+  let options = list2Options 0 [(N.head $ N.drop (N.length key1) key2, node1)]
+  midNode <- putNodeData db $ FullNodeData options $ Just val1
+  return $ ShortcutNodeData key1 $ Left midNode
+-}
+
+getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | key1 `N.isPrefixOf` key2 = do
+  node1 <- putNodeData db $ ShortcutNodeData (N.drop (N.length key1) key2) val2
+  let options = list2Options 0 [(N.head $ N.drop (N.length key1) key2, node1)]
+  midNode <- putNodeData db $ FullNodeData options $ Just val1
+  return $ ShortcutNodeData key1 $ Left midNode
+
 
 getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 (Right val2)) | key2 `N.isPrefixOf` key1 = do
   node1 <- putNodeData db $ ShortcutNodeData (N.drop (N.length key2) key1) $ Right val1
@@ -161,7 +177,7 @@ getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 (Left val2)) | key2 `N
   return $ ShortcutNodeData key2 $ Left newNode
   
 
-getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | N.head key1 == N.head key2 = trace "^^^^^^" $ do
+getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | N.head key1 == N.head key2 = do
   node1 <- putNodeData db $ ShortcutNodeData (N.pack $ tail suffix1) $ Right val1
   node2 <- putNodeData db $ ShortcutNodeData (N.pack $ tail suffix2) val2
   let options = list2Options 0 (sortBy (compare `on` fst) [(head suffix1, node1), (head suffix2, node2)])
@@ -202,7 +218,7 @@ instance Binary SHAPtr where
   put (SHAPtr x) = do
       sequence_ $ put <$> B.unpack x
   get = do
-      undefined
+    error "get undefined for SHAPtr"
 
 instance RLPSerializable SHAPtr where
     rlpEncode (SHAPtr x) = rlpEncode x
@@ -262,12 +278,12 @@ instance RLPSerializable NodeData where
   rlpEncode EmptyNodeData = error "rlpEncode should never be called on EmptyNodeData.  Use rlpSerialize instead."
   rlpEncode (FullNodeData {choices=cs, nodeVal=val}) = RLPArray ((encodeChoice <$> cs) ++ [encodeVal val])
     where
-      encodeChoice Nothing = RLPScalar 0
+      encodeChoice Nothing = rlpEncode (0::Integer)
       encodeChoice (Just (SHAPtr x)) = rlpEncode x
-      encodeVal Nothing = RLPScalar 0
+      encodeVal Nothing = rlpEncode (0::Integer)
       encodeVal (Just x) = rlpEncode x
   rlpEncode (ShortcutNodeData {nextNibbleString=s, nextVal=val}) = 
-    RLPArray[RLPString $ BC.unpack $ termNibbleString2String terminator s, encodeVal val] 
+    RLPArray[rlpEncode $ BC.unpack $ termNibbleString2String terminator s, encodeVal val] 
     where
       terminator = 
         case val of
@@ -285,11 +301,12 @@ instance RLPSerializable NodeData where
     where
       (terminator, s) = string2TermNibbleString $ rlpDecode a
   rlpDecode (RLPArray x) | length x == 17 =
-    FullNodeData (fmap getPtr <$> (\p -> case p of RLPScalar 0 -> Nothing; _ -> Just p) <$> childPointers) val
+    FullNodeData (fmap getPtr <$> (\p -> case p of RLPScalar 0 -> Nothing; RLPString "" -> Nothing; _ -> Just p) <$> childPointers) val
     where
       childPointers = init x
       val = case last x of
         RLPScalar 0 -> Nothing
+        RLPString "" -> Nothing
         RLPString s -> Just $ BC.pack s
         _ -> error "Malformed RLP data in call to rlpDecode for NodeData: value of FullNodeData is a RLPArray"
       getPtr::RLPObject->SHAPtr

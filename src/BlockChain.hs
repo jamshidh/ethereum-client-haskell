@@ -107,9 +107,6 @@ checkValidity bdb b = do
 
 
 {-
-        return undefined -- $ return ()
--}
-{-
                     coinbase=prvKey2Address prvKey,
         stateRoot = SHA 0x9b109189563315bfeb13d4bfd841b129ff3fd5c85f228a8d9d8563b4dde8432e,
                     transactionsTrie = 0,
