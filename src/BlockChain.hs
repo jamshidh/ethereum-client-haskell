@@ -28,15 +28,13 @@ import System.Directory
 
 import Block
 import Constants
+import DBs
 import Format
 import ModifyStateDB
 import RLP
 import SHA
 
 --import Debug.Trace
-
-type BlockDB = DB.DB
-type DetailsDB = DB.DB
 
 options::DB.Options
 options = DB.defaultOptions {
@@ -72,15 +70,12 @@ instance Format BlockValidityError where
     format (BlockDifficultyWrong d expected) = "Block difficulty is wrong, is '" ++ show d ++ "', expected '" ++ show expected ++ "'"
 -}
 
-verifyStateRootExists::Block->IO Bool
-verifyStateRootExists b = do
-  homeDir <- getHomeDirectory
-  runResourceT $ do
-    db <- DB.open (homeDir ++ stateDBPath) options
-    val <- DB.get db def (BL.toStrict $ encode $ stateRoot $ blockData b)
-    case val of
-      Nothing -> return False
-      Just _ -> return True
+verifyStateRootExists::StateDB->Block->ResourceT IO Bool
+verifyStateRootExists sdb b = do
+  val <- DB.get sdb def (BL.toStrict $ encode $ stateRoot $ blockData b)
+  case val of
+    Nothing -> return False
+    Just _ -> return True
 
 checkParentChildValidity::(Monad m)=>Block->Block->m ()
 checkParentChildValidity Block{blockData=c} Block{blockData=p} = do
@@ -92,16 +87,16 @@ checkParentChildValidity Block{blockData=c} Block{blockData=p} = do
              $ fail $ "Block gasLimit is wrong: got '" ++ show (gasLimit c) ++ "', expected '" ++ show (nextGasLimit (gasLimit p) (gasUsed p)) ++ "'"
     return ()
 
-checkValidity::Monad m=>BlockDB->Block->ResourceT IO (m ())
-checkValidity bdb b = do
+checkValidity::Monad m=>BlockDB->StateDB->Block->ResourceT IO (m ())
+checkValidity bdb sdb b = do
   maybeParentBlock <- getBlock bdb (parentHash $ blockData b)
   case maybeParentBlock of
     Just parentBlock -> do
           checkParentChildValidity b parentBlock
           unless (nonceIsValid b) $ fail $ "Block nonce is wrong: " ++ format b
           unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"
-          stateRootExists <- liftIO $ verifyStateRootExists b
-          unless stateRootExists $ fail $ "Block stateRoot does not exist: " ++ format (stateRoot $ blockData b)
+          stateRootExists <- verifyStateRootExists sdb b
+          unless stateRootExists $ fail ("Block stateRoot does not exist: " ++ format (stateRoot $ blockData b))
           return $ return ()
     Nothing -> fail ("Parent Block does not exist: " ++ format (parentHash $ blockData b))
 
@@ -121,17 +116,18 @@ addBlocks blocks = runResourceT $ do
   homeDir <- liftIO $ getHomeDirectory                     
   bdb <- DB.open (homeDir ++ blockDBPath) options
   ddb <- DB.open (homeDir ++ detailsDBPath) options
-  forM_ blocks (addBlock bdb ddb)
+  sdb <- DB.open (homeDir ++ stateDBPath) options
+  forM_ blocks (addBlock bdb ddb sdb)
 
-addBlock::BlockDB->DetailsDB->Block->ResourceT IO ()
-addBlock bdb ddb b = do
+addBlock::BlockDB->DetailsDB->StateDB->Block->ResourceT IO ()
+addBlock bdb ddb sdb b = do
   maybeParentBlock <- getBlock bdb $ parentHash $ blockData b
   let parentBlock = case maybeParentBlock of
                       Nothing -> error "Missing parent block in addBlock"
                       Just x -> x
-  newStateRoot <- liftIO $ addReward (stateRoot $ blockData parentBlock) (coinbase $ blockData b)
+  newStateRoot <- addReward sdb (stateRoot $ blockData parentBlock) (coinbase $ blockData b)
   liftIO $ putStrLn $ format newStateRoot
-  valid <- checkValidity bdb b
+  valid <- checkValidity bdb sdb b
   case valid of
      Right () -> return ()
      Left err -> error err

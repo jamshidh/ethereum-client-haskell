@@ -111,7 +111,11 @@ addReward stateRoot address =
 getNextBlock::Block->UTCTime->IO Block
 getNextBlock b ts = do
   let theCoinbase = prvKey2Address prvKey
-  newStateRoot <- addReward (stateRoot bd) theCoinbase
+  newStateRoot <- runResourceT $ do
+    homeDir <- liftIO getHomeDirectory
+    sdb <- DB.open (homeDir ++ stateDBPath) DB.defaultOptions {
+      DB.createIfMissing=True, DB.cacheSize=1024}
+    addReward sdb (stateRoot bd) theCoinbase
 
   return $ Block{
                blockData=testGetNextBlockData newStateRoot,

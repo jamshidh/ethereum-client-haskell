@@ -19,6 +19,7 @@ import System.Directory
 import Address
 import AddressState
 import Constants
+import DBs
 import EthDB
 import SHA
 
@@ -69,18 +70,15 @@ putAddressStates db stateRoot (address:rest) addressState = do
     putAddressStates db newStateRoot rest addressState
 
 
-addReward::SHAPtr->Address->IO SHAPtr
-addReward stateRoot address = 
-    runResourceT $ do
-      homeDir <- liftIO $ getHomeDirectory
-      db <- DB.open (homeDir ++ "/" ++ stateDBPath) DB.defaultOptions{DB.createIfMissing=True}
-      --DB.put db def startingRoot B.empty
+addReward::StateDB->SHAPtr->Address->ResourceT IO SHAPtr
+addReward sdb stateRoot address = do
+  --DB.put db def startingRoot B.empty
 
-      maybeAddressState <- getAddressState db stateRoot address
+  maybeAddressState <- getAddressState sdb stateRoot address
 
-      case maybeAddressState of
-        Nothing -> putAddressState db stateRoot address startingAddressState{ balance = fromIntegral $ 1500*finney }
-        Just addressState -> putAddressState db stateRoot address (addressState{balance=balance addressState + fromIntegral (1500*finney)})
+  case maybeAddressState of
+    Nothing -> putAddressState sdb stateRoot address startingAddressState{ balance = fromIntegral $ 1500*finney }
+    Just addressState -> putAddressState sdb stateRoot address (addressState{balance=balance addressState + fromIntegral (1500*finney)})
 
   
 
