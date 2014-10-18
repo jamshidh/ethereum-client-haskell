@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
 {-# OPTIONS_GHC -Wall #-}
 
 module BlockChain (
@@ -11,7 +11,6 @@ module BlockChain (
   ) where
 
 import Control.Monad
-import Control.Monad.Error
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import qualified Crypto.Hash.SHA3 as C
@@ -20,19 +19,29 @@ import Data.Bits
 import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import Data.Functor
+import Data.Maybe
 import Data.Time
 import Data.Time.Clock.POSIX
 import qualified Database.LevelDB as DB
-import Numeric
 import System.Directory
 
+--import Network.Haskoin.Constants (Signature)
+import Network.Haskoin.Internals (Signature(..))
+--import Network.Haskoin.Util (Signature)
+
+import Address
 import Block
 import Constants
 import DBs
+import EthDB
+import ExtendedECDSA
 import Format
 import ModifyStateDB
 import RLP
 import SHA
+import Transaction
+import TransactionReceipt
+import Util
 
 --import Debug.Trace
 
@@ -121,12 +130,15 @@ addBlocks blocks = runResourceT $ do
 
 addBlock::BlockDB->DetailsDB->StateDB->Block->ResourceT IO ()
 addBlock bdb ddb sdb b = do
-  maybeParentBlock <- getBlock bdb $ parentHash $ blockData b
-  let parentBlock = case maybeParentBlock of
-                      Nothing -> error "Missing parent block in addBlock"
-                      Just x -> x
+  parentBlock <- fromMaybe (error ("Missing parent block in addBlock: " ++ format (parentHash $ blockData b))) <$>
+                 (getBlock bdb $ parentHash $ blockData b)
+
   newStateRoot <- addReward sdb (stateRoot $ blockData parentBlock) (coinbase $ blockData b)
-  liftIO $ putStrLn $ format newStateRoot
+
+  newStateRoot2 <- addToNonces sdb newStateRoot $ theTransaction <$> receiptTransactions b
+
+  liftIO $ putStrLn $ "newStateRoot2: " ++ format newStateRoot2
+
   valid <- checkValidity bdb sdb b
   case valid of
      Right () -> return ()
@@ -134,6 +146,25 @@ addBlock bdb ddb sdb b = do
   let bytes = rlpSerialize $ rlpEncode b
   DB.put bdb def (C.hash 256 bytes) bytes
   replaceBestIfBetter bdb ddb b
+
+
+addToNonces::StateDB->SHAPtr->[Transaction]->ResourceT IO SHAPtr
+addToNonces _ stateRoot [] = return stateRoot
+addToNonces sdb stateRoot (t:rest) = do
+    let xSignature = ExtendedSignature (Signature (fromInteger $ r t) (fromInteger $ s t)) (0x1c == v t)
+    newStateRoot <- addNonce sdb stateRoot (pubKey2Address (getPubKeyFromSignature xSignature (fromInteger $ byteString2Integer $ C.hash 256 (theData t))))
+    addToNonces sdb newStateRoot rest
+      where
+        theData t = rlpSerialize $
+              RLPArray [
+                rlpEncode $ tNonce t,
+                rlpEncode $ gasPrice t,
+                rlpEncode $ toInteger $ tGasLimit t,
+                address2RLP $ to t,
+                rlpEncode $ value t,
+                rlpEncode $ tInit t
+                ]
+  
 
 getBestBlockHash::DetailsDB->ResourceT IO (Maybe SHA)
 getBestBlockHash ddb = do
@@ -158,7 +189,8 @@ replaceBestIfBetter bdb ddb b = do
     _ -> runResourceT $ do
       DB.put ddb def "best" (BL.toStrict $ encode $ blockHash b)
 
---withBlockDB::(BlockDB->a)->a
+withBlockDB::(MonadIO m, MonadThrow m, MonadBaseControl IO m) =>
+     (DB.DB -> ResourceT m a)-> m a
 withBlockDB f = do
   runResourceT $ do
     homeDir <- liftIO $ getHomeDirectory

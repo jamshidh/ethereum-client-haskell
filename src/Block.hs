@@ -119,7 +119,7 @@ instance RLPSerializable BlockData where
       rlpEncode $ minGasPrice bd,
       rlpEncode $ gasLimit bd,
       rlpEncode $ gasUsed bd,
-      rlpEncode $ toInteger $ round $ utcTimeToPOSIXSeconds $ timestamp bd,
+      rlpEncode $ (round $ utcTimeToPOSIXSeconds $ timestamp bd::Integer),
       rlpEncode $ extraData bd,
       rlpEncode $ nonce bd
       ]
@@ -183,7 +183,7 @@ noncelessBlockData2RLP bd =
       rlpEncode $ minGasPrice bd,
       rlpEncode $ gasLimit bd,
       rlpEncode $ gasUsed bd,
-      rlpEncode $ toInteger $ round $ utcTimeToPOSIXSeconds $ timestamp bd,
+      rlpEncode $ (round $ utcTimeToPOSIXSeconds $ timestamp bd::Integer),
       rlpEncode $ extraData bd
       ]
 

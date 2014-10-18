@@ -4,7 +4,8 @@
 module ModifyStateDB (
                       initializeBlankStateDB,
                       initializeStateDB,
-                      addReward
+                      addReward,
+                      addNonce
 ) where
 
 import Control.Monad.IO.Class
@@ -13,6 +14,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import Data.Default
 import Data.Functor
+import Data.Maybe
 import qualified Database.LevelDB as DB
 import System.Directory
 
@@ -33,7 +35,7 @@ startingAddressState::AddressState
 startingAddressState =
       AddressState {
       addressStateNonce=0,
-      balance= 0x0100000000000000000000000000000000000000000000000000,
+      balance= 0,
       contractRoot=0,
       codeHash=hash B.empty
       }
@@ -61,7 +63,8 @@ initializeStateDB = do
                        0xe4157b34ea9615cfbde6b4fda419828124b70c78
                       ]
 
-      putAddressStates db startingRoot2 addresses startingAddressState
+      putAddressStates db startingRoot2 addresses
+        startingAddressState{balance=0x0100000000000000000000000000000000000000000000000000}
 
 putAddressStates::DB.DB->SHAPtr->[Address]->AddressState->ResourceT IO SHAPtr
 putAddressStates _ stateRoot [] _ = return stateRoot
@@ -72,15 +75,21 @@ putAddressStates db stateRoot (address:rest) addressState = do
 
 addReward::StateDB->SHAPtr->Address->ResourceT IO SHAPtr
 addReward sdb stateRoot address = do
-  --DB.put db def startingRoot B.empty
-
-  maybeAddressState <- getAddressState sdb stateRoot address
-
-  case maybeAddressState of
-    Nothing -> putAddressState sdb stateRoot address startingAddressState{ balance = fromIntegral $ 1500*finney }
-    Just addressState -> putAddressState sdb stateRoot address (addressState{balance=balance addressState + fromIntegral (1500*finney)})
+  addressState <- fromMaybe startingAddressState <$> getAddressState sdb stateRoot address
+  putAddressState sdb stateRoot address
+    addressState{ balance = balance addressState + fromIntegral (1500*finney) }
+  
+addNonce::StateDB->SHAPtr->Address->ResourceT IO SHAPtr
+addNonce sdb stateRoot address = do
+  addressState <- fromMaybe startingAddressState <$> getAddressState sdb stateRoot address
+  putAddressState sdb stateRoot address
+    addressState{ addressStateNonce = addressStateNonce addressState + 1 }
 
   
+
+
+
+
 
 
 

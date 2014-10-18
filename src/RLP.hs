@@ -100,10 +100,6 @@ rlp2Bytes (RLPArray innerObjects) =
     innerBytes = concat $ rlp2Bytes <$> innerObjects
 rlp2Bytes obj = error ("Missing case in rlp2Bytes: " ++ show obj)
 
-getIntegerBytes::Integer->[Word8]
-getIntegerBytes 0 = []
-getIntegerBytes val = getIntegerBytes (val `quot` 256) ++ [fromIntegral $ val .&. 0xFF]
-
 rlpDeserialize::B.ByteString->RLPObject
 rlpDeserialize s = 
   case rlpSplit $ B.unpack s of
@@ -121,6 +117,7 @@ instance RLPSerializable Integer where
   rlpEncode x = RLPString $ w2c <$> integer2Bytes x
   rlpDecode (RLPScalar x) = fromIntegral x
   rlpDecode (RLPString s) = byteString2Integer $ BC.pack s
+  rlpDecode (RLPArray _) = error "rlpDecode called for Integer for array"
 
 instance RLPSerializable String where
   rlpEncode [c] | c2w c < 128 = RLPScalar $ c2w c

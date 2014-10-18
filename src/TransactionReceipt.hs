@@ -14,7 +14,7 @@ data PostTransactionState = PostTransactionState String deriving (Show)
 instance RLPSerializable PostTransactionState where
   rlpDecode (RLPString x) = PostTransactionState x
   rlpDecode x = error ("rlpDecode for PostTransactionState missing case: " ++ show x)
-  rlpEncode x = RLPArray []
+  rlpEncode (PostTransactionState x) = RLPString x
 
 data TransactionReceipt =
   TransactionReceipt {

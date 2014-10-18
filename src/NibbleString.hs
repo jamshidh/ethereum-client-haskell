@@ -78,7 +78,7 @@ append (OddNibbleString c1 s1) (OddNibbleString c2 s2) | B.null s1 = EvenNibbleS
 --append (EvenNibbleString s1) (OddNibbleString c2 s2) = OddNibbleString (
 --append (OddNibbleString c1 s1) (OddNibbleString c2 s2) = EvenNibbleString (s1 `B.append` s2) 
 append x y = pack (unpack x ++ unpack y)
-append x y = error ("Not implemented yet for append: " ++ show x ++ ", " ++ show y)
+--append x y = error ("Not implemented yet for append: " ++ show x ++ ", " ++ show y)
 
 head::NibbleString->Nibble
 --head n | trace ("calling head: (" ++ show (length n) ++ ")" ++ show n) $ False = undefined
@@ -93,18 +93,20 @@ tail (EvenNibbleString s) = OddNibbleString (B.head s .&. 0xF) $ B.tail s
 pack::[Nibble]->NibbleString
 pack (c:rest) | even $ Prelude.length rest = c `prependNibble` pack rest
               where
-                prependNibble c (EvenNibbleString x) = OddNibbleString c x
+                prependNibble c2 (EvenNibbleString x) = OddNibbleString c2 x
+                prependNibble _ (OddNibbleString _ _) = undefined
 pack x = EvenNibbleString $ B.pack (nibbles2Bytes x)
     where
       nibbles2Bytes::[Nibble]->[Word8]
       nibbles2Bytes [] = []
-      nibbles2Bytes (x:y:rest) = x `shiftL` 4 + y:nibbles2Bytes rest
+      nibbles2Bytes [_] = error "Error in N.pack, nibbles2Bytes: an odd length string was passed into nibbles2Bytes"
+      nibbles2Bytes (x1:x2:rest) = x1 `shiftL` 4 + x2:nibbles2Bytes rest
 
 unpack::NibbleString->[Nibble]
 unpack (OddNibbleString c rest) = c:unpack (EvenNibbleString rest)
 unpack (EvenNibbleString x) = byte2Nibbles =<< B.unpack x
     where
-      byte2Nibbles x = [x `shiftR` 4, x .&. 0xF]
+      byte2Nibbles y = [y `shiftR` 4, y .&. 0xF]
 
 
 isPrefixOf::NibbleString->NibbleString->Bool

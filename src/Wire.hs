@@ -67,7 +67,9 @@ instance Format Message where
     intercalate ",\n    " (format <$> pSHAs)
   format (NotInChain shas) =
     blue "NotInChain:" ++ 
-    tab ("\n" ++ intercalate ",\n    " (format <$> shas))
+    tab ("\n" ++ red "------------------------------------------------------------------" ++
+         "\n" ++ red "|" ++ intercalate ",\n    " (format <$> shas) ++ red "|" ++
+         "\n" ++ red "------------------------------------------------------------------")
   format GetTransactions = blue "GetTransactions"
 
 

@@ -5,7 +5,6 @@ module Main (
   main
   ) where
 
-import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import qualified Crypto.Hash.SHA3 as C
@@ -15,9 +14,6 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
 import Data.ByteString.Internal
-import qualified Data.ByteString.Base16 as B16
-import Data.Default
-import Data.Functor
 import Data.Function
 import Data.List
 import Data.Time.Clock
@@ -25,7 +21,6 @@ import Data.Time.Clock.POSIX
 import Data.Word
 import qualified Database.LevelDB as DB
 import Network.Haskoin.Crypto hiding (Address)
-import Network.Haskoin.Internals hiding (Ping, Pong, version, Message, Block, timestamp, Address)
 import Network.Socket (socketToHandle)
 import Numeric
 import System.Directory
@@ -37,7 +32,6 @@ import System.IO
 import Network.Simple.TCP
 
 import Address
-import AddressState
 import Block
 import BlockChain
 import Colors
@@ -53,29 +47,12 @@ import Wire
 
 --import Debug.Trace
 
-{-
-data IPAddress = IPV4Address Word8 Word8 Word8 Word8 |
-  IPV6Address Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word8 
--}
-
 
 prvKey::PrvKey
 Just prvKey = makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
 --Just prvKey = makePrvKey 0xd69bceff85f3bc2d0a13bcc43b7caf6bd54a21ad0c1997ae623739216710ca19 --cpp client prvKey
 --6ccf6b5c33ae2017a6c76b8791ca61276a69ab8e --cpp coinbase
 
-
-{-
-address::IPAddress->Word16->Word64->Put
-address (IPV4Address d1 d2 d3 d4) port flags = do
-  putWord64le flags
-  putByteString $ B.pack [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF]
-  putWord8 d1
-  putWord8 d2
-  putWord8 d3
-  putWord8 d4
-  putWord16le port
--}
 
 ethereumHeader::ByteString->Put
 ethereumHeader payload = do
@@ -93,21 +70,6 @@ sendMessage socket msg = do
   putStrLn (green "msg>>>>>: " ++ format msg)
   sendCommand socket $ rlpSerialize $ wireMessage2Obj msg
 
-{-
-addReward::SHAPtr->Address->IO SHAPtr
-addReward stateRoot address = 
-  runResourceT $ do
-    liftIO $ putStrLn "about to open"
-    homeDir <- liftIO $ getHomeDirectory
-    db <- DB.open (homeDir ++ "/" ++ stateDBPath) DB.defaultOptions{DB.createIfMissing=True}
-    liftIO $ putStrLn "opened"
-    DB.put db def startingRoot B.empty
-
-    addressState <- getAddressState db stateRoot address
-
-    putAddressState db stateRoot address (addressState{balance=balance addressState + fromIntegral (1500*finney)})
--}
-  
 getNextBlock::Block->UTCTime->IO Block
 getNextBlock b ts = do
   let theCoinbase = prvKey2Address prvKey
@@ -238,7 +200,8 @@ main1 = connect "127.0.0.1" "30303" $ \(socket, _) -> do
   signedTx <- withSource devURandom $
                    signTransaction prvKey tx
   -}
-  
+
+  {-
   let b = Block{blockData=
                    BlockData {
                      parentHash=SHA 0,
@@ -258,10 +221,8 @@ main1 = connect "127.0.0.1" "30303" $ \(socket, _) -> do
                 receiptTransactions=[],
                 blockUncles=[]
                }
-  --let ts = 0
+-}
 
-  ts <- getCurrentTime
-  
   --let newBlock = testGetNextBlock genesisBlock ts
   --let powVal = byteString2Integer $ BC.pack $ powFunc newBlock
   --putStrLn $ "powFunc = " ++ show (showHex powVal "")
@@ -278,7 +239,7 @@ main1 = connect "127.0.0.1" "30303" $ \(socket, _) -> do
     case maybeBestBlockHash of
       Nothing -> do
         initializeBlockChain
-        initializeStateDB
+        _ <- initializeStateDB
         return $ blockHash genesisBlock
       Just x -> return x
 

@@ -16,6 +16,8 @@ import Network.Haskoin.Crypto
 import Network.Haskoin.Internals
 import Network.Haskoin.Util
 
+import Debug.Trace
+
 nextSecret :: Monad m => SecretT m FieldN
 nextSecret = do
     (ws,f) <- S.get
@@ -81,10 +83,11 @@ extSignMsg h d = do
 
 getPubKeyFromSignature::ExtendedSignature->Word256->PubKey
 getPubKeyFromSignature (ExtendedSignature sig yIsOdd) msgHash = 
+  trace (show sig ++ "\n" ++ show msgHash ++ "\n" ++ show r ++ "\n" ++ show s) $ 
   PubKey $ ((s / r) `mulPoint` bigR) `addPoint` ((fromIntegral curveN - fromIntegral msgHash/r) `mulPoint` curveG)
   where
     r = sigR sig
     s = sigS sig
     ys = quadraticResidue $ (fromIntegral r)^(3::Integer)+7
-    correctY = if odd (ys !! 0) == yIsOdd then ys !! 0 else ys !! 1
+    correctY = trace (show ys) $ if odd (ys !! 0) == yIsOdd then ys !! 0 else ys !! 1
     Just bigR = makePoint (fromIntegral r) correctY
