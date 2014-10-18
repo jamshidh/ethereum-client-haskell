@@ -25,23 +25,17 @@ import Data.Time.Clock.POSIX
 import qualified Database.LevelDB as DB
 import System.Directory
 
---import Network.Haskoin.Constants (Signature)
-import Network.Haskoin.Internals (Signature(..))
---import Network.Haskoin.Util (Signature)
-
 import Address
 import Block
 import Constants
 import DBs
 import EthDB
-import ExtendedECDSA
 import Format
 import ModifyStateDB
 import RLP
 import SHA
 import Transaction
 import TransactionReceipt
-import Util
 
 --import Debug.Trace
 
@@ -133,11 +127,13 @@ addBlock bdb ddb sdb b = do
   parentBlock <- fromMaybe (error ("Missing parent block in addBlock: " ++ format (parentHash $ blockData b))) <$>
                  (getBlock bdb $ parentHash $ blockData b)
 
-  newStateRoot <- addReward sdb (stateRoot $ blockData parentBlock) (coinbase $ blockData b)
+  newStateRoot <- addToBalance sdb (stateRoot $ blockData parentBlock) (coinbase $ blockData b) (1500*finney)
 
   newStateRoot2 <- addToNonces sdb newStateRoot $ theTransaction <$> receiptTransactions b
 
-  liftIO $ putStrLn $ "newStateRoot2: " ++ format newStateRoot2
+  newStateRoot3 <- chargeFees sdb newStateRoot2 (coinbase $ blockData b) $ theTransaction <$> receiptTransactions b
+
+  --liftIO $ putStrLn $ "newStateRoot3: " ++ format newStateRoot3
 
   valid <- checkValidity bdb sdb b
   case valid of
@@ -149,21 +145,17 @@ addBlock bdb ddb sdb b = do
 
 
 addToNonces::StateDB->SHAPtr->[Transaction]->ResourceT IO SHAPtr
-addToNonces _ stateRoot [] = return stateRoot
-addToNonces sdb stateRoot (t:rest) = do
-    let xSignature = ExtendedSignature (Signature (fromInteger $ r t) (fromInteger $ s t)) (0x1c == v t)
-    newStateRoot <- addNonce sdb stateRoot (pubKey2Address (getPubKeyFromSignature xSignature (fromInteger $ byteString2Integer $ C.hash 256 (theData t))))
-    addToNonces sdb newStateRoot rest
-      where
-        theData t = rlpSerialize $
-              RLPArray [
-                rlpEncode $ tNonce t,
-                rlpEncode $ gasPrice t,
-                rlpEncode $ toInteger $ tGasLimit t,
-                address2RLP $ to t,
-                rlpEncode $ value t,
-                rlpEncode $ tInit t
-                ]
+addToNonces _ sr [] = return sr
+addToNonces sdb sr (t:rest) = do
+    sr2 <- addNonce sdb sr $ whoSignedThisTransaction t
+    addToNonces sdb sr2 rest
+
+chargeFees::StateDB->SHAPtr->Address->[Transaction]->ResourceT IO SHAPtr
+chargeFees _ sr _ [] = return sr
+chargeFees sdb sr theCoinbase (t:rest) = do
+  sr2 <- addToBalance sdb sr theCoinbase (5*finney)
+  sr3 <- addToBalance sdb sr2 (whoSignedThisTransaction t) (-5*finney)
+  chargeFees sdb sr3 theCoinbase rest
   
 
 getBestBlockHash::DetailsDB->ResourceT IO (Maybe SHA)

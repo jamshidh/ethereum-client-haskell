@@ -77,7 +77,7 @@ getNextBlock b ts = do
     homeDir <- liftIO getHomeDirectory
     sdb <- DB.open (homeDir ++ stateDBPath) DB.defaultOptions {
       DB.createIfMissing=True, DB.cacheSize=1024}
-    addReward sdb (stateRoot bd) theCoinbase
+    addToBalance sdb (stateRoot bd) theCoinbase (1500*finney)
 
   return $ Block{
                blockData=testGetNextBlockData newStateRoot,

@@ -4,7 +4,7 @@
 module ModifyStateDB (
                       initializeBlankStateDB,
                       initializeStateDB,
-                      addReward,
+                      addToBalance,
                       addNonce
 ) where
 
@@ -73,11 +73,11 @@ putAddressStates db stateRoot (address:rest) addressState = do
     putAddressStates db newStateRoot rest addressState
 
 
-addReward::StateDB->SHAPtr->Address->ResourceT IO SHAPtr
-addReward sdb stateRoot address = do
+addToBalance::StateDB->SHAPtr->Address->Integer->ResourceT IO SHAPtr
+addToBalance sdb stateRoot address val = do
   addressState <- fromMaybe startingAddressState <$> getAddressState sdb stateRoot address
   putAddressState sdb stateRoot address
-    addressState{ balance = balance addressState + fromIntegral (1500*finney) }
+    addressState{ balance = balance addressState + fromIntegral val }
   
 addNonce::StateDB->SHAPtr->Address->ResourceT IO SHAPtr
 addNonce sdb stateRoot address = do

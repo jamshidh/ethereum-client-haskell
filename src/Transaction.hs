@@ -3,10 +3,11 @@
 
 module Transaction (
   Transaction(..),
-  signTransaction
+  signTransaction,
+  whoSignedThisTransaction
   ) where
 
-import Crypto.Hash.SHA3
+import qualified Crypto.Hash.SHA3 as C
 import qualified Data.ByteString as B
 import Data.ByteString.Base16
 import Data.ByteString.Internal
@@ -81,7 +82,7 @@ signTransaction privKey t = do
                 rlpEncode $ value t,
                 rlpEncode $ tInit t
                 ]
-    theHash = fromInteger $ byteString2Integer $ hash 256 theData
+    theHash = fromInteger $ byteString2Integer $ C.hash 256 theData
 
 
 instance RLPSerializable Transaction where
@@ -111,3 +112,19 @@ instance RLPSerializable Transaction where
         rlpEncode $ r t,
         rlpEncode $ s t
         ]
+
+whoSignedThisTransaction::Transaction->Address
+whoSignedThisTransaction t =
+  pubKey2Address (getPubKeyFromSignature xSignature (fromInteger $ byteString2Integer $ C.hash 256 (theData t)))
+      where
+        xSignature = ExtendedSignature (Signature (fromInteger $ r t) (fromInteger $ s t)) (0x1c == v t)
+        theData t = rlpSerialize $
+              RLPArray [
+                rlpEncode $ tNonce t,
+                rlpEncode $ gasPrice t,
+                rlpEncode $ toInteger $ tGasLimit t,
+                address2RLP $ to t,
+                rlpEncode $ value t,
+                rlpEncode $ tInit t
+                ]
+  
