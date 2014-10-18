@@ -16,6 +16,7 @@ import Control.Monad.Trans.Resource
 import qualified Crypto.Hash.SHA3 as C
 import Data.Binary
 import Data.Bits
+import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import Data.Functor
@@ -133,7 +134,9 @@ addBlock bdb ddb sdb b = do
 
   newStateRoot3 <- chargeFees sdb newStateRoot2 (coinbase $ blockData b) $ theTransaction <$> receiptTransactions b
 
-  --liftIO $ putStrLn $ "newStateRoot3: " ++ format newStateRoot3
+  newStateRoot4 <- chargeForCodeSize sdb newStateRoot3 (coinbase $ blockData b) $ theTransaction <$> receiptTransactions b
+
+  liftIO $ putStrLn $ "newStateRoot4: " ++ format newStateRoot4
 
   valid <- checkValidity bdb sdb b
   case valid of
@@ -155,6 +158,15 @@ chargeFees _ sr _ [] = return sr
 chargeFees sdb sr theCoinbase (t:rest) = do
   sr2 <- addToBalance sdb sr theCoinbase (5*finney)
   sr3 <- addToBalance sdb sr2 (whoSignedThisTransaction t) (-5*finney)
+  chargeFees sdb sr3 theCoinbase rest
+  
+chargeForCodeSize::StateDB->SHAPtr->Address->[Transaction]->ResourceT IO SHAPtr
+chargeForCodeSize _ sr _ [] = return sr
+chargeForCodeSize sdb sr theCoinbase (t:rest) = do
+  let codeSize = B.length (tInit t)
+  let val = 5 * (gasPrice t) * fromIntegral codeSize
+  sr2 <- addToBalance sdb sr theCoinbase val
+  sr3 <- addToBalance sdb sr2 (whoSignedThisTransaction t) (-val)
   chargeFees sdb sr3 theCoinbase rest
   
 

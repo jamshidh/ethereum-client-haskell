@@ -9,6 +9,7 @@ module Transaction (
 
 import qualified Crypto.Hash.SHA3 as C
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as BC
 import Data.ByteString.Base16
 import Data.ByteString.Internal
 import Data.Word
@@ -33,7 +34,7 @@ data Transaction =
     tGasLimit::Int,
     to::Address,
     value::Integer,
-    tInit::Integer,
+    tInit::B.ByteString,
     v::Word8,
     r::Integer,
     s::Integer
@@ -80,7 +81,7 @@ signTransaction privKey t = do
                 rlpEncode $ toInteger $ tGasLimit t,
                 address2RLP $ to t,
                 rlpEncode $ value t,
-                rlpEncode $ tInit t
+                rlpEncode $ BC.unpack $ tInit t
                 ]
     theHash = fromInteger $ byteString2Integer $ C.hash 256 theData
 
@@ -93,7 +94,7 @@ instance RLPSerializable Transaction where
       tGasLimit = fromInteger $ rlpDecode gl,
       to = rlp2Address toAddr,
       value = rlpDecode val,
-      tInit = rlpDecode i,
+      tInit = BC.pack $ rlpDecode i,
       v = fromInteger $ rlpDecode vVal,
       r = rlpDecode rVal,
       s = rlpDecode sVal
@@ -107,7 +108,7 @@ instance RLPSerializable Transaction where
         rlpEncode $ toInteger $ tGasLimit t,
         address2RLP $ to t,
         rlpEncode $ value t,
-        rlpEncode $ tInit t,
+        rlpEncode $ BC.unpack $ tInit t,
         rlpEncode $ toInteger $ v t,
         rlpEncode $ r t,
         rlpEncode $ s t
@@ -125,6 +126,6 @@ whoSignedThisTransaction t =
                 rlpEncode $ toInteger $ tGasLimit t,
                 address2RLP $ to t,
                 rlpEncode $ value t,
-                rlpEncode $ tInit t
+                rlpEncode $ BC.unpack $ tInit t
                 ]
   
