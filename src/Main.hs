@@ -140,7 +140,7 @@ handlePayload socket payload = do
       addBlocks $ sortBy (compare `on` number . blockData) blocks
       case blocks of
         [b] -> submitNextBlock socket b
-        _ -> return ()
+        _ -> requestNewBlocks socket
       
       --sendMessage socket $ Blocks [addNonceToBlock newBlock n]
     GetTransactions -> do
@@ -168,8 +168,24 @@ readAndOutput socket = do
       handlePayload socket $ B.pack pl
       handleAllPayloads rest
 
-main1::IO ()    
-main1 = connect "127.0.0.1" "30303" $ \(socket, _) -> do
+requestNewBlocks::Socket->IO ()
+requestNewBlocks socket = do
+  maybeBestBlockHash <- withBlockDB getBestBlockHash
+
+  bestBlockHash <-
+    case maybeBestBlockHash of
+      Nothing -> do
+        initializeBlockChain
+        _ <- initializeStateDB
+        return $ blockHash genesisBlock
+      Just x -> return x
+
+  putStrLn $ "Best block hash: " ++ format bestBlockHash
+
+  sendMessage socket $ GetChain [bestBlockHash] 0x40
+
+main::IO ()    
+main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
 --main1 = connect "192.168.0.2" "30303" $ \(socket, _) -> do
   putStrLn "Connected"
 
@@ -233,33 +249,11 @@ main1 = connect "127.0.0.1" "30303" $ \(socket, _) -> do
 
 
   --sendMessage socket $ Transactions [signedTx]
-  maybeBestBlockHash <- withBlockDB getBestBlockHash
 
-  bestBlockHash <-
-    case maybeBestBlockHash of
-      Nothing -> do
-        initializeBlockChain
-        _ <- initializeStateDB
-        return $ blockHash genesisBlock
-      Just x -> return x
-
-  putStrLn $ "Best block hash: " ++ format bestBlockHash
-
-  sendMessage socket $ GetChain [bestBlockHash] 0x40
+  requestNewBlocks socket
   --sendMessage socket $ GetChain [blockHash genesisBlock] 0x40
   putStrLn "Transaction has been sent"
 
   readAndOutput socket
-
--------------------------
-
   
 
---"/home/jim/.ethereum/state/"
---"/Users/hutong/Library/Application Support/Ethereum/state/"
---"/tmp/leveldbtest"
-
-
-main::IO ()    
-main = do
-  main1

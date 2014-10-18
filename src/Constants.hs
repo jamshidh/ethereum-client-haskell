@@ -32,3 +32,4 @@ detailsDBPath="/.ethereumH/details/"
 stateDBPath::String
 stateDBPath="/.ethereumH/state/"
 
+--"/Users/hutong/Library/Application Support/Ethereum/state/"
