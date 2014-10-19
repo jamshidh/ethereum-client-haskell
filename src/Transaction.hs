@@ -9,9 +9,13 @@ module Transaction (
 
 import qualified Crypto.Hash.SHA3 as C
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8 as BC
-import Data.ByteString.Base16
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Lazy.Char8 as BLC
+import Data.Binary
 import Data.ByteString.Internal
+import Data.Functor
 import Data.Word
 import Network.Haskoin.Internals hiding (Address)
 import Numeric
@@ -23,6 +27,7 @@ import Colors
 import Format
 import RLP
 import Util
+import VM
 
 --import Debug.Trace
 
@@ -34,7 +39,7 @@ data Transaction =
     tGasLimit::Int,
     to::Address,
     value::Integer,
-    tInit::B.ByteString,
+    tInit::EthCode,
     v::Word8,
     r::Integer,
     s::Integer
@@ -65,11 +70,11 @@ signTransaction privKey t = do
   return $ t {
     v = if yIsOdd then 0x1c else 0x1b,
     r =
-      case decode $ B.pack $ map c2w $ addLeadingZerosTo64 $ showHex (sigR signature) "" of
+      case B16.decode $ B.pack $ map c2w $ addLeadingZerosTo64 $ showHex (sigR signature) "" of
         (val, "") -> byteString2Integer val
         _ -> error ("error: sigR is: " ++ showHex (sigR signature) ""),
     s = 
-      case decode $ B.pack $ map c2w $ addLeadingZerosTo64 $ showHex (sigS signature) "" of
+      case B16.decode $ B.pack $ map c2w $ addLeadingZerosTo64 $ showHex (sigS signature) "" of
         (val, "") -> byteString2Integer val
         _ -> error ("error: sigS is: " ++ showHex (sigS signature) "")
     }
@@ -81,7 +86,7 @@ signTransaction privKey t = do
                 rlpEncode $ toInteger $ tGasLimit t,
                 address2RLP $ to t,
                 rlpEncode $ value t,
-                rlpEncode $ BC.unpack $ tInit t
+                rlpEncode $ BLC.unpack $ BL.concat $ map encode $ tInit t
                 ]
     theHash = fromInteger $ byteString2Integer $ C.hash 256 theData
 
@@ -94,7 +99,7 @@ instance RLPSerializable Transaction where
       tGasLimit = fromInteger $ rlpDecode gl,
       to = rlp2Address toAddr,
       value = rlpDecode val,
-      tInit = BC.pack $ rlpDecode i,
+      tInit = decodeEthCode $ BC.pack $ rlpDecode i,
       v = fromInteger $ rlpDecode vVal,
       r = rlpDecode rVal,
       s = rlpDecode sVal
@@ -108,7 +113,7 @@ instance RLPSerializable Transaction where
         rlpEncode $ toInteger $ tGasLimit t,
         address2RLP $ to t,
         rlpEncode $ value t,
-        rlpEncode $ BC.unpack $ tInit t,
+        rlpEncode $ BLC.unpack $ BL.concat $ map encode $ tInit t,
         rlpEncode $ toInteger $ v t,
         rlpEncode $ r t,
         rlpEncode $ s t
@@ -126,6 +131,6 @@ whoSignedThisTransaction t =
                 rlpEncode $ toInteger $ tGasLimit t,
                 address2RLP $ to t,
                 rlpEncode $ value t,
-                rlpEncode $ BC.unpack $ tInit t
+                rlpEncode $ BLC.unpack $ BL.concat $ map encode $ tInit t
                 ]
   

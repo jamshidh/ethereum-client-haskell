@@ -163,7 +163,7 @@ chargeFees sdb sr theCoinbase (t:rest) = do
 chargeForCodeSize::StateDB->SHAPtr->Address->[Transaction]->ResourceT IO SHAPtr
 chargeForCodeSize _ sr _ [] = return sr
 chargeForCodeSize sdb sr theCoinbase (t:rest) = do
-  let codeSize = B.length (tInit t)
+  let codeSize = BL.length (encode $ tInit t)
   let val = 5 * (gasPrice t) * fromIntegral codeSize
   sr2 <- addToBalance sdb sr theCoinbase val
   sr3 <- addToBalance sdb sr2 (whoSignedThisTransaction t) (-val)
