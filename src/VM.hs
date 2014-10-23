@@ -130,6 +130,14 @@ opCode2Op code =
     Just x -> x
     Nothing -> error $ "code is missing in code2OpMap: " ++ show code
 
+getOperationAt::B.ByteString->Int->(Operation, Int)
+getOperationAt rom p = (opCode2Op $ rom `B.index` p, p)
+
+showCode::B.ByteString->String
+showCode rom | B.null rom = ""
+showCode rom = show op ++ "\n" ++ showCode (B.drop nextP rom)
+    where
+      (op, nextP) = getOperationAt rom 0
 
 instance Binary Operation where
   get = do

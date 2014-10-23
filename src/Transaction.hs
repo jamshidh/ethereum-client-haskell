@@ -39,7 +39,7 @@ data Transaction =
     tGasLimit::Int,
     to::Address,
     value::Integer,
-    tInit::EthCode,
+    tInit::B.ByteString,
     v::Word8,
     r::Integer,
     s::Integer
@@ -55,7 +55,7 @@ instance Format Transaction where
       "tGasLimit: " ++ show (tGasLimit x) ++ "\n" ++
       "to: " ++ format (to x) ++ "\n" ++
       "value: " ++ show (value x) ++ "\n" ++
-      "tInit: " ++ show (tInit x) ++ "\n" ++
+      "tInit: " ++ showCode (tInit x) ++ "\n" ++
       "v: " ++ show (v x) ++ "\n" ++
       "r: " ++ show (r x) ++ "\n" ++
       "s: " ++ show (s x) ++ "\n")
@@ -86,7 +86,7 @@ signTransaction privKey t = do
                 rlpEncode $ toInteger $ tGasLimit t,
                 address2RLP $ to t,
                 rlpEncode $ value t,
-                rlpEncode $ BLC.unpack $ BL.concat $ map encode $ tInit t
+                rlpEncode $ BC.unpack $ tInit t
                 ]
     theHash = fromInteger $ byteString2Integer $ C.hash 256 theData
 
@@ -99,7 +99,7 @@ instance RLPSerializable Transaction where
       tGasLimit = fromInteger $ rlpDecode gl,
       to = rlp2Address toAddr,
       value = rlpDecode val,
-      tInit = decodeEthCode $ BC.pack $ rlpDecode i,
+      tInit = BC.pack $ rlpDecode i,
       v = fromInteger $ rlpDecode vVal,
       r = rlpDecode rVal,
       s = rlpDecode sVal
@@ -113,7 +113,7 @@ instance RLPSerializable Transaction where
         rlpEncode $ toInteger $ tGasLimit t,
         address2RLP $ to t,
         rlpEncode $ value t,
-        rlpEncode $ BLC.unpack $ BL.concat $ map encode $ tInit t,
+        rlpEncode $ BC.unpack $ tInit t,
         rlpEncode $ toInteger $ v t,
         rlpEncode $ r t,
         rlpEncode $ s t
@@ -131,6 +131,6 @@ whoSignedThisTransaction t =
                 rlpEncode $ toInteger $ tGasLimit t,
                 address2RLP $ to t,
                 rlpEncode $ value t,
-                rlpEncode $ BLC.unpack $ BL.concat $ map encode $ tInit t
+                rlpEncode $ BC.unpack $ tInit t
                 ]
   
