@@ -38,6 +38,7 @@ import RLP
 import SHA
 import Transaction
 import TransactionReceipt
+import Util
 import VM
 
 --import Debug.Trace
@@ -144,6 +145,16 @@ addBlocks blocks = runResourceT $ do
   sdb <- DB.open (homeDir ++ stateDBPath) options
   forM_ blocks (addBlock bdb ddb sdb)
 
+getNewAddress::Transaction->Address
+getNewAddress t =
+  --TODO- fix bug....  Leading zeros in address might not work, because the 
+  let SHA theHash = hash $ rlpSerialize $ RLPArray [rlpEncode $ whoSignedThisTransaction t, rlpEncode $ tNonce t]
+  in Address $ fromIntegral $ byteString2Integer $ B.pack $ drop 12 $ integer2Bytes $ fromIntegral $ theHash
+
+showNewAccount::Transaction->IO ()
+showNewAccount t = do
+  putStrLn $ format $ getNewAddress t
+
 addBlock::BlockDB->DetailsDB->StateDB->Block->ResourceT IO ()
 addBlock bdb ddb sdb b = do
   parentBlock <- fromMaybe (error ("Missing parent block in addBlock: " ++ format (parentHash $ blockData b))) <$>
@@ -160,6 +171,8 @@ addBlock bdb ddb sdb b = do
   newStateRoot5 <- runAllCode sdb newStateRoot4 (coinbase $ blockData b) $ theTransaction <$> receiptTransactions b
 
   liftIO $ putStrLn $ "newStateRoot5: " ++ format newStateRoot5
+
+  liftIO $ sequence $ showNewAccount <$> theTransaction <$> receiptTransactions b
 
   valid <- checkValidity bdb sdb b
   case valid of

@@ -56,6 +56,10 @@ pubKey2Address (PubKey point) =
         _ -> error "getY failed in prvKey2Address"
 
 
+instance RLPSerializable Address where
+  rlpEncode = address2RLP
+  rlpDecode = rlp2Address
+
 address2RLP::Address->RLPObject
 address2RLP (Address a) = RLPString $ BLC.unpack $ encode a
 
