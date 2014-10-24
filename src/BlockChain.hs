@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
-{-# OPTIONS_GHC -Wall #-}
 
 module BlockChain (
   initializeBlockChain,
@@ -116,25 +115,26 @@ checkValidity bdb sdb b = do
 
 
 addVars::StateDB->SHAPtr->M.Map String String->SHAPtr
-addVars sdb p vars = p
+--addVars sdb p vars = p
+addVars _ p _ = p
 
 chargeForCodeRun::StateDB->SHAPtr->Address->Address->Integer->ResourceT IO SHAPtr
-chargeForCodeRun sdb p a coinbase val = do
+chargeForCodeRun sdb p a theCoinbase val = do
   p2 <- addToBalance sdb p a (-val)
-  addToBalance sdb p2 coinbase val
+  addToBalance sdb p2 theCoinbase val
 
 runCodeForTransaction::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPtr
-runCodeForTransaction sdb p coinbase t = do
+runCodeForTransaction sdb p theCoinbase t = do
   let vmState = runCode (tInit t) startingState
   let p2 = addVars sdb p (vars vmState)
   liftIO $ putStrLn $ "gasUsed: " ++ show (vmGasUsed vmState)
-  chargeForCodeRun sdb p2 (whoSignedThisTransaction t) coinbase (vmGasUsed vmState * gasPrice t)
+  chargeForCodeRun sdb p2 (whoSignedThisTransaction t) theCoinbase (vmGasUsed vmState * gasPrice t)
                                       
 runAllCode::StateDB->SHAPtr->Address->[Transaction]->ResourceT IO SHAPtr
 runAllCode _ p _ [] = return p
-runAllCode sdb p coinbase (t:rest) = do
-  nextP <- runCodeForTransaction sdb p coinbase t
-  runAllCode sdb nextP coinbase rest
+runAllCode sdb p theCoinbase (t:rest) = do
+  nextP <- runCodeForTransaction sdb p theCoinbase t
+  runAllCode sdb nextP theCoinbase rest
  
 
 addBlocks::[Block]->IO ()
@@ -172,7 +172,7 @@ addBlock bdb ddb sdb b = do
 
   liftIO $ putStrLn $ "newStateRoot5: " ++ format newStateRoot5
 
-  liftIO $ sequence $ showNewAccount <$> theTransaction <$> receiptTransactions b
+  liftIO $ sequence_ $ showNewAccount <$> theTransaction <$> receiptTransactions b
 
   valid <- checkValidity bdb sdb b
   case valid of

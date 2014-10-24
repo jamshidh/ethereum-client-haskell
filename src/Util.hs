@@ -18,7 +18,7 @@ byteString2Integer x = byteString2Integer' $ B.unpack x
   where
     byteString2Integer'::[Word8]->Integer
     byteString2Integer' [] = 0
-    byteString2Integer' (x:rest) = fromIntegral x `shift` (8 * length rest) + byteString2Integer' rest
+    byteString2Integer' (byte:rest) = fromIntegral byte `shift` (8 * length rest) + byteString2Integer' rest
 
 integer2Bytes::Integer->[Word8]
 integer2Bytes 0 = []

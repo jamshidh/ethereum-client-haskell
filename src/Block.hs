@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings, ForeignFunctionInterface #-}
-{-# OPTIONS_GHC -Wall #-}
 
 module Block (
   BlockData(..),

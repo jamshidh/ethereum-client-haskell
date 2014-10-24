@@ -1,23 +1,10 @@
------------------------------------------------------------------------------
---
--- Module      :  Colors
--- Copyright   :
--- License     :  AllRightsReserved
---
--- Maintainer  :
--- Stability   :
--- Portability :
---
--- |
---
------------------------------------------------------------------------------
+{-# OPTIONS_GHC  -fno-warn-missing-signatures -fno-warn-type-defaults #-}
 
 module Colors (
     red, green, yellow, blue,
     magenta, cyan, white2, white, black,
     bright, dim, underline, blink, Colors.reverse, hidden
 ) where
-
 
 
 bright string = "\ESC[1m" ++ string ++ "\ESC[0m"

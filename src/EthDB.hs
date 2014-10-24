@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_GHC -Wall #-}
 
 module EthDB (
   showAllKeyVal,
@@ -145,10 +144,12 @@ getNewNodeDataFromPut db key val (FullNodeData options nodeValue) = do
 getNewNodeDataFromPut _ key1 val (ShortcutNodeData key2 (Right _)) | key1 == key2 =
   return $ ShortcutNodeData key1 $ Right val
 
-getNewNodeDataFromPut _ key1 val (ShortcutNodeData key2 (Left _)) | key1 == key2 =
+--getNewNodeDataFromPut _ key1 val (ShortcutNodeData key2 (Left _)) | key1 == key2 =
+getNewNodeDataFromPut _ key1 _ (ShortcutNodeData key2 (Left _)) | key1 == key2 =
   error "getNewNodeDataFromPut not defined for shortcutnodedata with ptr"
 
-getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | N.null key1 = do
+--getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | N.null key1 = do
+getNewNodeDataFromPut _ key1 _ (ShortcutNodeData _ _) | N.null key1 = do
   undefined
   {-
   node1 <- putNodeData db $ ShortcutNodeData (N.drop (N.length key1) key2) val2

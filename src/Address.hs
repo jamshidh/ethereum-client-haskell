@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -Wall #-}
 
 module Address (
   Address(..),
@@ -10,6 +9,7 @@ import Crypto.Hash.SHA3
 import Data.Binary
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as BLC
+import Data.Maybe
 import Network.Haskoin.Crypto hiding (Address)
 import Network.Haskoin.Internals hiding (Address)
 import Numeric
@@ -30,28 +30,17 @@ prvKey2Address prvKey =
   --B16.encode $ hash 256 $ BL.toStrict $ encode x `BL.append` encode y
   where
     PubKey point = derivePubKey prvKey
-    x =
-      case getX point of
-        Just val -> val
-        _ -> error "getX failed in prvKey2Address"
-    y =
-      case getY point of
-        Just val -> val
-        _ -> error "getY failed in prvKey2Address"
+    x = fromMaybe (error "getX failed in prvKey2Address") $ getX point
+    y = fromMaybe (error "getY failed in prvKey2Address") $ getY point
 
 pubKey2Address::PubKey->Address
 pubKey2Address (PubKey point) =
   Address $ fromInteger $ byteString2Integer $ hash 256 $ BL.toStrict $ encode x `BL.append` encode y
   --B16.encode $ hash 256 $ BL.toStrict $ encode x `BL.append` encode y
   where
-    x =
-      case getX point of
-        Just val -> val
-        _ -> error "getX failed in prvKey2Address"
-    y =
-      case getY point of
-        Just val -> val
-        _ -> error "getY failed in prvKey2Address"
+    x = fromMaybe (error "getX failed in prvKey2Address") $ getX point
+    y = fromMaybe (error "getY failed in prvKey2Address") $ getY point
+pubKey2Address (PubKeyU _) = error $ "Missing case in pubKey2Address: PubKeyU"
 
 
 instance RLPSerializable Address where

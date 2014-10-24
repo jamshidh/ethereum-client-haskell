@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC  -fno-warn-missing-signatures -fno-warn-type-defaults #-}
 
 module Constants where
 

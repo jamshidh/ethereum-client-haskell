@@ -28,7 +28,7 @@ data AddressState = AddressState { addressStateNonce::Word256, balance::Word256,
 instance Format AddressState where
   format a = blue "AddressState" ++
              tab("\nnonce: " ++ showHex (addressStateNonce a) "" ++
-                 "\nbalance: " ++ show (fromIntegral $ balance a) ++
+                 "\nbalance: " ++ show (toInteger $ balance a) ++
                  "\ncontractRoot: " ++ showHex (contractRoot a) "" ++
                  "\ncodeHash: " ++ format (codeHash a))
   
@@ -42,6 +42,7 @@ instance RLPSerializable AddressState where
       contractRoot=fromInteger $ rlpDecode cr,
       codeHash=rlpDecode ch
       } 
+  rlpDecode x = error $ "Missing case in rlpDecode for AddressState: " ++ format x
 
 addressAsNibbleString::Address->N.NibbleString
 addressAsNibbleString (Address s) = N.EvenNibbleString $ B.pack $ integer2Bytes $ fromIntegral s
@@ -52,7 +53,7 @@ getAddressState db p address = do
   case states of
     [] -> return Nothing
     [state] -> return $ Just $ rlpDecode $ rlpDeserialize $ snd state
-    x -> error ("getAddressStates found multiple states for: " ++ format address)
+    _ -> error ("getAddressStates found multiple states for: " ++ format address)
   
 
 getAllAddressStates::DB->SHAPtr->ResourceT IO [(N.NibbleString, AddressState)]

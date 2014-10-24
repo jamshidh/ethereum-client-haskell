@@ -34,6 +34,8 @@ instance RLPSerializable TransactionReceipt where
       postTransactionState = rlpDecode pts,
       cumulativeGasUsed = rlpDecode gasUsed
       }
+  rlpDecode x = error $ "Missing case in rlpDecode for TransactionReceipt: " ++ format x
+  
   rlpEncode TransactionReceipt{
     theTransaction=t,
     postTransactionState=p,

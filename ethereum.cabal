@@ -27,6 +27,7 @@ executable ethereumH
     main-is: Main.hs
     C-sources: fastNonceFinder/nonceFinder.c
     --ghc-options: -threaded
+    ghc-options: -Wall
     buildable: True
     hs-source-dirs: src
     other-modules: RLP Wire

@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# OPTIONS_GHC -Wall #-}
+
 module NibbleString (
   Nibble,
   NibbleString(..),
@@ -27,7 +27,6 @@ import Data.String
 import Data.Word
 import Numeric
 
-import ByteStringTools()
 import Colors
 import Format
 

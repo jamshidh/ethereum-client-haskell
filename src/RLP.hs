@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# OPTIONS_GHC -Wall #-}
 
 module RLP (
   RLPObject(..),
@@ -125,3 +124,9 @@ instance RLPSerializable String where
   rlpDecode (RLPString s) = s
   rlpDecode (RLPScalar n) = [w2c $ fromIntegral n]
   rlpDecode (RLPArray _) = error "Malformed RLP in call to rlpDecode for String: RLPObject is an array."
+
+instance RLPSerializable B.ByteString where
+    rlpEncode s = RLPString $ BC.unpack s
+      
+    rlpDecode (RLPString s) = BC.pack s
+    rlpDecode x = error ("rlpDecode for ByteString not defined for: " ++ show x)
