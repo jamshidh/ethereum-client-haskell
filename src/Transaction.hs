@@ -55,7 +55,7 @@ instance Format Transaction where
       "tGasLimit: " ++ show (tGasLimit x) ++ "\n" ++
       "to: " ++ format (to x) ++ "\n" ++
       "value: " ++ show (value x) ++ "\n" ++
-      "tInit: " ++ showCode (tInit x) ++ "\n" ++
+      "tInit: " ++ tab ("\n" ++ showCode (tInit x)) ++ "\n" ++
       "v: " ++ show (v x) ++ "\n" ++
       "r: " ++ show (r x) ++ "\n" ++
       "s: " ++ show (s x) ++ "\n")
