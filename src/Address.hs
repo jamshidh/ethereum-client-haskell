@@ -3,9 +3,7 @@
 module Address (
   Address(..),
   prvKey2Address,
-  pubKey2Address,
-  rlp2Address,
-  address2RLP
+  pubKey2Address
   ) where
 
 import Crypto.Hash.SHA3
@@ -57,12 +55,7 @@ pubKey2Address (PubKey point) =
 
 
 instance RLPSerializable Address where
-  rlpEncode = address2RLP
-  rlpDecode = rlp2Address
+  rlpEncode (Address a) = RLPString $ BLC.unpack $ encode a
+  rlpDecode (RLPString s) = Address $ decode $ BLC.pack s
+  rlpDecode x = error ("Malformed rlp object sent to rlp2Address: " ++ show x)
 
-address2RLP::Address->RLPObject
-address2RLP (Address a) = RLPString $ BLC.unpack $ encode a
-
-rlp2Address::RLPObject->Address
-rlp2Address (RLPString s) = Address $ decode $ BLC.pack s
-rlp2Address x = error ("Malformed rlp object sent to rlp2Address: " ++ show x)

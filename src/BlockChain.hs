@@ -147,7 +147,7 @@ addBlocks blocks = runResourceT $ do
 
 getNewAddress::Transaction->Address
 getNewAddress t =
-  --TODO- fix bug....  Leading zeros in address might not work, because the 
+  --TODO- fix bug....  Leading zeros in address might not work, because the drop 12 may cut off two much if the zeros aren't present.
   let SHA theHash = hash $ rlpSerialize $ RLPArray [rlpEncode $ whoSignedThisTransaction t, rlpEncode $ tNonce t]
   in Address $ fromIntegral $ byteString2Integer $ B.pack $ drop 12 $ integer2Bytes $ fromIntegral $ theHash
 

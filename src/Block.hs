@@ -91,7 +91,7 @@ instance RLPSerializable BlockData where
     BlockData {
       parentHash = rlpDecode v1,
       unclesHash = rlpDecode v2,
-      coinbase = rlp2Address v3,
+      coinbase = rlpDecode v3,
       stateRoot = rlpDecode v4,
       transactionsTrie = rlpDecode v5,
       difficulty = rlpDecode v6,
@@ -111,7 +111,7 @@ instance RLPSerializable BlockData where
     RLPArray [
       rlpEncode $ parentHash bd,
       rlpEncode $ unclesHash bd,
-      address2RLP $ coinbase bd,
+      rlpEncode $ coinbase bd,
       rlpEncode $ stateRoot bd,
       rlpEncode $ transactionsTrie bd,
       rlpEncode $ difficulty bd,
@@ -175,7 +175,7 @@ noncelessBlockData2RLP bd =
   RLPArray [
       rlpEncode $ parentHash bd,
       rlpEncode $ unclesHash bd,
-      address2RLP $ coinbase bd,
+      rlpEncode $ coinbase bd,
       rlpEncode $ stateRoot bd,
       rlpEncode $ transactionsTrie bd,
       rlpEncode $ difficulty bd,

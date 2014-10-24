@@ -11,12 +11,8 @@ import qualified Crypto.Hash.SHA3 as C
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8 as BC
-import qualified Data.ByteString.Lazy as BL
-import qualified Data.ByteString.Lazy.Char8 as BLC
 import Data.Binary
 import Data.ByteString.Internal
-import Data.Functor
-import Data.Word
 import Network.Haskoin.Internals hiding (Address)
 import Numeric
 
@@ -84,7 +80,7 @@ signTransaction privKey t = do
                 rlpEncode $ tNonce t,
                 rlpEncode $ gasPrice t,
                 rlpEncode $ toInteger $ tGasLimit t,
-                address2RLP $ to t,
+                rlpEncode $ to t,
                 rlpEncode $ value t,
                 rlpEncode $ BC.unpack $ tInit t
                 ]
@@ -97,7 +93,7 @@ instance RLPSerializable Transaction where
       tNonce = rlpDecode n,
       gasPrice = rlpDecode gp,
       tGasLimit = fromInteger $ rlpDecode gl,
-      to = rlp2Address toAddr,
+      to = rlpDecode toAddr,
       value = rlpDecode val,
       tInit = BC.pack $ rlpDecode i,
       v = fromInteger $ rlpDecode vVal,
@@ -111,7 +107,7 @@ instance RLPSerializable Transaction where
         rlpEncode $ tNonce t,
         rlpEncode $ gasPrice t,
         rlpEncode $ toInteger $ tGasLimit t,
-        address2RLP $ to t,
+        rlpEncode $ to t,
         rlpEncode $ value t,
         rlpEncode $ BC.unpack $ tInit t,
         rlpEncode $ toInteger $ v t,
@@ -124,13 +120,13 @@ whoSignedThisTransaction t =
   pubKey2Address (getPubKeyFromSignature xSignature (fromInteger $ byteString2Integer $ C.hash 256 (theData t)))
       where
         xSignature = ExtendedSignature (Signature (fromInteger $ r t) (fromInteger $ s t)) (0x1c == v t)
-        theData t = rlpSerialize $
+        theData t' = rlpSerialize $
               RLPArray [
-                rlpEncode $ tNonce t,
-                rlpEncode $ gasPrice t,
-                rlpEncode $ toInteger $ tGasLimit t,
-                address2RLP $ to t,
-                rlpEncode $ value t,
-                rlpEncode $ BC.unpack $ tInit t
+                rlpEncode $ tNonce t',
+                rlpEncode $ gasPrice t',
+                rlpEncode $ toInteger $ tGasLimit t',
+                rlpEncode $ to t',
+                rlpEncode $ value t',
+                rlpEncode $ BC.unpack $ tInit t'
                 ]
   
