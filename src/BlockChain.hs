@@ -124,9 +124,10 @@ chargeForCodeRun sdb p a coinbase val = do
 
 runCodeForTransaction::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPtr
 runCodeForTransaction sdb p coinbase t = do
-  let vmState = runCode (tInit t) 0
+  let vmState = runCode (tInit t) startingState
   let p2 = addVars sdb p (vars vmState)
-  chargeForCodeRun sdb p2 (whoSignedThisTransaction t) coinbase (vmGasUsed vmState)
+  liftIO $ putStrLn $ "gasUsed: " ++ show (vmGasUsed vmState)
+  chargeForCodeRun sdb p2 (whoSignedThisTransaction t) coinbase (vmGasUsed vmState * gasPrice t)
                                       
 runAllCode::StateDB->SHAPtr->Address->[Transaction]->ResourceT IO SHAPtr
 runAllCode _ p _ [] = return p
@@ -185,7 +186,7 @@ chargeFees sdb sr theCoinbase (t:rest) = do
 chargeForCodeSize::StateDB->SHAPtr->Address->[Transaction]->ResourceT IO SHAPtr
 chargeForCodeSize _ sr _ [] = return sr
 chargeForCodeSize sdb sr theCoinbase (t:rest) = do
-  let codeSize = BL.length (encode $ tInit t)
+  let codeSize = B.length $ tInit t
   let val = 5 * (gasPrice t) * fromIntegral codeSize
   sr2 <- addToBalance sdb sr theCoinbase val
   sr3 <- addToBalance sdb sr2 (whoSignedThisTransaction t) (-val)

@@ -12,7 +12,7 @@ import qualified Data.Map as M
 import Debug.Trace
 
 data Operation = STOP | ADD | MUL | SUB | DIV | SDIV | MOD | SMOD | EXP | NEG | LT | GT | SLT | SGT | EQ | NOT | AND | OR | XOR | BYTE | SHA3 | ADDRESS | BALANCE | ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | PREVHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | POP | DUP | SWAP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | JUMP | JUMPI | PC | MSIZE | GAS
-               | PUSH1 Int | PUSH2 | PUSH3 | PUSH4 | PUSH5 | PUSH6 | PUSH7 | PUSH8 | PUSH9 | PUSH10 | PUSH11 | PUSH12 | PUSH13 | PUSH14 | PUSH15 | PUSH16 | PUSH17 | PUSH18 | PUSH19 | PUSH20 | PUSH21 | PUSH22 | PUSH23 | PUSH24 | PUSH25 | PUSH26 | PUSH27 | PUSH28 | PUSH29 | PUSH30 | PUSH31 | PUSH32
+               | PUSH1 Word8 | PUSH2 | PUSH3 | PUSH4 | PUSH5 | PUSH6 | PUSH7 | PUSH8 | PUSH9 | PUSH10 | PUSH11 | PUSH12 | PUSH13 | PUSH14 | PUSH15 | PUSH16 | PUSH17 | PUSH18 | PUSH19 | PUSH20 | PUSH21 | PUSH22 | PUSH23 | PUSH24 | PUSH25 | PUSH26 | PUSH27 | PUSH28 | PUSH29 | PUSH30 | PUSH31 | PUSH32
                | CREATE | CALL | RETURN | SUICIDE deriving (Show, Eq, Ord)
 
 data OPData = OPData Word8 ([Word8]->Operation, Int) Int Int String
@@ -142,17 +142,20 @@ showCode rom = show op ++ "\n" ++ showCode (B.drop nextP rom)
     where
       (op, nextP) = getOperationAt rom 0
 
-data VMState = VMState { pc::Int, done::Bool, vmGasUsed::Integer, vars::M.Map String String }
+data VMState = VMState { pc::Int, done::Bool, vmGasUsed::Integer, vars::M.Map String String, stack::[Word8], memory::Int }
 
-startingState = VMState { pc = 0, done=False, vmGasUsed=0 }
+startingState = VMState { pc = 0, done=False, vmGasUsed=0, vars=M.empty, stack=[], memory=undefined }
 
 runOperation::Operation->VMState->VMState
+runOperation (PUSH1 x) state = state { vmGasUsed = vmGasUsed state + 1, stack=x:stack state, pc = pc state + 2 }
+runOperation MSTORE state = state { vmGasUsed = vmGasUsed state + 2, stack=tail $ stack state, pc = pc state + 1, memory=undefined }
+runOperation RETURN state = state { vmGasUsed = vmGasUsed state + 1, done=True }
 runOperation x _ = error $ "Missing case in runOperation: " ++ show x
 
-runCode::B.ByteString->Int->VMState
-runCode rom p = let (op, len) = getOperationAt rom p
-                in
-                 case runOperation op startingState of
-                   state@VMState{done=True} -> state
-                   state -> runCode rom (pc state)
+runCode::B.ByteString->VMState->VMState
+runCode rom state = let (op, len) = getOperationAt rom (pc state)
+                    in
+                     case runOperation op state of
+                       state2@VMState{done=True} -> state2
+                       state2 -> runCode rom state2
                    
