@@ -142,7 +142,7 @@ showCode rom = show op ++ "\n" ++ showCode (B.drop nextP rom)
     where
       (op, nextP) = getOperationAt rom 0
 
-data VMState = VMState { pc::Int, done::Bool, vmGasUsed::Int, vars::M.Map String String }
+data VMState = VMState { pc::Int, done::Bool, vmGasUsed::Integer, vars::M.Map String String }
 
 startingState = VMState { pc = 0, done=False, vmGasUsed=0 }
 

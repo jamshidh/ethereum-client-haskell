@@ -117,19 +117,22 @@ checkValidity bdb sdb b = do
 addVars::StateDB->SHAPtr->M.Map String String->SHAPtr
 addVars sdb p vars = p
 
-chargeForCodeRun::StateDB->SHAPtr->Int->SHAPtr
-chargeForCodeRun sdb p val = p
+chargeForCodeRun::StateDB->SHAPtr->Address->Address->Integer->ResourceT IO SHAPtr
+chargeForCodeRun sdb p a coinbase val = do
+  p2 <- addToBalance sdb p a (-val)
+  addToBalance sdb p2 coinbase val
 
-runCodeForTransaction::StateDB->SHAPtr->B.ByteString->SHAPtr
-runCodeForTransaction sdb p rom = let vmState = runCode rom 0
-                                      p2 = addVars sdb p (vars vmState)
-                                  in chargeForCodeRun sdb p2 (vmGasUsed vmState)
+runCodeForTransaction::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPtr
+runCodeForTransaction sdb p coinbase t = do
+  let vmState = runCode (tInit t) 0
+  let p2 = addVars sdb p (vars vmState)
+  chargeForCodeRun sdb p2 (whoSignedThisTransaction t) coinbase (vmGasUsed vmState)
                                       
-runAllCode::StateDB->SHAPtr->[Transaction]->SHAPtr
-runAllCode _ p [] = p
-runAllCode sdb p (t:rest) =
-  let nextP = runCodeForTransaction sdb p (tInit t)
-      in runAllCode sdb nextP rest
+runAllCode::StateDB->SHAPtr->Address->[Transaction]->ResourceT IO SHAPtr
+runAllCode _ p _ [] = return p
+runAllCode sdb p coinbase (t:rest) = do
+  nextP <- runCodeForTransaction sdb p coinbase t
+  runAllCode sdb nextP coinbase rest
  
 
 addBlocks::[Block]->IO ()
@@ -153,7 +156,7 @@ addBlock bdb ddb sdb b = do
 
   newStateRoot4 <- chargeForCodeSize sdb newStateRoot3 (coinbase $ blockData b) $ theTransaction <$> receiptTransactions b
 
-  let newStateRoot5 = runAllCode sdb newStateRoot4 $ theTransaction <$> receiptTransactions b
+  newStateRoot5 <- runAllCode sdb newStateRoot4 (coinbase $ blockData b) $ theTransaction <$> receiptTransactions b
 
   liftIO $ putStrLn $ "newStateRoot5: " ++ format newStateRoot5
 
