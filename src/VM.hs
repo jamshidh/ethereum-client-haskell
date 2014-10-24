@@ -142,3 +142,17 @@ showCode rom = show op ++ "\n" ++ showCode (B.drop nextP rom)
     where
       (op, nextP) = getOperationAt rom 0
 
+data VMState = VMState { pc::Int, done::Bool, vmGasUsed::Int, vars::M.Map String String }
+
+startingState = VMState { pc = 0, done=False, vmGasUsed=0 }
+
+runOperation::Operation->VMState->VMState
+runOperation x _ = error $ "Missing case in runOperation: " ++ show x
+
+runCode::B.ByteString->Int->VMState
+runCode rom p = let (op, len) = getOperationAt rom p
+                in
+                 case runOperation op startingState of
+                   state@VMState{done=True} -> state
+                   state -> runCode rom (pc state)
+                   

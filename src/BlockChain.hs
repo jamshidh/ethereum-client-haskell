@@ -20,6 +20,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import Data.Functor
+import qualified Data.Map as M
 import Data.Maybe
 import Data.Time
 import Data.Time.Clock.POSIX
@@ -37,6 +38,7 @@ import RLP
 import SHA
 import Transaction
 import TransactionReceipt
+import VM
 
 --import Debug.Trace
 
@@ -112,7 +114,22 @@ checkValidity bdb sdb b = do
 -}
 
 
+addVars::StateDB->SHAPtr->M.Map String String->SHAPtr
+addVars sdb p vars = p
 
+chargeForCodeRun::StateDB->SHAPtr->Int->SHAPtr
+chargeForCodeRun sdb p val = p
+
+runCodeForTransaction::StateDB->SHAPtr->B.ByteString->SHAPtr
+runCodeForTransaction sdb p rom = let vmState = runCode rom 0
+                                      p2 = addVars sdb p (vars vmState)
+                                  in chargeForCodeRun sdb p2 (vmGasUsed vmState)
+                                      
+runAllCode::StateDB->SHAPtr->[Transaction]->SHAPtr
+runAllCode _ p [] = p
+runAllCode sdb p (t:rest) =
+  let nextP = runCodeForTransaction sdb p (tInit t)
+      in runAllCode sdb nextP rest
  
 
 addBlocks::[Block]->IO ()
@@ -136,7 +153,9 @@ addBlock bdb ddb sdb b = do
 
   newStateRoot4 <- chargeForCodeSize sdb newStateRoot3 (coinbase $ blockData b) $ theTransaction <$> receiptTransactions b
 
-  liftIO $ putStrLn $ "newStateRoot4: " ++ format newStateRoot4
+  let newStateRoot5 = runAllCode sdb newStateRoot4 $ theTransaction <$> receiptTransactions b
+
+  liftIO $ putStrLn $ "newStateRoot5: " ++ format newStateRoot5
 
   valid <- checkValidity bdb sdb b
   case valid of
