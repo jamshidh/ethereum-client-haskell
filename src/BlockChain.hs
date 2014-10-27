@@ -13,7 +13,6 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import qualified Crypto.Hash.SHA3 as C
-import Data.Array.IO
 import Data.Binary
 import Data.Bits
 import qualified Data.ByteString as B
@@ -38,7 +37,6 @@ import RLP
 import SHA
 import Transaction
 import TransactionReceipt
-import Util
 import VM
 
 --import Debug.Trace
@@ -150,13 +148,12 @@ addBlocks blocks = runResourceT $ do
 
 getNewAddress::Transaction->Address
 getNewAddress t =
-  --TODO- fix bug....  Leading zeros in address might not work, because the drop 12 may cut off two much if the zeros aren't present.
-  let SHA theHash = hash $ rlpSerialize $ RLPArray [rlpEncode $ whoSignedThisTransaction t, rlpEncode $ tNonce t]
-  in Address $ fromIntegral $ byteString2Integer $ B.pack $ drop 12 $ integer2Bytes $ fromIntegral $ theHash
+  let theHash = hash $ rlpSerialize $ RLPArray [rlpEncode $ whoSignedThisTransaction t, rlpEncode $ tNonce t]
+  in decode $ BL.drop 12 $ encode $ theHash
 
 showNewAccount::Transaction->IO ()
 showNewAccount t = do
-  putStrLn $ format $ getNewAddress t
+  putStrLn $ "New account: " ++ format (getNewAddress t)
 
 addBlock::BlockDB->DetailsDB->StateDB->Block->ResourceT IO ()
 addBlock bdb ddb sdb b = do

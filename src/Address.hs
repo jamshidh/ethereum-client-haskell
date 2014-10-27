@@ -7,6 +7,7 @@ module Address (
 
 import Crypto.Hash.SHA3
 import Data.Binary
+import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as BLC
 import Data.Maybe
@@ -23,6 +24,14 @@ newtype Address = Address Word160 deriving (Show, Eq)
 
 instance Format Address where
   format (Address x) = yellow $ padZeros 40 $ showHex x ""
+
+instance Binary Address where
+  put (Address x) = sequence_ $ fmap put $ word160ToBytes $ fromIntegral x
+  get = do
+    bytes <- sequence $ replicate 20 get
+    let byteString = B.pack bytes
+    return (Address $ fromInteger $ byteString2Integer byteString)
+
 
 prvKey2Address::PrvKey->Address
 prvKey2Address prvKey =

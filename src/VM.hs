@@ -5,13 +5,13 @@ import Prelude hiding (LT, GT, EQ)
 
 import Data.Array.IO
 import Data.Binary
-import Data.Bits
 import qualified Data.ByteString as B
 import Data.Functor
 import qualified Data.Map as M
 import Network.Haskoin.Crypto (Word256)
 
 import Format
+import Util
 
 --import Debug.Trace
 
@@ -161,11 +161,6 @@ startingState = do
   m <- newArray (0, 100) 0
   return VMState { pc = 0, done=False, vmGasUsed=0, vars=M.empty, stack=[], memory=m }
 
-word256ToBytes::Word256->[Word8]
-word256ToBytes x =
-     fromIntegral <$> (\byte -> (x `shiftR` (byte*8)) .&. 0xFF) <$> [31,30..0]
-
-    
 runOperation::Operation->VMState->IO VMState
 runOperation (PUSH1 x) state =
   return $
