@@ -4,6 +4,7 @@ module ModifyStateDB (
                       initializeBlankStateDB,
                       initializeStateDB,
                       addToBalance,
+                      addNewAccount,
                       addNonce
 ) where
 
@@ -78,6 +79,12 @@ addToBalance sdb stateRoot address val = do
   putAddressState sdb stateRoot address
     addressState{ balance = balance addressState + fromIntegral val }
   
+addNewAccount::StateDB->SHAPtr->Address->B.ByteString->ResourceT IO SHAPtr
+addNewAccount sdb stateRoot address code = do
+  let addressState = AddressState {addressStateNonce=0, balance=0, contractRoot=0, codeHash=hash code}
+  putAddressState sdb stateRoot address addressState
+
+
 addNonce::StateDB->SHAPtr->Address->ResourceT IO SHAPtr
 addNonce sdb stateRoot address = do
   addressState <- fromMaybe startingAddressState <$> getAddressState sdb stateRoot address

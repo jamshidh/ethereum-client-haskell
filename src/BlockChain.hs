@@ -126,10 +126,12 @@ runCodeForTransaction::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPt
 runCodeForTransaction sdb p theCoinbase t = do
   vmState <- liftIO $ runCodeFromStart (tInit t)
   result <- liftIO $ getReturnValue vmState
-  liftIO $ putStrLn $ format result
-  let p2 = addVars sdb p (vars vmState)
+  let newAddress = getNewAddress t
+  liftIO $ putStrLn $ format newAddress ++ ": " ++ format result
+  p2 <- addNewAccount sdb p newAddress result
+  let p3 = addVars sdb p2 (vars vmState)
   liftIO $ putStrLn $ "gasUsed: " ++ show (vmGasUsed vmState)
-  chargeForCodeRun sdb p2 (whoSignedThisTransaction t) theCoinbase (vmGasUsed vmState * gasPrice t)
+  chargeForCodeRun sdb p3 (whoSignedThisTransaction t) theCoinbase (vmGasUsed vmState * gasPrice t)
 
 runAllCode::StateDB->SHAPtr->Address->[Transaction]->ResourceT IO SHAPtr
 runAllCode _ p _ [] = return p
@@ -151,10 +153,6 @@ getNewAddress t =
   let theHash = hash $ rlpSerialize $ RLPArray [rlpEncode $ whoSignedThisTransaction t, rlpEncode $ tNonce t]
   in decode $ BL.drop 12 $ encode $ theHash
 
-showNewAccount::Transaction->IO ()
-showNewAccount t = do
-  putStrLn $ "New account: " ++ format (getNewAddress t)
-
 addBlock::BlockDB->DetailsDB->StateDB->Block->ResourceT IO ()
 addBlock bdb ddb sdb b = do
   parentBlock <- fromMaybe (error ("Missing parent block in addBlock: " ++ format (parentHash $ blockData b))) <$>
@@ -171,8 +169,6 @@ addBlock bdb ddb sdb b = do
   newStateRoot5 <- runAllCode sdb newStateRoot4 (coinbase $ blockData b) $ theTransaction <$> receiptTransactions b
 
   liftIO $ putStrLn $ "newStateRoot5: " ++ format newStateRoot5
-
-  liftIO $ sequence_ $ showNewAccount <$> theTransaction <$> receiptTransactions b
 
   valid <- checkValidity bdb sdb b
   case valid of
