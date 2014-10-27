@@ -171,7 +171,7 @@ runOperation (PUSH1 x) state =
   return $
   state { stack=fromIntegral x:stack state }
 runOperation MSTORE state@VMState{stack=(p:val:rest)} = do
-  memory <- sequence_ $ uncurry (writeArray (memory state)) <$> zip [fromIntegral p..] (word256ToBytes val)
+  sequence_ $ uncurry (writeArray (memory state)) <$> zip [fromIntegral p..] (word256ToBytes val)
   return $
     state { stack=rest }
 runOperation RETURN state =
@@ -193,7 +193,16 @@ runCode rom state = do
   case result of
     state2@VMState{done=True} -> return $ decreaseGas op $ movePC state2 len
     state2 -> runCode rom $ decreaseGas op $ movePC state2 len
-                   
+
+getReturnValue::VMState->IO B.ByteString
+getReturnValue state = do
+  --TODO- This needs better error handling other than to just crash if the stack isn't 2 items long
+  let [address, size] = stack state
+  vals <- sequence $ readArray (memory state) <$> fromIntegral <$> [address..address+size-1]
+  return $ B.pack vals
+  
+
+
 runCodeFromStart::B.ByteString->IO VMState
 runCodeFromStart rom = do
   s <- startingState
