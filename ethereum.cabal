@@ -48,6 +48,7 @@ executable stateDBClient
                  , resourcet
                  , data-default
                  , leveldb-haskell
+                 , array
                  , directory
     main-is: Main.hs
     buildable: True

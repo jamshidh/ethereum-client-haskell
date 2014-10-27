@@ -13,6 +13,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import qualified Crypto.Hash.SHA3 as C
+import Data.Array.IO
 import Data.Binary
 import Data.Bits
 import qualified Data.ByteString as B
@@ -125,7 +126,12 @@ chargeForCodeRun sdb p a theCoinbase val = do
 
 runCodeForTransaction::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPtr
 runCodeForTransaction sdb p theCoinbase t = do
-  let vmState = runCode (tInit t) startingState
+  vmState <- liftIO $ runCodeFromStart (tInit t)
+  liftIO $ putStrLn $ format vmState
+  let [address, size] = (stack vmState)
+  vals <- liftIO $ sequence $ readArray (memory vmState) <$> fromIntegral <$> [address..address+size-1]
+  --val <- liftIO $ readArray (memory vmState) 0
+  liftIO $ putStrLn $ show vals
   let p2 = addVars sdb p (vars vmState)
   liftIO $ putStrLn $ "gasUsed: " ++ show (vmGasUsed vmState)
   chargeForCodeRun sdb p2 (whoSignedThisTransaction t) theCoinbase (vmGasUsed vmState * gasPrice t)

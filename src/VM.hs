@@ -3,10 +3,15 @@ module VM where
 
 import Prelude hiding (LT, GT, EQ)
 
+import Data.Array.IO
 import Data.Binary
+import Data.Bits
 import qualified Data.ByteString as B
 import Data.Functor
 import qualified Data.Map as M
+import Network.Haskoin.Crypto (Word256)
+
+import Format
 
 --import Debug.Trace
 
@@ -142,24 +147,54 @@ showCode rom = show op ++ "\n" ++ showCode (B.drop nextP rom)
     where
       (op, nextP) = getOperationAt rom 0
 
-data VMState = VMState { pc::Int, done::Bool, vmGasUsed::Integer, vars::M.Map String String, stack::[Word8], memory::Int }
+data VMState = VMState { pc::Int, done::Bool, vmGasUsed::Integer, vars::M.Map String String, stack::[Word256], memory::IOArray Word32 Word8 }
 
-startingState::VMState
-startingState = VMState { pc = 0, done=False, vmGasUsed=0, vars=M.empty, stack=[], memory=undefined }
+instance Format VMState where
+  format state =
+    "pc: " ++ show (pc state) ++ "\n" ++
+    "done: " ++ show (done state) ++ "\n" ++
+    "gasUsed: " ++ show (vmGasUsed state) ++ "\n" ++
+    "stack: " ++ show (stack state) ++ "\n"
 
-runOperation::Operation->VMState->VMState
-runOperation (PUSH1 x) state = state { vmGasUsed = vmGasUsed state + 1, stack=x:stack state }
-runOperation MSTORE state = state { vmGasUsed = vmGasUsed state + 2, stack=tail $ stack state, memory=undefined }
-runOperation RETURN state = state { vmGasUsed = vmGasUsed state + 1, done=True }
+startingState::IO VMState
+startingState = do
+  m <- newArray (0, 100) 0
+  return VMState { pc = 0, done=False, vmGasUsed=0, vars=M.empty, stack=[], memory=m }
+
+word256ToBytes::Word256->[Word8]
+word256ToBytes x =
+     fromIntegral <$> (\byte -> (x `shiftR` (byte*8)) .&. 0xFF) <$> [31,30..0]
+
+    
+runOperation::Operation->VMState->IO VMState
+runOperation (PUSH1 x) state =
+  return $
+  state { stack=fromIntegral x:stack state }
+runOperation MSTORE state@VMState{stack=(p:val:rest)} = do
+  memory <- sequence_ $ uncurry (writeArray (memory state)) <$> zip [fromIntegral p..] (word256ToBytes val)
+  return $
+    state { stack=rest }
+runOperation RETURN state =
+  return $ state { done=True }
 runOperation x _ = error $ "Missing case in runOperation: " ++ show x
 
 movePC::VMState->Int->VMState
 movePC state l = state{ pc=pc state + l }
 
-runCode::B.ByteString->VMState->VMState
-runCode rom state = let (op, len) = getOperationAt rom (pc state)
-                    in
-                     case runOperation op state of
-                       state2@VMState{done=True} -> movePC state2 len
-                       state2 -> runCode rom $ movePC state2 len
+decreaseGas::Operation->VMState->VMState
+decreaseGas MSTORE state = state{ vmGasUsed = vmGasUsed state + 2 }
+decreaseGas _ state = state{ vmGasUsed = vmGasUsed state + 1 }
+
+
+runCode::B.ByteString->VMState->IO VMState
+runCode rom state = do
+  let (op, len) = getOperationAt rom (pc state)
+  result <- runOperation op state
+  case result of
+    state2@VMState{done=True} -> return $ decreaseGas op $ movePC state2 len
+    state2 -> runCode rom $ decreaseGas op $ movePC state2 len
                    
+runCodeFromStart::B.ByteString->IO VMState
+runCodeFromStart rom = do
+  s <- startingState
+  runCode rom s
