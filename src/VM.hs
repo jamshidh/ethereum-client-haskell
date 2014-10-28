@@ -5,6 +5,7 @@ import Prelude hiding (LT, GT, EQ)
 
 import Data.Array.IO
 import Data.Binary
+import Data.Bits
 import qualified Data.ByteString as B
 import Data.Functor
 import qualified Data.Map as M
@@ -147,7 +148,9 @@ showCode rom = show op ++ "\n" ++ showCode (B.drop nextP rom)
     where
       (op, nextP) = getOperationAt rom 0
 
-data VMState = VMState { pc::Int, done::Bool, vmGasUsed::Integer, vars::M.Map String String, stack::[Word256], memory::IOArray Word32 Word8 }
+data VMError = VMError String deriving (Show)
+
+data VMState = VMState { pc::Int, done::Bool, vmError::Maybe VMError, vmGasUsed::Integer, vars::M.Map String String, stack::[Word256], memory::IOArray Word32 Word8 }
 
 instance Format VMState where
   format state =
@@ -159,9 +162,12 @@ instance Format VMState where
 startingState::IO VMState
 startingState = do
   m <- newArray (0, 100) 0
-  return VMState { pc = 0, done=False, vmGasUsed=0, vars=M.empty, stack=[], memory=m }
+  return VMState { pc = 0, done=False, vmError=Nothing, vmGasUsed=0, vars=M.empty, stack=[], memory=m }
 
 runOperation::Operation->VMState->IO VMState
+runOperation STOP state = return state{done=True}
+runOperation XOR state@VMState{stack=(x:y:rest)} = return state{stack=(x `xor` y:rest)}
+runOperation XOR state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to XOR"}
 runOperation (PUSH1 x) state =
   return $
   state { stack=fromIntegral x:stack state }
@@ -177,6 +183,7 @@ movePC::VMState->Int->VMState
 movePC state l = state{ pc=pc state + l }
 
 decreaseGas::Operation->VMState->VMState
+decreaseGas STOP state = state
 decreaseGas MSTORE state = state{ vmGasUsed = vmGasUsed state + 2 }
 decreaseGas _ state = state{ vmGasUsed = vmGasUsed state + 1 }
 
@@ -186,15 +193,22 @@ runCode rom state = do
   let (op, len) = getOperationAt rom (pc state)
   result <- runOperation op state
   case result of
-    state2@VMState{done=True} -> return $ decreaseGas op $ movePC state2 len
+    VMState{vmError=Just err} -> return result
+    VMState{done=True} -> return $ decreaseGas op $ movePC result len
     state2 -> runCode rom $ decreaseGas op $ movePC state2 len
 
-getReturnValue::VMState->IO B.ByteString
+getReturnValue::VMState->IO (Either VMError B.ByteString)
 getReturnValue state = do
-  --TODO- This needs better error handling other than to just crash if the stack isn't 2 items long
-  let [address, size] = stack state
-  vals <- sequence $ readArray (memory state) <$> fromIntegral <$> [address..address+size-1]
-  return $ B.pack vals
+  case vmError state of
+    Just err -> return $ Left err
+    Nothing -> do
+      --TODO- This needs better error handling other than to just crash if the stack isn't 2 items long
+      vals <- 
+        case stack state of
+          [address, size] ->
+            sequence $ readArray (memory state) <$> fromIntegral <$> [address..address+size-1]
+          [] -> return [] --Happens when STOP is called
+      return $ Right $ B.pack vals
   
 
 

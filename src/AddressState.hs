@@ -11,7 +11,6 @@ import Control.Monad.Trans.Resource
 import qualified Data.ByteString as B
 import Data.Functor
 import Database.LevelDB
-import Network.Haskoin.Internals hiding (Address)
 import Numeric
 
 import Address
@@ -23,7 +22,7 @@ import RLP
 import SHA
 import Util
 
-data AddressState = AddressState { addressStateNonce::Word256, balance::Word256, contractRoot::Word256, codeHash::SHA } deriving (Show)
+data AddressState = AddressState { addressStateNonce::Integer, balance::Integer, contractRoot::Integer, codeHash::SHA } deriving (Show)
 
 instance Format AddressState where
   format a = blue "AddressState" ++

@@ -4,6 +4,7 @@ module ModifyStateDB (
                       initializeBlankStateDB,
                       initializeStateDB,
                       addToBalance,
+                      transferEther,
                       addNewAccount,
                       addNonce
 ) where
@@ -78,7 +79,13 @@ addToBalance sdb stateRoot address val = do
   addressState <- fromMaybe startingAddressState <$> getAddressState sdb stateRoot address
   putAddressState sdb stateRoot address
     addressState{ balance = balance addressState + fromIntegral val }
-  
+
+transferEther::StateDB->SHAPtr->Address->Address->Integer->ResourceT IO SHAPtr
+transferEther sdb sr fromAddress toAddress val = do
+  sr2 <- addToBalance sdb sr fromAddress (-val)
+  addToBalance sdb sr2 toAddress val
+
+
 addNewAccount::StateDB->SHAPtr->Address->B.ByteString->ResourceT IO SHAPtr
 addNewAccount sdb stateRoot address code = do
   let addressState = AddressState {addressStateNonce=0, balance=0, contractRoot=0, codeHash=hash code}
@@ -90,6 +97,11 @@ addNonce sdb stateRoot address = do
   addressState <- fromMaybe startingAddressState <$> getAddressState sdb stateRoot address
   putAddressState sdb stateRoot address
     addressState{ addressStateNonce = addressStateNonce addressState + 1 }
+
+
+
+
+
 
   
 

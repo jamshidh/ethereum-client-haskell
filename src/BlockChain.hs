@@ -27,7 +27,9 @@ import qualified Database.LevelDB as DB
 import System.Directory
 
 import Address
+import AddressState
 import Block
+import Colors
 import Constants
 import DBs
 import EthDB
@@ -126,18 +128,26 @@ runCodeForTransaction::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPt
 runCodeForTransaction sdb p theCoinbase t = do
   vmState <- liftIO $ runCodeFromStart (tInit t)
   result <- liftIO $ getReturnValue vmState
-  let newAddress = getNewAddress t
-  liftIO $ putStrLn $ format newAddress ++ ": " ++ format result
-  p2 <- addNewAccount sdb p newAddress result
-  let p3 = addVars sdb p2 (vars vmState)
-  liftIO $ putStrLn $ "gasUsed: " ++ show (vmGasUsed vmState)
-  chargeForCodeRun sdb p3 (whoSignedThisTransaction t) theCoinbase (vmGasUsed vmState * gasPrice t)
+  case result of
+    Left err -> do
+      liftIO $ putStrLn $ red $ show err
+      return p
+    Right resultBytes -> do
+      let newAddress = getNewAddress t
+      liftIO $ putStrLn $ format newAddress ++ ": " ++ format resultBytes
+      --TODO- I think there is an error in the cpp ethereum, no new account it made
+      --when value doesn't equal 0....  I am mimicking this here so that I can work with that
+      --client, but I really should either try to understand this better or if I convince myself
+      --that there is a bug, report it.
+      p2 <- if value t == 0
+            then addNewAccount sdb p newAddress resultBytes
+            else return p
+      let p3 = addVars sdb p2 (vars vmState)
+      liftIO $ putStrLn $ "gasUsed: " ++ show (vmGasUsed vmState)
+      chargeForCodeRun sdb p3 (whoSignedThisTransaction t) theCoinbase (vmGasUsed vmState * gasPrice t)
 
-runAllCode::StateDB->SHAPtr->Address->[Transaction]->ResourceT IO SHAPtr
-runAllCode _ p _ [] = return p
-runAllCode sdb p theCoinbase (t:rest) = do
-  nextP <- runCodeForTransaction sdb p theCoinbase t
-  runAllCode sdb nextP theCoinbase rest
+runAllCode::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPtr
+runAllCode sdb p theCoinbase t = runCodeForTransaction sdb p theCoinbase t
  
 
 addBlocks::[Block]->IO ()
@@ -153,22 +163,52 @@ getNewAddress t =
   let theHash = hash $ rlpSerialize $ RLPArray [rlpEncode $ whoSignedThisTransaction t, rlpEncode $ tNonce t]
   in decode $ BL.drop 12 $ encode $ theHash
 
+isTransactionValid::StateDB->SHAPtr->Transaction->ResourceT IO Bool
+isTransactionValid sdb p t = do
+  maybeAddressState <- getAddressState sdb p $ whoSignedThisTransaction t
+  case maybeAddressState of
+    Nothing -> return (0 == tNonce t)
+    Just addressState -> return (addressStateNonce addressState == tNonce t)
+
+addTransaction::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPtr
+addTransaction sdb sr theCoinbase t = do
+  liftIO $ print "adding to nonces"
+  let signAddress = whoSignedThisTransaction t
+  sr2 <- addNonce sdb sr signAddress
+  sr3 <- chargeFees sdb sr2 theCoinbase t
+  sr4 <- chargeForCodeSize sdb sr3 theCoinbase t
+  sr5 <- if to t == Address 0
+         then addToBalance sdb sr4 signAddress (-value t)
+         else transferEther sdb sr4 signAddress (to t) (value t)
+  if B.null $ tInit t
+    then return sr4
+    else runAllCode sdb sr4 theCoinbase t
+
+addTransactions::StateDB->SHAPtr->Address->[Transaction]->ResourceT IO SHAPtr
+addTransactions _ sr _ [] = return sr
+addTransactions sdb sr theCoinbase (t:rest) = do
+  valid <- isTransactionValid sdb sr t
+  sr2 <- if valid
+         then addTransaction sdb sr theCoinbase t
+         else return sr
+  addTransactions sdb sr2 theCoinbase rest
+  
+
 addBlock::BlockDB->DetailsDB->StateDB->Block->ResourceT IO ()
 addBlock bdb ddb sdb b = do
-  parentBlock <- fromMaybe (error ("Missing parent block in addBlock: " ++ format (parentHash $ blockData b))) <$>
-                 (getBlock bdb $ parentHash $ blockData b)
+  let bd = blockData b
+  parentBlock <-
+    fromMaybe (error ("Missing parent block in addBlock: " ++ format (parentHash bd))) <$>
+    (getBlock bdb $ parentHash bd)
 
-  newStateRoot <- addToBalance sdb (stateRoot $ blockData parentBlock) (coinbase $ blockData b) (1500*finney)
+  sr2 <- addToBalance sdb (stateRoot $ blockData parentBlock) (coinbase bd) (1500*finney)
 
-  newStateRoot2 <- addToNonces sdb newStateRoot $ theTransaction <$> receiptTransactions b
+  let transactions = theTransaction <$> receiptTransactions b
 
-  newStateRoot3 <- chargeFees sdb newStateRoot2 (coinbase $ blockData b) $ theTransaction <$> receiptTransactions b
+  sr3 <- addTransactions sdb sr2 (coinbase bd) transactions
+  
 
-  newStateRoot4 <- chargeForCodeSize sdb newStateRoot3 (coinbase $ blockData b) $ theTransaction <$> receiptTransactions b
-
-  newStateRoot5 <- runAllCode sdb newStateRoot4 (coinbase $ blockData b) $ theTransaction <$> receiptTransactions b
-
-  liftIO $ putStrLn $ "newStateRoot5: " ++ format newStateRoot5
+  liftIO $ putStrLn $ "newStateRoot: " ++ format sr3
 
   valid <- checkValidity bdb sdb b
   case valid of
@@ -179,27 +219,17 @@ addBlock bdb ddb sdb b = do
   replaceBestIfBetter bdb ddb b
 
 
-addToNonces::StateDB->SHAPtr->[Transaction]->ResourceT IO SHAPtr
-addToNonces _ sr [] = return sr
-addToNonces sdb sr (t:rest) = do
-    sr2 <- addNonce sdb sr $ whoSignedThisTransaction t
-    addToNonces sdb sr2 rest
-
-chargeFees::StateDB->SHAPtr->Address->[Transaction]->ResourceT IO SHAPtr
-chargeFees _ sr _ [] = return sr
-chargeFees sdb sr theCoinbase (t:rest) = do
+chargeFees::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPtr
+chargeFees sdb sr theCoinbase t = do
   sr2 <- addToBalance sdb sr theCoinbase (5*finney)
-  sr3 <- addToBalance sdb sr2 (whoSignedThisTransaction t) (-5*finney)
-  chargeFees sdb sr3 theCoinbase rest
+  addToBalance sdb sr2 (whoSignedThisTransaction t) (-5*finney)
   
-chargeForCodeSize::StateDB->SHAPtr->Address->[Transaction]->ResourceT IO SHAPtr
-chargeForCodeSize _ sr _ [] = return sr
-chargeForCodeSize sdb sr theCoinbase (t:rest) = do
+chargeForCodeSize::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPtr
+chargeForCodeSize sdb sr theCoinbase t = do
   let codeSize = B.length $ tInit t
   let val = 5 * (gasPrice t) * fromIntegral codeSize
   sr2 <- addToBalance sdb sr theCoinbase val
-  sr3 <- addToBalance sdb sr2 (whoSignedThisTransaction t) (-val)
-  chargeFees sdb sr3 theCoinbase rest
+  addToBalance sdb sr2 (whoSignedThisTransaction t) (-val)
   
 
 getBestBlockHash::DetailsDB->ResourceT IO (Maybe SHA)
