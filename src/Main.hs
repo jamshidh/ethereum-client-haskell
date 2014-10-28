@@ -120,8 +120,9 @@ submitNextBlock socket b = do
         let theBytes = headerHashWithoutNonce newBlock `B.append` B.pack (integer2Bytes n)
         print $ format theBytes
         print $ format $ C.hash 256 theBytes
-        sendMessage socket $ Blocks [addNonceToBlock newBlock n]
-              
+        let theNewBlock = addNonceToBlock newBlock n
+        sendMessage socket $ Blocks [theNewBlock]
+        addBlocks [theNewBlock]
 
 
 
