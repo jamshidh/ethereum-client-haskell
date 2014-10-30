@@ -164,10 +164,87 @@ startingState = do
   m <- newArray (0, 100) 0
   return VMState { pc = 0, done=False, vmError=Nothing, vmGasUsed=0, vars=M.empty, stack=[], memory=m }
 
+
+
+
+
+
+
+
+--BYTE | SHA3 | ADDRESS | BALANCE | ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | PREVHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | POP | DUP | SWAP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | JUMP | JUMPI | PC | MSIZE | GAS
+--               | PUSH1 Word8 | PUSH2 | PUSH3 | PUSH4 | PUSH5 | PUSH6 | PUSH7 | PUSH8 | PUSH9 | PUSH10 | PUSH11 | PUSH12 | PUSH13 | PUSH14 | PUSH15 | PUSH16 | PUSH17 | PUSH18 | PUSH19 | PUSH20 | PUSH21 | PUSH22 | PUSH23 | PUSH24 | PUSH25 | PUSH26 | PUSH27 | PUSH28 | PUSH29 | PUSH30 | PUSH31 | PUSH32
+--               | CREATE | CALL | RETURN | SUICIDE deriving (Show, Eq, Ord)
+
+
+
+squot=undefined
+smod=undefined
+sgt=undefined
+slt=undefined
+
+
 runOperation::Operation->VMState->IO VMState
 runOperation STOP state = return state{done=True}
+
+runOperation ADD state@VMState{stack=(x:y:rest)} = return state{stack=(x + y:rest)}
+runOperation ADD state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to ADD"}
+
+runOperation MUL state@VMState{stack=(x:y:rest)} = return state{stack=(x * y:rest)}
+runOperation MUL state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to MUL"}
+
+runOperation SUB state@VMState{stack=(x:y:rest)} = return state{stack=(x - y:rest)}
+runOperation SUB state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to SUB"}
+
+runOperation DIV state@VMState{stack=(x:y:rest)} = return state{stack=(x `quot` y:rest)}
+runOperation DIV state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to DIV"}
+
+runOperation SDIV state@VMState{stack=(x:y:rest)} = return state{stack=(x `squot` y:rest)}
+runOperation SDIV state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to SDIV"}
+
+runOperation MOD state@VMState{stack=(x:y:rest)} = return state{stack=(x `mod` y:rest)}
+runOperation MOD state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to MOD"}
+
+runOperation SMOD state@VMState{stack=(x:y:rest)} = return state{stack=(x `smod` y:rest)}
+runOperation SMOD state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to SMOD"}
+
+runOperation EXP state@VMState{stack=(x:y:rest)} = return state{stack=(x^y:rest)}
+runOperation EXP state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to EXP"}
+
+runOperation NEG state@VMState{stack=(x:rest)} = return state{stack=(-x:rest)}
+runOperation NEG state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to NEG"}
+
+runOperation LT state@VMState{stack=(x:y:rest)} = return state{stack=((if x < y then 1 else 0):rest)}
+runOperation LT state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to LT"}
+
+runOperation GT state@VMState{stack=(x:y:rest)} = return state{stack=((if x > y then 1 else 0):rest)}
+runOperation GT state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to GT"}
+
+runOperation SLT state@VMState{stack=(x:y:rest)} = return state{stack=((if x `slt` y then 1 else 0):rest)}
+runOperation SLT state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to SLT"}
+
+runOperation SGT state@VMState{stack=(x:y:rest)} = return state{stack=((if x `sgt` y then 1 else 0):rest)}
+runOperation SGT state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to SGT"}
+
+runOperation EQ state@VMState{stack=(x:y:rest)} = return state{stack=((if x == y then 1 else 0):rest)}
+runOperation EQ state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to EQ"}
+
+runOperation NOT state@VMState{stack=(x:rest)} = return state{stack=((if x == 1 then 1 else 0):rest)}
+runOperation NOT state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to NOT"}
+
+runOperation AND state@VMState{stack=(x:y:rest)} = return state{stack=(x .&. y:rest)}
+runOperation AND state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to AND"}
+
+runOperation OR state@VMState{stack=(x:y:rest)} = return state{stack=((x .|. y):rest)}
+runOperation OR state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to OR"}
+
 runOperation XOR state@VMState{stack=(x:y:rest)} = return state{stack=(x `xor` y:rest)}
 runOperation XOR state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to XOR"}
+
+
+
+
+
+
 runOperation (PUSH1 x) state =
   return $
   state { stack=fromIntegral x:stack state }
@@ -193,7 +270,7 @@ runCode rom state = do
   let (op, len) = getOperationAt rom (pc state)
   result <- runOperation op state
   case result of
-    VMState{vmError=Just err} -> return result
+    VMState{vmError=Just _} -> return result
     VMState{done=True} -> return $ decreaseGas op $ movePC result len
     state2 -> runCode rom $ decreaseGas op $ movePC state2 len
 
@@ -208,6 +285,7 @@ getReturnValue state = do
           [address, size] ->
             sequence $ readArray (memory state) <$> fromIntegral <$> [address..address+size-1]
           [] -> return [] --Happens when STOP is called
+          _ -> error $ "Error in getReturnValue: VM ended with stack in an unsupported case"
       return $ Right $ B.pack vals
   
 
