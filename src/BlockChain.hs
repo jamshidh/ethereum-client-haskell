@@ -172,7 +172,7 @@ isTransactionValid sdb p t = do
 
 addTransaction::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPtr
 addTransaction sdb sr theCoinbase t = do
-  liftIO $ print "adding to nonces"
+  liftIO $ putStrLn "adding to nonces"
   let signAddress = whoSignedThisTransaction t
   sr2 <- addNonce sdb sr signAddress
   sr3 <- chargeFees sdb sr2 theCoinbase t
@@ -181,8 +181,8 @@ addTransaction sdb sr theCoinbase t = do
          then addToBalance sdb sr4 signAddress (-value t)
          else transferEther sdb sr4 signAddress (to t) (value t)
   if B.null $ tInit t
-    then return sr4
-    else runAllCode sdb sr4 theCoinbase t
+    then return sr5
+    else runAllCode sdb sr5 theCoinbase t
 
 addTransactions::StateDB->SHAPtr->Address->[Transaction]->ResourceT IO SHAPtr
 addTransactions _ sr _ [] = return sr

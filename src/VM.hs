@@ -125,7 +125,7 @@ opDatas =
 --op2CodeMap::Operation->(Int->Word8)
 --op2CodeMap=M.fromList $ (\(OPData code op _ _ _) -> (op, code)) <$> opDatas
 code2OpMap::M.Map Word8 ([Word8] -> Operation, Int)
-code2OpMap=M.fromList $ (\(OPData code op _ _ _) -> (code, op)) <$> opDatas
+code2OpMap=M.fromList $ (\(OPData opcode op _ _ _) -> (opcode, op)) <$> opDatas
 
 {-
 op2OpCode::Operation->Word8
@@ -153,7 +153,7 @@ showCode rom = show op ++ "\n" ++ showCode (B.drop nextP rom)
 
 data VMError = VMError String deriving (Show)
 
-data VMState = VMState { pc::Int, done::Bool, vmError::Maybe VMError, vmGasUsed::Integer, vars::M.Map String String, stack::[Word256], memory::IOArray Word32 Word8 }
+data VMState = VMState { code::B.ByteString, pc::Int, done::Bool, vmError::Maybe VMError, vmGasUsed::Integer, vars::M.Map String String, stack::[Word256], memory::IOArray Word32 Word8 }
 
 instance Format VMState where
   format state =
@@ -162,10 +162,10 @@ instance Format VMState where
     "gasUsed: " ++ show (vmGasUsed state) ++ "\n" ++
     "stack: " ++ show (stack state) ++ "\n"
 
-startingState::IO VMState
-startingState = do
+startingState::B.ByteString->IO VMState
+startingState c = do
   m <- newArray (0, 100) 0
-  return VMState { pc = 0, done=False, vmError=Nothing, vmGasUsed=0, vars=M.empty, stack=[], memory=m }
+  return VMState { code = c, pc = 0, done=False, vmError=Nothing, vmGasUsed=0, vars=M.empty, stack=[], memory=m }
 
 
 
@@ -182,71 +182,50 @@ startingState = do
 
 
 
-squot=undefined
-smod=undefined
-sgt=undefined
-slt=undefined
+bool2Word256::Bool->Word256
+bool2Word256 True = 1
+bool2Word256 False = 0
+
+word2562Bool::Word256->Bool
+word2562Bool 1 = True
+word2562Bool _ = False
+
+binaryAction::(Word256->Word256->Word256)->VMState->IO VMState
+binaryAction action state@VMState{stack=(x:y:rest)} = return state{stack=(x `action` y:rest)}
+binaryAction _ state = do
+  let (op, _) = getOperationAt (code state) (pc state)
+  return state{vmError=Just $ VMError ("stack did not contain enough elements for a call to " ++ show op)}
+
+unaryAction::(Word256->Word256)->VMState->IO VMState
+unaryAction action state@VMState{stack=(x:rest)} = return state{stack=(action x:rest)}
+unaryAction _ state = do
+  let (op, _) = getOperationAt (code state) (pc state)
+  return state{vmError=Just $ VMError ("stack did not contain enough elements for a call to " ++ show op)}
 
 
 runOperation::Operation->VMState->IO VMState
 runOperation STOP state = return state{done=True}
 
-runOperation ADD state@VMState{stack=(x:y:rest)} = return state{stack=(x + y:rest)}
-runOperation ADD state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to ADD"}
+runOperation ADD state = binaryAction (+) state
+runOperation MUL state = binaryAction (*) state
+runOperation SUB state = binaryAction (-) state
+runOperation DIV state = binaryAction quot state
+runOperation SDIV state = binaryAction undefined state
+runOperation MOD state = binaryAction mod state
+runOperation SMOD state = binaryAction undefined state
+runOperation EXP state = binaryAction (^) state
+runOperation NEG state = unaryAction negate state
+runOperation LT state = binaryAction ((bool2Word256 .) . (<)) state
+runOperation GT state = binaryAction ((bool2Word256 .) . (>)) state
+runOperation SLT state = binaryAction undefined state
+runOperation SGT state = binaryAction undefined state
+runOperation EQ state = binaryAction ((bool2Word256 .) . (==)) state
+runOperation NOT state = unaryAction (bool2Word256 . not . word2562Bool) state
+runOperation AND state = binaryAction (.&.) state
+runOperation OR state = binaryAction (.|.) state
+runOperation XOR state = binaryAction xor state
 
-runOperation MUL state@VMState{stack=(x:y:rest)} = return state{stack=(x * y:rest)}
-runOperation MUL state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to MUL"}
-
-runOperation SUB state@VMState{stack=(x:y:rest)} = return state{stack=(x - y:rest)}
-runOperation SUB state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to SUB"}
-
-runOperation DIV state@VMState{stack=(x:y:rest)} = return state{stack=(x `quot` y:rest)}
-runOperation DIV state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to DIV"}
-
-runOperation SDIV state@VMState{stack=(x:y:rest)} = return state{stack=(x `squot` y:rest)}
-runOperation SDIV state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to SDIV"}
-
-runOperation MOD state@VMState{stack=(x:y:rest)} = return state{stack=(x `mod` y:rest)}
-runOperation MOD state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to MOD"}
-
-runOperation SMOD state@VMState{stack=(x:y:rest)} = return state{stack=(x `smod` y:rest)}
-runOperation SMOD state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to SMOD"}
-
-runOperation EXP state@VMState{stack=(x:y:rest)} = return state{stack=(x^y:rest)}
-runOperation EXP state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to EXP"}
-
-runOperation NEG state@VMState{stack=(x:rest)} = return state{stack=(-x:rest)}
-runOperation NEG state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to NEG"}
-
-runOperation LT state@VMState{stack=(x:y:rest)} = return state{stack=((if x < y then 1 else 0):rest)}
-runOperation LT state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to LT"}
-
-runOperation GT state@VMState{stack=(x:y:rest)} = return state{stack=((if x > y then 1 else 0):rest)}
-runOperation GT state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to GT"}
-
-runOperation SLT state@VMState{stack=(x:y:rest)} = return state{stack=((if x `slt` y then 1 else 0):rest)}
-runOperation SLT state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to SLT"}
-
-runOperation SGT state@VMState{stack=(x:y:rest)} = return state{stack=((if x `sgt` y then 1 else 0):rest)}
-runOperation SGT state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to SGT"}
-
-runOperation EQ state@VMState{stack=(x:y:rest)} = return state{stack=((if x == y then 1 else 0):rest)}
-runOperation EQ state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to EQ"}
-
-runOperation NOT state@VMState{stack=(x:rest)} = return state{stack=((if x == 1 then 1 else 0):rest)}
-runOperation NOT state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to NOT"}
-
-runOperation AND state@VMState{stack=(x:y:rest)} = return state{stack=(x .&. y:rest)}
-runOperation AND state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to AND"}
-
-runOperation OR state@VMState{stack=(x:y:rest)} = return state{stack=((x .|. y):rest)}
-runOperation OR state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to OR"}
-
-runOperation XOR state@VMState{stack=(x:y:rest)} = return state{stack=(x `xor` y:rest)}
-runOperation XOR state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to XOR"}
-
-runOperation BYTE state@VMState{stack=(x:y:rest)} = return state{stack=((y `shiftR` fromIntegral x) .&. 0xFF:rest)}
-runOperation BYTE state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to BYTE"}
+--runOperation BYTE state = binaryAction (+) state
 
 --runOperation SHA3 state@VMState{stack=(x:y:rest)} = return state{stack=((y `shiftR` x):rest)}
 --runOperation SHA3 state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to SHA3"}
@@ -283,14 +262,14 @@ decreaseGas MSTORE state = state{ vmGasUsed = vmGasUsed state + 2 }
 decreaseGas _ state = state{ vmGasUsed = vmGasUsed state + 1 }
 
 
-runCode::B.ByteString->VMState->IO VMState
-runCode rom state = do
-  let (op, len) = getOperationAt rom (pc state)
+runCode::VMState->IO VMState
+runCode state = do
+  let (op, len) = getOperationAt (code state) (pc state)
   result <- runOperation op state
   case result of
     VMState{vmError=Just _} -> return result
     VMState{done=True} -> return $ decreaseGas op $ movePC result len
-    state2 -> runCode rom $ decreaseGas op $ movePC state2 len
+    state2 -> runCode $ decreaseGas op $ movePC state2 len
 
 getReturnValue::VMState->IO (Either VMError B.ByteString)
 getReturnValue state = do
@@ -310,5 +289,5 @@ getReturnValue state = do
 
 runCodeFromStart::B.ByteString->IO VMState
 runCodeFromStart rom = do
-  s <- startingState
-  runCode rom s
+  s <- startingState rom
+  runCode s
