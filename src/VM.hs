@@ -17,7 +17,7 @@ import Util
 --import Debug.Trace
 
 data Operation = STOP | ADD | MUL | SUB | DIV | SDIV | MOD | SMOD | EXP | NEG | LT | GT | SLT | SGT | EQ | NOT | AND | OR | XOR | BYTE | SHA3 | ADDRESS | BALANCE | ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | PREVHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | POP | DUP | SWAP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | JUMP | JUMPI | PC | MSIZE | GAS
-               | PUSH1 Word8 | PUSH2 | PUSH3 | PUSH4 | PUSH5 | PUSH6 | PUSH7 | PUSH8 | PUSH9 | PUSH10 | PUSH11 | PUSH12 | PUSH13 | PUSH14 | PUSH15 | PUSH16 | PUSH17 | PUSH18 | PUSH19 | PUSH20 | PUSH21 | PUSH22 | PUSH23 | PUSH24 | PUSH25 | PUSH26 | PUSH27 | PUSH28 | PUSH29 | PUSH30 | PUSH31 | PUSH32
+               | PUSH [Word8]
                | CREATE | CALL | RETURN | SUICIDE deriving (Show, Eq, Ord)
 
 data OPData = OPData Word8 ([Word8]->Operation, Int) Int Int String
@@ -26,6 +26,9 @@ type EthCode = [Operation]
 
 singleOp::Operation->([Word8]->Operation, Int)
 singleOp o = (const o, 1)
+
+pushOp::Int->([Word8]->Operation, Int)
+pushOp numArgs = (\bytes -> PUSH (take numArgs bytes), numArgs + 1)
 
 opDatas::[OPData]
 opDatas = 
@@ -81,38 +84,38 @@ opDatas =
     OPData 0x5a (singleOp PC) 0 1 "Get the program counter.",
     OPData 0x5b (singleOp MSIZE) 0 1 "Get the size of active memory in bytes.",
     OPData 0x5c (singleOp GAS) 0 1 "Get the amount of available gas.",
-    OPData 0x60 (\[x]->PUSH1 $ fromIntegral x, 2) 0 1 "Place 1 byte item on stack.",
-    OPData 0x61 (singleOp PUSH2) 0 1 "Place 2-byte item on stack.",
-    OPData 0x62 (singleOp PUSH3) 0 1 "Place 3-byte item on stack.",
-    OPData 0x63 (singleOp PUSH4) 0 1 "Place 4-byte item on stack.",
-    OPData 0x64 (singleOp PUSH5) 0 1 "Place 5-byte item on stack.",
-    OPData 0x65 (singleOp PUSH6) 0 1 "Place 6-byte item on stack.",
-    OPData 0x66 (singleOp PUSH7) 0 1 "Place 7-byte item on stack.",
-    OPData 0x67 (singleOp PUSH8) 0 1 "Place 8-byte item on stack.",
-    OPData 0x68 (singleOp PUSH9) 0 1 "Place 9-byte item on stack.",
-    OPData 0x69 (singleOp PUSH10) 0 1 "Place 10-byte item on stack.",
-    OPData 0x6a (singleOp PUSH11) 0 1 "Place 11-byte item on stack.",
-    OPData 0x6b (singleOp PUSH12) 0 1 "Place 12-byte item on stack.",
-    OPData 0x6c (singleOp PUSH13) 0 1 "Place 13-byte item on stack.",
-    OPData 0x6d (singleOp PUSH14) 0 1 "Place 14-byte item on stack.",
-    OPData 0x6e (singleOp PUSH15) 0 1 "Place 15-byte item on stack.",
-    OPData 0x6f (singleOp PUSH16) 0 1 "Place 16-byte item on stack.",
-    OPData 0x70 (singleOp PUSH17) 0 1 "Place 17-byte item on stack.",
-    OPData 0x71 (singleOp PUSH18) 0 1 "Place 18-byte item on stack.",
-    OPData 0x72 (singleOp PUSH19) 0 1 "Place 19-byte item on stack.",
-    OPData 0x73 (singleOp PUSH20) 0 1 "Place 20-byte item on stack.",
-    OPData 0x74 (singleOp PUSH21) 0 1 "Place 21-byte item on stack.",
-    OPData 0x75 (singleOp PUSH22) 0 1 "Place 22-byte item on stack.",
-    OPData 0x76 (singleOp PUSH23) 0 1 "Place 23-byte item on stack.",
-    OPData 0x77 (singleOp PUSH24) 0 1 "Place 24-byte item on stack.",
-    OPData 0x78 (singleOp PUSH25) 0 1 "Place 25-byte item on stack.",
-    OPData 0x79 (singleOp PUSH26) 0 1 "Place 26-byte item on stack.",
-    OPData 0x7a (singleOp PUSH27) 0 1 "Place 27-byte item on stack.",
-    OPData 0x7b (singleOp PUSH28) 0 1 "Place 28-byte item on stack.",
-    OPData 0x7c (singleOp PUSH29) 0 1 "Place 29-byte item on stack.",
-    OPData 0x7d (singleOp PUSH30) 0 1 "Place 30-byte item on stack.",
-    OPData 0x7e (singleOp PUSH31) 0 1 "Place 31-byte item on stack.",
-    OPData 0x7f (singleOp PUSH32) 0 1 "Place 32-byte item on stack.",
+    OPData 0x60 (pushOp 1) 0 1 "Place 1 byte item on stack.",
+    OPData 0x61 (pushOp 2) 0 1 "Place 2-byte item on stack.",
+    OPData 0x62 (pushOp 3) 0 1 "Place 3-byte item on stack.",
+    OPData 0x63 (pushOp 4) 0 1 "Place 4-byte item on stack.",
+    OPData 0x64 (pushOp 5) 0 1 "Place 5-byte item on stack.",
+    OPData 0x65 (pushOp 6) 0 1 "Place 6-byte item on stack.",
+    OPData 0x66 (pushOp 7) 0 1 "Place 7-byte item on stack.",
+    OPData 0x67 (pushOp 8) 0 1 "Place 8-byte item on stack.",
+    OPData 0x68 (pushOp 9) 0 1 "Place 9-byte item on stack.",
+    OPData 0x69 (pushOp 10) 0 1 "Place 10-byte item on stack.",
+    OPData 0x6a (pushOp 11) 0 1 "Place 11-byte item on stack.",
+    OPData 0x6b (pushOp 12) 0 1 "Place 12-byte item on stack.",
+    OPData 0x6c (pushOp 13) 0 1 "Place 13-byte item on stack.",
+    OPData 0x6d (pushOp 14) 0 1 "Place 14-byte item on stack.",
+    OPData 0x6e (pushOp 15) 0 1 "Place 15-byte item on stack.",
+    OPData 0x6f (pushOp 16) 0 1 "Place 16-byte item on stack.",
+    OPData 0x70 (pushOp 17) 0 1 "Place 17-byte item on stack.",
+    OPData 0x71 (pushOp 18) 0 1 "Place 18-byte item on stack.",
+    OPData 0x72 (pushOp 19) 0 1 "Place 19-byte item on stack.",
+    OPData 0x73 (pushOp 20) 0 1 "Place 20-byte item on stack.",
+    OPData 0x74 (pushOp 21) 0 1 "Place 21-byte item on stack.",
+    OPData 0x75 (pushOp 22) 0 1 "Place 22-byte item on stack.",
+    OPData 0x76 (pushOp 23) 0 1 "Place 23-byte item on stack.",
+    OPData 0x77 (pushOp 24) 0 1 "Place 24-byte item on stack.",
+    OPData 0x78 (pushOp 25) 0 1 "Place 25-byte item on stack.",
+    OPData 0x79 (pushOp 26) 0 1 "Place 26-byte item on stack.",
+    OPData 0x7a (pushOp 27) 0 1 "Place 27-byte item on stack.",
+    OPData 0x7b (pushOp 28) 0 1 "Place 28-byte item on stack.",
+    OPData 0x7c (pushOp 29) 0 1 "Place 29-byte item on stack.",
+    OPData 0x7d (pushOp 30) 0 1 "Place 30-byte item on stack.",
+    OPData 0x7e (pushOp 31) 0 1 "Place 31-byte item on stack.",
+    OPData 0x7f (pushOp 32) 0 1 "Place 32-byte item on stack.",
     OPData 0xf0 (singleOp CREATE) 3 1 "Create a new account with associated code.",
     OPData 0xf1 (singleOp CALL) 7 1 "Message-call into an account.",
     OPData 0xf2 (singleOp RETURN) 2 0 "Halt execution returning output data.",
@@ -172,7 +175,9 @@ startingState = do
 
 
 --SHA3 | ADDRESS | BALANCE | ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | PREVHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | POP | DUP | SWAP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | JUMP | JUMPI | PC | MSIZE | GAS
+
 --               | PUSH1 Word8 | PUSH2 | PUSH3 | PUSH4 | PUSH5 | PUSH6 | PUSH7 | PUSH8 | PUSH9 | PUSH10 | PUSH11 | PUSH12 | PUSH13 | PUSH14 | PUSH15 | PUSH16 | PUSH17 | PUSH18 | PUSH19 | PUSH20 | PUSH21 | PUSH22 | PUSH23 | PUSH24 | PUSH25 | PUSH26 | PUSH27 | PUSH28 | PUSH29 | PUSH30 | PUSH31 | PUSH32
+
 --               | CREATE | CALL | RETURN | SUICIDE deriving (Show, Eq, Ord)
 
 
@@ -258,9 +263,9 @@ runOperation BYTE state = return state{vmError=Just $ VMError "stack did not con
 
 
 
-runOperation (PUSH1 x) state =
+runOperation (PUSH vals) state =
   return $
-  state { stack=fromIntegral x:stack state }
+  state { stack=(fromIntegral <$> vals) ++ stack state }
 runOperation MSTORE state@VMState{stack=(p:val:rest)} = do
   sequence_ $ uncurry (writeArray (memory state)) <$> zip [fromIntegral p..] (word256ToBytes val)
   return $
