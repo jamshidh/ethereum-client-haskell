@@ -171,7 +171,7 @@ startingState = do
 
 
 
---BYTE | SHA3 | ADDRESS | BALANCE | ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | PREVHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | POP | DUP | SWAP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | JUMP | JUMPI | PC | MSIZE | GAS
+--SHA3 | ADDRESS | BALANCE | ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | PREVHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | POP | DUP | SWAP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | JUMP | JUMPI | PC | MSIZE | GAS
 --               | PUSH1 Word8 | PUSH2 | PUSH3 | PUSH4 | PUSH5 | PUSH6 | PUSH7 | PUSH8 | PUSH9 | PUSH10 | PUSH11 | PUSH12 | PUSH13 | PUSH14 | PUSH15 | PUSH16 | PUSH17 | PUSH18 | PUSH19 | PUSH20 | PUSH21 | PUSH22 | PUSH23 | PUSH24 | PUSH25 | PUSH26 | PUSH27 | PUSH28 | PUSH29 | PUSH30 | PUSH31 | PUSH32
 --               | CREATE | CALL | RETURN | SUICIDE deriving (Show, Eq, Ord)
 
@@ -240,6 +240,19 @@ runOperation OR state = return state{vmError=Just $ VMError "stack did not conta
 runOperation XOR state@VMState{stack=(x:y:rest)} = return state{stack=(x `xor` y:rest)}
 runOperation XOR state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to XOR"}
 
+runOperation BYTE state@VMState{stack=(x:y:rest)} = return state{stack=((y `shiftR` fromIntegral x) .&. 0xFF:rest)}
+runOperation BYTE state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to BYTE"}
+
+--runOperation SHA3 state@VMState{stack=(x:y:rest)} = return state{stack=((y `shiftR` x):rest)}
+--runOperation SHA3 state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to SHA3"}
+
+--runOperation ADDRESS state@VMState{stack=(x:y:rest)} = return state{stack=((y `shiftR` x) .&. 0xFF:rest)}
+--runOperation ADDRESS state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to BALANCE"}
+
+--runOperation BALANCE state@VMState{stack=(x:y:rest)} = return state{stack=((y `shiftR` x) .&. 0xFF:rest)}
+--runOperation BALANCE state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to BALANCE"}
+
+--gORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | PREVHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | POP | DUP | SWAP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | JUMP | JUMPI | PC | MSIZE | GAS
 
 
 
