@@ -24,6 +24,7 @@ import qualified Database.LevelDB as DB
 import Numeric
 
 import Colors
+import DBs
 import Format
 import qualified NibbleString as N
 import RLP
@@ -210,7 +211,7 @@ putKeyVal db p key val = do
 prependToKey::N.NibbleString->(N.NibbleString, B.ByteString)->(N.NibbleString, B.ByteString)
 prependToKey prefix (key, val) = (prefix `N.append` key, val)
 
-newtype SHAPtr = SHAPtr B.ByteString deriving (Show, Eq)
+--newtype SHAPtr = SHAPtr B.ByteString deriving (Show, Eq)
 
 instance Format SHAPtr where
   format (SHAPtr x) = yellow $ format x

@@ -126,7 +126,7 @@ chargeForCodeRun sdb p a theCoinbase val = do
 
 runCodeForTransaction::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPtr
 runCodeForTransaction sdb p theCoinbase t = do
-  vmState <- liftIO $ runCodeFromStart (tInit t)
+  vmState <- liftIO $ runCodeFromStart sdb p (tInit t) $ whoSignedThisTransaction t
   result <- liftIO $ getReturnValue vmState
   case result of
     Left err -> do

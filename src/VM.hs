@@ -9,8 +9,13 @@ import Data.Bits
 import qualified Data.ByteString as B
 import Data.Functor
 import qualified Data.Map as M
+import Data.Maybe
+import Database.LevelDB
 import Network.Haskoin.Crypto (Word256)
 
+import Address
+import AddressState
+import DBs
 import Format
 import Util
 
@@ -153,7 +158,7 @@ showCode rom = show op ++ "\n" ++ showCode (B.drop nextP rom)
 
 data VMError = VMError String deriving (Show)
 
-data VMState = VMState { code::B.ByteString, pc::Int, done::Bool, vmError::Maybe VMError, vmGasUsed::Integer, vars::M.Map String String, stack::[Word256], memory::IOArray Word32 Word8 }
+data VMState = VMState { code::B.ByteString, pc::Int, done::Bool, vmError::Maybe VMError, vmGasUsed::Integer, vars::M.Map String String, stack::[Word256], memory::IOArray Word32 Word8, address::Address }
 
 instance Format VMState where
   format state =
@@ -162,10 +167,10 @@ instance Format VMState where
     "gasUsed: " ++ show (vmGasUsed state) ++ "\n" ++
     "stack: " ++ show (stack state) ++ "\n"
 
-startingState::B.ByteString->IO VMState
-startingState c = do
+startingState::B.ByteString->Address->IO VMState
+startingState c a = do
   m <- newArray (0, 100) 0
-  return VMState { code = c, pc = 0, done=False, vmError=Nothing, vmGasUsed=0, vars=M.empty, stack=[], memory=m }
+  return VMState { code = c, pc = 0, done=False, vmError=Nothing, vmGasUsed=0, vars=M.empty, stack=[], memory=m, address = a }
 
 
 
@@ -190,68 +195,83 @@ word2562Bool::Word256->Bool
 word2562Bool 1 = True
 word2562Bool _ = False
 
+addErr::String->VMState->IO VMState
+addErr message state = do
+  let (op, _) = getOperationAt (code state) (pc state)
+  return state{vmError=Just $ VMError (message ++ " for a call to " ++ show op)}
+
 binaryAction::(Word256->Word256->Word256)->VMState->IO VMState
 binaryAction action state@VMState{stack=(x:y:rest)} = return state{stack=(x `action` y:rest)}
-binaryAction _ state = do
-  let (op, _) = getOperationAt (code state) (pc state)
-  return state{vmError=Just $ VMError ("stack did not contain enough elements for a call to " ++ show op)}
+binaryAction _ state = addErr "stack did not contain enough elements" state
 
 unaryAction::(Word256->Word256)->VMState->IO VMState
 unaryAction action state@VMState{stack=(x:rest)} = return state{stack=(action x:rest)}
-unaryAction _ state = do
-  let (op, _) = getOperationAt (code state) (pc state)
-  return state{vmError=Just $ VMError ("stack did not contain enough elements for a call to " ++ show op)}
-
-
-runOperation::Operation->VMState->IO VMState
-runOperation STOP state = return state{done=True}
-
-runOperation ADD state = binaryAction (+) state
-runOperation MUL state = binaryAction (*) state
-runOperation SUB state = binaryAction (-) state
-runOperation DIV state = binaryAction quot state
-runOperation SDIV state = binaryAction undefined state
-runOperation MOD state = binaryAction mod state
-runOperation SMOD state = binaryAction undefined state
-runOperation EXP state = binaryAction (^) state
-runOperation NEG state = unaryAction negate state
-runOperation LT state = binaryAction ((bool2Word256 .) . (<)) state
-runOperation GT state = binaryAction ((bool2Word256 .) . (>)) state
-runOperation SLT state = binaryAction undefined state
-runOperation SGT state = binaryAction undefined state
-runOperation EQ state = binaryAction ((bool2Word256 .) . (==)) state
-runOperation NOT state = unaryAction (bool2Word256 . not . word2562Bool) state
-runOperation AND state = binaryAction (.&.) state
-runOperation OR state = binaryAction (.|.) state
-runOperation XOR state = binaryAction xor state
-
---runOperation BYTE state = binaryAction (+) state
-
---runOperation SHA3 state@VMState{stack=(x:y:rest)} = return state{stack=((y `shiftR` x):rest)}
---runOperation SHA3 state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to SHA3"}
-
---runOperation ADDRESS state@VMState{stack=(x:y:rest)} = return state{stack=((y `shiftR` x) .&. 0xFF:rest)}
---runOperation ADDRESS state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to BALANCE"}
-
---runOperation BALANCE state@VMState{stack=(x:y:rest)} = return state{stack=((y `shiftR` x) .&. 0xFF:rest)}
---runOperation BALANCE state = return state{vmError=Just $ VMError "stack did not contain enough elements for a call to BALANCE"}
-
---gORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | PREVHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | POP | DUP | SWAP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | JUMP | JUMPI | PC | MSIZE | GAS
+unaryAction _ state = addErr "stack did not contain enough elements" state
 
 
 
+runOperation::StateDB->SHAPtr->Operation->VMState->IO VMState
+runOperation _ _ STOP state = return state{done=True}
+
+runOperation _ _ ADD state = binaryAction (+) state
+runOperation _ _ MUL state = binaryAction (*) state
+runOperation _ _ SUB state = binaryAction (-) state
+runOperation _ _ DIV state = binaryAction quot state
+runOperation _ _ SDIV state = binaryAction undefined state
+runOperation _ _ MOD state = binaryAction mod state
+runOperation _ _ SMOD state = binaryAction undefined state
+runOperation _ _ EXP state = binaryAction (^) state
+runOperation _ _ NEG state = unaryAction negate state
+runOperation _ _ LT state = binaryAction ((bool2Word256 .) . (<)) state
+runOperation _ _ GT state = binaryAction ((bool2Word256 .) . (>)) state
+runOperation _ _ SLT state = binaryAction undefined state
+runOperation _ _ SGT state = binaryAction undefined state
+runOperation _ _ EQ state = binaryAction ((bool2Word256 .) . (==)) state
+runOperation _ _ NOT state = unaryAction (bool2Word256 . not . word2562Bool) state
+runOperation _ _ AND state = binaryAction (.&.) state
+runOperation _ _ OR state = binaryAction (.|.) state
+runOperation _ _ XOR state = binaryAction xor state
+
+runOperation _ _ BYTE state = binaryAction (\x y -> y `shiftR` fromIntegral x .&. 0xFF) state
+
+runOperation _ _ SHA3 state@VMState{stack=(x:y:rest)} = undefined
+
+runOperation _ _ ADDRESS state = return state{stack=fromIntegral a:stack state}
+    where
+      Address a = address state
+
+runOperation sdb p BALANCE state@VMState{stack=(x:rest)} = do
+  maybeAddressState <- runResourceT $ do
+                    getAddressState sdb p (Address $ fromIntegral x)
+  return state{stack=(fromIntegral $ fromMaybe 0 $ balance <$> maybeAddressState):rest}
+runOperation _ _ BALANCE state = addErr "stack did not contain enough elements" state
+
+--ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | PREVHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | 
+
+--POP | DUP | SWAP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | JUMP | JUMPI | PC | MSIZE | GAS
+
+runOperation _ _ POP state@VMState{stack=x:rest} = return state{stack=rest}
+runOperation _ _ POP state = addErr "Stack did not contain any items" state
+
+runOperation _ _ DUP state@VMState{stack=x:rest} = return state{stack=x:x:rest}
+runOperation _ _ DUP state = addErr "Stack did not contain any items" state
+
+runOperation _ _ SWAP state@VMState{stack=x:y:rest} = return state{stack=y:x:rest}
+runOperation _ _ SWAP state = addErr "Stack did not contain enough items" state
 
 
-runOperation (PUSH vals) state =
+
+
+runOperation _ _ (PUSH vals) state =
   return $
   state { stack=(fromIntegral <$> vals) ++ stack state }
-runOperation MSTORE state@VMState{stack=(p:val:rest)} = do
+runOperation _ _ MSTORE state@VMState{stack=(p:val:rest)} = do
   sequence_ $ uncurry (writeArray (memory state)) <$> zip [fromIntegral p..] (word256ToBytes val)
   return $
     state { stack=rest }
-runOperation RETURN state =
+runOperation _ _ RETURN state =
   return $ state { done=True }
-runOperation x _ = error $ "Missing case in runOperation: " ++ show x
+runOperation _ _ x _ = error $ "Missing case in runOperation: " ++ show x
 
 movePC::VMState->Int->VMState
 movePC state l = state{ pc=pc state + l }
@@ -262,14 +282,14 @@ decreaseGas MSTORE state = state{ vmGasUsed = vmGasUsed state + 2 }
 decreaseGas _ state = state{ vmGasUsed = vmGasUsed state + 1 }
 
 
-runCode::VMState->IO VMState
-runCode state = do
+runCode::StateDB->SHAPtr->VMState->IO VMState
+runCode sdb p state = do
   let (op, len) = getOperationAt (code state) (pc state)
-  result <- runOperation op state
+  result <- runOperation sdb p op state
   case result of
     VMState{vmError=Just _} -> return result
     VMState{done=True} -> return $ decreaseGas op $ movePC result len
-    state2 -> runCode $ decreaseGas op $ movePC state2 len
+    state2 -> runCode sdb p $ decreaseGas op $ movePC state2 len
 
 getReturnValue::VMState->IO (Either VMError B.ByteString)
 getReturnValue state = do
@@ -287,7 +307,7 @@ getReturnValue state = do
   
 
 
-runCodeFromStart::B.ByteString->IO VMState
-runCodeFromStart rom = do
-  s <- startingState rom
-  runCode s
+runCodeFromStart::StateDB->SHAPtr->B.ByteString->Address->IO VMState
+runCodeFromStart sdb p rom address = do
+  s <- startingState rom address
+  runCode sdb p s
