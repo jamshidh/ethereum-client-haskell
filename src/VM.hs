@@ -158,7 +158,7 @@ showCode rom = show op ++ "\n" ++ showCode (B.drop nextP rom)
 
 data VMError = VMError String deriving (Show)
 
-data VMState = VMState { code::B.ByteString, pc::Int, done::Bool, vmError::Maybe VMError, vmGasUsed::Integer, vars::M.Map String String, stack::[Word256], memory::IOArray Word32 Word8, address::Address }
+data VMState = VMState { code::B.ByteString, pc::Int, done::Bool, vmError::Maybe VMError, vmGasUsed::Integer, vars::M.Map String String, stack::[Word256], memory::IOArray Word32 Word8, storage::M.Map Word256 Word256, address::Address }
 
 instance Format VMState where
   format state =
@@ -170,7 +170,7 @@ instance Format VMState where
 startingState::B.ByteString->Address->IO VMState
 startingState c a = do
   m <- newArray (0, 100) 0
-  return VMState { code = c, pc = 0, done=False, vmError=Nothing, vmGasUsed=0, vars=M.empty, stack=[], memory=m, address = a }
+  return VMState { code = c, pc = 0, done=False, vmError=Nothing, vmGasUsed=0, vars=M.empty, stack=[], memory=m, storage = M.empty, address = a }
 
 
 
@@ -248,8 +248,6 @@ runOperation _ _ BALANCE state = addErr "stack did not contain enough elements" 
 
 --ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | PREVHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | 
 
---POP | DUP | SWAP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | JUMP | JUMPI | PC | MSIZE | GAS
-
 runOperation _ _ POP state@VMState{stack=x:rest} = return state{stack=rest}
 runOperation _ _ POP state = addErr "Stack did not contain any items" state
 
@@ -260,15 +258,43 @@ runOperation _ _ SWAP state@VMState{stack=x:y:rest} = return state{stack=y:x:res
 runOperation _ _ SWAP state = addErr "Stack did not contain enough items" state
 
 
+runOperation _ _ MLOAD state@VMState{stack=(p:rest)} = do
+  bytes <- sequence $ readArray (memory state) <$> fromIntegral <$> [p..p+31]
+  return $ state { stack=fromIntegral (bytes2Integer bytes):rest }
+  
+runOperation _ _ MSTORE state@VMState{stack=(p:val:rest)} = do
+  sequence_ $ uncurry (writeArray (memory state)) <$> zip [fromIntegral p..] (word256ToBytes val)
+  return $
+    state { stack=rest }
+
+runOperation _ _ MSTORE8 state@VMState{stack=(p:val:rest)} = do
+  writeArray (memory state) (fromIntegral p) (fromIntegral $ val .&. 0xFF)
+  return $
+    state { stack=rest }
+
+runOperation _ _ SLOAD state@VMState{stack=(p:rest)} = do
+  let val = fromMaybe 0 $ M.lookup p (storage state)
+  return $ state { stack=val:rest }
+  
+runOperation _ _ SSTORE state@VMState{stack=(p:val:rest)} = do
+  return $ state { stack=rest, storage=M.insert p val $ storage state }
+
+runOperation _ _ JUMP state@VMState{stack=(p:rest)} =
+  return $ state { stack=rest, pc=fromIntegral p }
+
+runOperation _ _ JUMPI state@VMState{stack=(p:cond:rest)} =
+  return $ state { stack=rest, pc=if word2562Bool cond then fromIntegral p else (pc state) }
+
+runOperation _ _ PC state =
+  return $ state { stack=fromIntegral (pc state):stack state }
+
+-- MSIZE | GAS
+
 
 
 runOperation _ _ (PUSH vals) state =
   return $
   state { stack=(fromIntegral <$> vals) ++ stack state }
-runOperation _ _ MSTORE state@VMState{stack=(p:val:rest)} = do
-  sequence_ $ uncurry (writeArray (memory state)) <$> zip [fromIntegral p..] (word256ToBytes val)
-  return $
-    state { stack=rest }
 runOperation _ _ RETURN state =
   return $ state { done=True }
 runOperation _ _ x _ = error $ "Missing case in runOperation: " ++ show x

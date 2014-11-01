@@ -1,6 +1,7 @@
 
 module Util (
   byteString2Integer,
+  bytes2Integer,
   integer2Bytes,
   word160ToBytes,
   word256ToBytes,
@@ -17,11 +18,11 @@ import Network.Haskoin.Crypto (Word160, Word256)
 --There should be an easier way....
 --See http://stackoverflow.com/questions/25854311/efficient-packing-bytes-into-integers
 byteString2Integer::B.ByteString->Integer
-byteString2Integer x = byteString2Integer' $ B.unpack x
-  where
-    byteString2Integer'::[Word8]->Integer
-    byteString2Integer' [] = 0
-    byteString2Integer' (byte:rest) = fromIntegral byte `shift` (8 * length rest) + byteString2Integer' rest
+byteString2Integer x = bytes2Integer $ B.unpack x
+
+bytes2Integer::[Word8]->Integer
+bytes2Integer [] = 0
+bytes2Integer (byte:rest) = fromIntegral byte `shift` (8 * length rest) + bytes2Integer rest
 
 integer2Bytes::Integer->[Word8]
 integer2Bytes 0 = []
