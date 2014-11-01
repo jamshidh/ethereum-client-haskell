@@ -17,6 +17,7 @@ import Address
 import AddressState
 import DBs
 import Format
+import Memory
 import Util
 
 --import Debug.Trace
@@ -158,7 +159,20 @@ showCode rom = show op ++ "\n" ++ showCode (B.drop nextP rom)
 
 data VMError = VMError String deriving (Show)
 
-data VMState = VMState { code::B.ByteString, pc::Int, done::Bool, vmError::Maybe VMError, vmGasUsed::Integer, vars::M.Map String String, stack::[Word256], memory::IOArray Word32 Word8, storage::M.Map Word256 Word256, address::Address }
+data VMState =
+  VMState {
+    code::B.ByteString,
+    pc::Int,
+    done::Bool,
+    vmError::Maybe VMError,
+    vmGasUsed::Integer,
+    vars::M.Map String String,
+    stack::[Word256],
+    memory::IOArray Integer Word8,
+--    memory::Memory,
+    storage::M.Map Word256 Word256,
+    address::Address
+    }
 
 instance Format VMState where
   format state =
@@ -289,7 +303,7 @@ runOperation _ _ PC state =
   return $ state { stack=fromIntegral (pc state):stack state }
 
 -- MSIZE | GAS
-
+  
 
 
 runOperation _ _ (PUSH vals) state =
