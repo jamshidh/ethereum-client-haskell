@@ -33,6 +33,7 @@ import Code
 import Colors
 import Constants
 import DBs
+import Environment
 import Format
 import ModifyStateDB
 import RLP
@@ -124,10 +125,10 @@ chargeForCodeRun sdb p a theCoinbase val = do
   p2 <- addToBalance sdb p a (-val)
   addToBalance sdb p2 theCoinbase val
 
-runCodeForTransaction::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPtr
-runCodeForTransaction _ p _ Transaction{tInit=Code c} | B.null c = return p
-runCodeForTransaction sdb p theCoinbase t = do
-  vmState <- liftIO $ runCodeFromStart sdb p (tInit t) $ whoSignedThisTransaction t
+runCodeForTransaction::StateDB->SHAPtr->Block->Transaction->ResourceT IO SHAPtr
+runCodeForTransaction _ p b Transaction{tInit=Code c} | B.null c = return p
+runCodeForTransaction sdb p b t = do
+  vmState <- liftIO $ runCodeFromStart sdb p (tInit t) (whoSignedThisTransaction t) Environment{envBlock=b}
   result <- liftIO $ getReturnValue vmState
   case result of
     Left err -> do
@@ -147,10 +148,10 @@ runCodeForTransaction sdb p theCoinbase t = do
       liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
       let usedGas = tGasLimit t - vmGasRemaining vmState
       liftIO $ putStrLn $ "gasUsed: " ++ show usedGas
-      chargeForCodeRun sdb p3 (whoSignedThisTransaction t) theCoinbase (usedGas * gasPrice t)
+      chargeForCodeRun sdb p3 (whoSignedThisTransaction t) (coinbase $ blockData b) (usedGas * gasPrice t)
 
-runAllCode::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPtr
-runAllCode sdb p theCoinbase t = runCodeForTransaction sdb p theCoinbase t
+runAllCode::StateDB->SHAPtr->Block->Transaction->ResourceT IO SHAPtr
+runAllCode sdb p b t = runCodeForTransaction sdb p b t
  
 
 addBlocks::[Block]->IO ()
@@ -173,26 +174,26 @@ isTransactionValid sdb p t = do
     Nothing -> return (0 == tNonce t)
     Just addressState -> return (addressStateNonce addressState == tNonce t)
 
-addTransaction::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPtr
-addTransaction sdb sr theCoinbase t = do
+addTransaction::StateDB->SHAPtr->Block->Transaction->ResourceT IO SHAPtr
+addTransaction sdb sr b t = do
   liftIO $ putStrLn "adding to nonces"
   let signAddress = whoSignedThisTransaction t
   sr2 <- addNonce sdb sr signAddress
-  sr3 <- chargeFees sdb sr2 theCoinbase t
-  sr4 <- chargeForCodeSize sdb sr3 theCoinbase t
+  sr3 <- chargeFees sdb sr2 (coinbase $ blockData b) t
+  sr4 <- chargeForCodeSize sdb sr3 (coinbase $ blockData b) t
   sr5 <- if to t == Address 0
          then addToBalance sdb sr4 signAddress (-value t)
          else transferEther sdb sr4 signAddress (to t) (value t)
-  runAllCode sdb sr5 theCoinbase t
+  runAllCode sdb sr5 b t
 
-addTransactions::StateDB->SHAPtr->Address->[Transaction]->ResourceT IO SHAPtr
+addTransactions::StateDB->SHAPtr->Block->[Transaction]->ResourceT IO SHAPtr
 addTransactions _ sr _ [] = return sr
-addTransactions sdb sr theCoinbase (t:rest) = do
+addTransactions sdb sr b (t:rest) = do
   valid <- isTransactionValid sdb sr t
   sr2 <- if valid
-         then addTransaction sdb sr theCoinbase t
+         then addTransaction sdb sr b t
          else return sr
-  addTransactions sdb sr2 theCoinbase rest
+  addTransactions sdb sr2 b rest
   
 
 addBlock::BlockDB->DetailsDB->StateDB->Block->ResourceT IO ()
@@ -206,7 +207,7 @@ addBlock bdb ddb sdb b = do
 
   let transactions = theTransaction <$> receiptTransactions b
 
-  sr3 <- addTransactions sdb sr2 (coinbase bd) transactions
+  sr3 <- addTransactions sdb sr2 b transactions
   
 
   liftIO $ putStrLn $ "newStateRoot: " ++ format sr3
