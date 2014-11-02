@@ -128,7 +128,7 @@ chargeForCodeRun sdb p a theCoinbase val = do
 runCodeForTransaction::StateDB->SHAPtr->Block->Transaction->ResourceT IO SHAPtr
 runCodeForTransaction _ p b Transaction{tInit=Code c} | B.null c = return p
 runCodeForTransaction sdb p b t = do
-  vmState <- liftIO $ runCodeFromStart sdb p (tInit t) (whoSignedThisTransaction t) Environment{envBlock=b}
+  vmState <- liftIO $ runCodeFromStart sdb p (tInit t) (whoSignedThisTransaction t) Environment{envGasPrice=gasPrice t, envBlock=b}
   result <- liftIO $ getReturnValue vmState
   case result of
     Left err -> do

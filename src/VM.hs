@@ -8,6 +8,7 @@ import qualified Data.ByteString as B
 import Data.Functor
 import qualified Data.Map as M
 import Data.Maybe
+import Data.Time.Clock.POSIX
 import Database.LevelDB
 import Network.Haskoin.Crypto (Word256)
 
@@ -135,9 +136,16 @@ runOperation _ _ BALANCE _ state = addErr "stack did not contain enough elements
 
 --ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | PREVHASH | 
 
+runOperation _ _ GASPRICE Environment{envGasPrice=gp} state = return state{stack=fromIntegral gp:stack state}
+
+runOperation _ _ PREVHASH Environment{envBlock=Block{blockData=BlockData{parentHash=SHA prevHash}}} state = return state{stack=prevHash:stack state}
+
 runOperation _ _ COINBASE Environment{envBlock=Block{blockData=BlockData{coinbase=Address cb}}} state = return state{stack=fromIntegral cb:stack state}
 
---COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | 
+runOperation _ _ TIMESTAMP Environment{envBlock=Block{blockData=bd}} state = return state{stack=(round $ utcTimeToPOSIXSeconds $ timestamp bd):stack state}
+runOperation _ _ NUMBER Environment{envBlock=Block{blockData=bd}} state = return state{stack=fromIntegral (number bd):stack state}
+runOperation _ _ DIFFICULTY Environment{envBlock=Block{blockData=bd}} state = return state{stack=fromIntegral (difficulty bd):stack state}
+runOperation _ _ GASLIMIT Environment{envBlock=Block{blockData=bd}} state = return state{stack=fromIntegral (gasLimit bd):stack state}
 
 runOperation _ _ POP _ state@VMState{stack=_:rest} = return state{stack=rest}
 runOperation _ _ POP _ state = addErr "Stack did not contain any items" state
