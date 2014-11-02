@@ -11,7 +11,6 @@ module EthDB (
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import qualified Crypto.Hash.SHA3 as C
-import Data.Binary
 import Data.Bits
 import qualified Data.ByteString as B
 import Data.ByteString.Internal
@@ -212,19 +211,6 @@ prependToKey::N.NibbleString->(N.NibbleString, B.ByteString)->(N.NibbleString, B
 prependToKey prefix (key, val) = (prefix `N.append` key, val)
 
 --newtype SHAPtr = SHAPtr B.ByteString deriving (Show, Eq)
-
-instance Format SHAPtr where
-  format (SHAPtr x) = yellow $ format x
-
-instance Binary SHAPtr where
-  put (SHAPtr x) = do
-      sequence_ $ put <$> B.unpack x
-  get = do
-    error "get undefined for SHAPtr"
-
-instance RLPSerializable SHAPtr where
-    rlpEncode (SHAPtr x) = rlpEncode x
-    rlpDecode x = SHAPtr $ rlpDecode x
 
 data NodeData =
   EmptyNodeData |

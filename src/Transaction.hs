@@ -9,7 +9,6 @@ module Transaction (
 import qualified Crypto.Hash.SHA3 as C
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
-import qualified Data.ByteString.Char8 as BC
 import Data.Binary
 import Data.ByteString.Internal
 import Network.Haskoin.Internals hiding (Address)
@@ -18,11 +17,12 @@ import Numeric
 import ExtendedECDSA
 
 import Address
+import Code
 import Colors
 import Format
 import RLP
 import Util
-import VM
+--import VM
 
 --import Debug.Trace
 
@@ -34,7 +34,7 @@ data Transaction =
     tGasLimit::Integer,
     to::Address,
     value::Integer,
-    tInit::B.ByteString,
+    tInit::Code,
     v::Word8,
     r::Integer,
     s::Integer
@@ -50,7 +50,7 @@ instance Format Transaction where
       "tGasLimit: " ++ show (tGasLimit x) ++ "\n" ++
       "to: " ++ format (to x) ++ "\n" ++
       "value: " ++ show (value x) ++ "\n" ++
-      "tInit: " ++ tab ("\n" ++ showCode (tInit x)) ++ "\n" ++
+      "tInit: " ++ tab ("\n" ++ format (tInit x)) ++ "\n" ++
       "v: " ++ show (v x) ++ "\n" ++
       "r: " ++ show (r x) ++ "\n" ++
       "s: " ++ show (s x) ++ "\n")
@@ -81,7 +81,7 @@ signTransaction privKey t = do
                 rlpEncode $ toInteger $ tGasLimit t,
                 rlpEncode $ to t,
                 rlpEncode $ value t,
-                rlpEncode $ BC.unpack $ tInit t
+                rlpEncode $ tInit t
                 ]
     theHash = fromInteger $ byteString2Integer $ C.hash 256 theData
 
@@ -94,7 +94,7 @@ instance RLPSerializable Transaction where
       tGasLimit = fromInteger $ rlpDecode gl,
       to = rlpDecode toAddr,
       value = rlpDecode val,
-      tInit = BC.pack $ rlpDecode i,
+      tInit = rlpDecode i,
       v = fromInteger $ rlpDecode vVal,
       r = rlpDecode rVal,
       s = rlpDecode sVal
@@ -108,7 +108,7 @@ instance RLPSerializable Transaction where
         rlpEncode $ toInteger $ tGasLimit t,
         rlpEncode $ to t,
         rlpEncode $ value t,
-        rlpEncode $ BC.unpack $ tInit t,
+        rlpEncode $ tInit t,
         rlpEncode $ toInteger $ v t,
         rlpEncode $ r t,
         rlpEncode $ s t
@@ -126,6 +126,6 @@ whoSignedThisTransaction t =
                 rlpEncode $ toInteger $ tGasLimit t',
                 rlpEncode $ to t',
                 rlpEncode $ value t',
-                rlpEncode $ BC.unpack $ tInit t'
+                rlpEncode $ tInit t'
                 ]
   

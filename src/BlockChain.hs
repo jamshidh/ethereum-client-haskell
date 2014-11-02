@@ -29,10 +29,10 @@ import System.Directory
 import Address
 import AddressState
 import Block
+import Code
 import Colors
 import Constants
 import DBs
-import EthDB
 import Format
 import ModifyStateDB
 import RLP
@@ -125,6 +125,7 @@ chargeForCodeRun sdb p a theCoinbase val = do
   addToBalance sdb p2 theCoinbase val
 
 runCodeForTransaction::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPtr
+runCodeForTransaction _ p _ Transaction{tInit=Code c} | B.null c = return p
 runCodeForTransaction sdb p theCoinbase t = do
   vmState <- liftIO $ runCodeFromStart sdb p (tInit t) $ whoSignedThisTransaction t
   result <- liftIO $ getReturnValue vmState
@@ -144,9 +145,9 @@ runCodeForTransaction sdb p theCoinbase t = do
             else return p
       let p3 = addVars sdb p2 (vars vmState)
       liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
-      let gasUsed = tGasLimit t - vmGasRemaining vmState
-      liftIO $ putStrLn $ "gasUsed: " ++ show gasUsed
-      chargeForCodeRun sdb p3 (whoSignedThisTransaction t) theCoinbase (gasUsed * gasPrice t)
+      let usedGas = tGasLimit t - vmGasRemaining vmState
+      liftIO $ putStrLn $ "gasUsed: " ++ show usedGas
+      chargeForCodeRun sdb p3 (whoSignedThisTransaction t) theCoinbase (usedGas * gasPrice t)
 
 runAllCode::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPtr
 runAllCode sdb p theCoinbase t = runCodeForTransaction sdb p theCoinbase t
@@ -182,9 +183,7 @@ addTransaction sdb sr theCoinbase t = do
   sr5 <- if to t == Address 0
          then addToBalance sdb sr4 signAddress (-value t)
          else transferEther sdb sr4 signAddress (to t) (value t)
-  if B.null $ tInit t
-    then return sr5
-    else runAllCode sdb sr5 theCoinbase t
+  runAllCode sdb sr5 theCoinbase t
 
 addTransactions::StateDB->SHAPtr->Address->[Transaction]->ResourceT IO SHAPtr
 addTransactions _ sr _ [] = return sr
@@ -228,7 +227,7 @@ chargeFees sdb sr theCoinbase t = do
   
 chargeForCodeSize::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPtr
 chargeForCodeSize sdb sr theCoinbase t = do
-  let codeSize = B.length $ tInit t
+  let codeSize = codeLength $ tInit t
   let val = 5 * (gasPrice t) * fromIntegral codeSize
   sr2 <- addToBalance sdb sr theCoinbase val
   addToBalance sdb sr2 (whoSignedThisTransaction t) (-val)

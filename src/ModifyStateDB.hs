@@ -23,7 +23,6 @@ import Address
 import AddressState
 import Constants
 import DBs
-import EthDB
 import SHA
 
 --import Debug.Trace
