@@ -31,7 +31,7 @@ data Transaction =
   Transaction {
     tNonce::Integer,
     gasPrice::Integer,
-    tGasLimit::Int,
+    tGasLimit::Integer,
     to::Address,
     value::Integer,
     tInit::B.ByteString,

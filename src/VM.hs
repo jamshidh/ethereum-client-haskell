@@ -165,7 +165,7 @@ data VMState =
     pc::Int,
     done::Bool,
     vmError::Maybe VMError,
-    vmGasUsed::Integer,
+    vmGasRemaining::Integer,
     vars::M.Map String String,
     stack::[Word256],
     --memory::IOArray Integer Word8,
@@ -178,13 +178,13 @@ instance Format VMState where
   format state =
     "pc: " ++ show (pc state) ++ "\n" ++
     "done: " ++ show (done state) ++ "\n" ++
-    "gasUsed: " ++ show (vmGasUsed state) ++ "\n" ++
+    "gasRemaining: " ++ show (vmGasRemaining state) ++ "\n" ++
     "stack: " ++ show (stack state) ++ "\n"
 
 startingState::B.ByteString->Address->IO VMState
 startingState c a = do
   m <- newMemory
-  return VMState { code = c, pc = 0, done=False, vmError=Nothing, vmGasUsed=0, vars=M.empty, stack=[], memory=m, storage = M.empty, address = a }
+  return VMState { code = c, pc = 0, done=False, vmError=Nothing, vmGasRemaining=0, vars=M.empty, stack=[], memory=m, storage = M.empty, address = a }
 
 
 
@@ -299,7 +299,13 @@ runOperation _ _ JUMPI state@VMState{stack=(p:cond:rest)} =
   return $ state { stack=rest, pc=if word2562Bool cond then fromIntegral p else (pc state) }
 
 runOperation _ _ PC state =
-  return $ state { stack=fromIntegral (pc state):stack state }
+  return state{stack=fromIntegral (pc state):stack state}
+
+runOperation _ _ MSIZE state@VMState{memory=Memory mSize _} =
+  return state{stack=mSize:stack state}
+
+runOperation _ _ GAS state =
+  return $ state { stack=fromInteger (vmGasRemaining state):stack state }
 
 -- MSIZE | GAS
   
@@ -317,8 +323,8 @@ movePC state l = state{ pc=pc state + l }
 
 decreaseGas::Operation->VMState->VMState
 decreaseGas STOP state = state
-decreaseGas MSTORE state = state{ vmGasUsed = vmGasUsed state + 2 }
-decreaseGas _ state = state{ vmGasUsed = vmGasUsed state + 1 }
+decreaseGas MSTORE state = state{ vmGasRemaining = vmGasRemaining state - 2 }
+decreaseGas _ state = state{ vmGasRemaining = vmGasRemaining state - 1 }
 
 
 runCode::StateDB->SHAPtr->VMState->IO VMState

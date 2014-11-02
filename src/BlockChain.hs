@@ -143,8 +143,10 @@ runCodeForTransaction sdb p theCoinbase t = do
             then addNewAccount sdb p newAddress resultBytes
             else return p
       let p3 = addVars sdb p2 (vars vmState)
-      liftIO $ putStrLn $ "gasUsed: " ++ show (vmGasUsed vmState)
-      chargeForCodeRun sdb p3 (whoSignedThisTransaction t) theCoinbase (vmGasUsed vmState * gasPrice t)
+      liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
+      let gasUsed = tGasLimit t - vmGasRemaining vmState
+      liftIO $ putStrLn $ "gasUsed: " ++ show gasUsed
+      chargeForCodeRun sdb p3 (whoSignedThisTransaction t) theCoinbase (gasUsed * gasPrice t)
 
 runAllCode::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPtr
 runAllCode sdb p theCoinbase t = runCodeForTransaction sdb p theCoinbase t

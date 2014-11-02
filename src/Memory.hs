@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
 module Memory (
-  Memory,
+  Memory(..),
   newMemory,
   mLoad,
   mLoad8,
