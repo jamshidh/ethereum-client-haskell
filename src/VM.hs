@@ -168,8 +168,8 @@ data VMState =
     vmGasUsed::Integer,
     vars::M.Map String String,
     stack::[Word256],
-    memory::IOArray Integer Word8,
---    memory::Memory,
+    --memory::IOArray Integer Word8,
+    memory::Memory,
     storage::M.Map Word256 Word256,
     address::Address
     }
@@ -183,7 +183,7 @@ instance Format VMState where
 
 startingState::B.ByteString->Address->IO VMState
 startingState c a = do
-  m <- newArray (0, 100) 0
+  m <- newMemory
   return VMState { code = c, pc = 0, done=False, vmError=Nothing, vmGasUsed=0, vars=M.empty, stack=[], memory=m, storage = M.empty, address = a }
 
 
@@ -273,16 +273,15 @@ runOperation _ _ SWAP state = addErr "Stack did not contain enough items" state
 
 
 runOperation _ _ MLOAD state@VMState{stack=(p:rest)} = do
-  bytes <- sequence $ readArray (memory state) <$> fromIntegral <$> [p..p+31]
-  return $ state { stack=fromIntegral (bytes2Integer bytes):rest }
+  bytes <- mLoad (memory state) p --sequence $ readArray (memory state) <$> fromIntegral <$> [p..p+31]
+  return $ state { stack=fromInteger (bytes2Integer bytes):rest }
   
 runOperation _ _ MSTORE state@VMState{stack=(p:val:rest)} = do
-  sequence_ $ uncurry (writeArray (memory state)) <$> zip [fromIntegral p..] (word256ToBytes val)
-  return $
-    state { stack=rest }
+  mStore (memory state) p val
+  return state{stack=rest}
 
 runOperation _ _ MSTORE8 state@VMState{stack=(p:val:rest)} = do
-  writeArray (memory state) (fromIntegral p) (fromIntegral $ val .&. 0xFF)
+  mStore8 (memory state) (fromIntegral p) (fromIntegral $ val .&. 0xFF)
   return $
     state { stack=rest }
 
@@ -340,7 +339,7 @@ getReturnValue state = do
       vals <- 
         case stack state of
           [address, size] ->
-            sequence $ readArray (memory state) <$> fromIntegral <$> [address..address+size-1]
+            sequence $ mLoad8 (memory state) <$> fromIntegral <$> [address..address+size-1]
           [] -> return [] --Happens when STOP is called
           _ -> error $ "Error in getReturnValue: VM ended with stack in an unsupported case"
       return $ Right $ B.pack vals
