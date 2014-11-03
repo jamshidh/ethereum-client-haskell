@@ -5,6 +5,7 @@ import qualified Data.ByteString as B
 
 import Address
 import Block
+import Code
 
 data Environment =
     Environment {
@@ -14,7 +15,7 @@ data Environment =
       envInputData::B.ByteString,
       envSender::Address,
       envValue::Integer,
-      envCode::B.ByteString,
+      envCode::Code,
       envBlock::Block
     }
 

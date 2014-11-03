@@ -134,7 +134,13 @@ runOperation sdb p BALANCE _ state@VMState{stack=(x:rest)} = do
   return state{stack=(fromIntegral $ fromMaybe 0 $ balance <$> maybeAddressState):rest}
 runOperation _ _ BALANCE _ state = addErr "stack did not contain enough elements" state
 
---ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | PREVHASH | 
+--ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY
+
+runOperation _ _ CODESIZE Environment{envCode=c} state = return state{stack=fromIntegral (codeLength c):stack state}
+
+runOperation _ _ CODECOPY Environment{envCode=Code c} state@VMState{stack=memP:codeP:size:rest} = do
+  mStoreByteString (memory state) memP $ B.take (fromIntegral size) $ B.drop (fromIntegral codeP) c
+  return state{stack=rest}
 
 runOperation _ _ GASPRICE Environment{envGasPrice=gp} state = return state{stack=fromIntegral gp:stack state}
 
