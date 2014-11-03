@@ -129,7 +129,7 @@ runCodeForTransaction::StateDB->SHAPtr->Block->Transaction->ResourceT IO SHAPtr
 runCodeForTransaction _ p _ Transaction{tInit=Code c} | B.null c = return p
 runCodeForTransaction sdb p b t = do
   vmState <-
-    liftIO $ runCodeFromStart sdb p (tInit t) (whoSignedThisTransaction t)
+    liftIO $ runCodeFromStart sdb p (whoSignedThisTransaction t)
     Environment{
       envGasPrice=gasPrice t,
       envBlock=b,
@@ -138,7 +138,7 @@ runCodeForTransaction sdb p b t = do
       envInputData = undefined,
       envSender = undefined,
       envValue = undefined,
-      envCode = undefined
+      envCode = tInit t
       }
   result <- liftIO $ getReturnValue vmState
   case result of

@@ -33,7 +33,6 @@ data VMError = VMError String deriving (Show)
 
 data VMState =
   VMState {
-    code::Code,
     pc::Int,
     done::Bool,
     vmError::Maybe VMError,
@@ -54,10 +53,10 @@ instance Format VMState where
     "gasRemaining: " ++ show (vmGasRemaining state) ++ "\n" ++
     "stack: " ++ show (stack state) ++ "\n"
 
-startingState::Code->Address->IO VMState
-startingState c a = do
+startingState::Address->IO VMState
+startingState a = do
   m <- newMemory
-  return VMState { code = c, pc = 0, done=False, vmError=Nothing, vmGasRemaining=0, vars=M.empty, stack=[], memory=m, storage = M.empty, address = a, markedForSuicide=False }
+  return VMState { pc = 0, done=False, vmError=Nothing, vmGasRemaining=0, vars=M.empty, stack=[], memory=m, storage = M.empty, address = a, markedForSuicide=False }
 
 
 
@@ -81,44 +80,44 @@ word2562Bool::Word256->Bool
 word2562Bool 1 = True
 word2562Bool _ = False
 
-addErr::String->VMState->IO VMState
-addErr message state = do
-  let (op, _) = getOperationAt (code state) (pc state)
+addErr::String->Code->VMState->IO VMState
+addErr message c state = do
+  let (op, _) = getOperationAt c (pc state)
   return state{vmError=Just $ VMError (message ++ " for a call to " ++ show op)}
 
-binaryAction::(Word256->Word256->Word256)->VMState->IO VMState
-binaryAction action state@VMState{stack=(x:y:rest)} = return state{stack=(x `action` y:rest)}
-binaryAction _ state = addErr "stack did not contain enough elements" state
+binaryAction::(Word256->Word256->Word256)->Environment->VMState->IO VMState
+binaryAction action _ state@VMState{stack=(x:y:rest)} = return state{stack=(x `action` y:rest)}
+binaryAction _ env state = addErr "stack did not contain enough elements" (envCode env) state
 
-unaryAction::(Word256->Word256)->VMState->IO VMState
-unaryAction action state@VMState{stack=(x:rest)} = return state{stack=(action x:rest)}
-unaryAction _ state = addErr "stack did not contain enough elements" state
+unaryAction::(Word256->Word256)->Environment->VMState->IO VMState
+unaryAction action _ state@VMState{stack=(x:rest)} = return state{stack=(action x:rest)}
+unaryAction _ env state = addErr "stack did not contain enough elements" (envCode env) state
 
 
 
 runOperation::StateDB->SHAPtr->Operation->Environment->VMState->IO VMState
 runOperation _ _ STOP _ state = return state{done=True}
 
-runOperation _ _ ADD _ state = binaryAction (+) state
-runOperation _ _ MUL _ state = binaryAction (*) state
-runOperation _ _ SUB _ state = binaryAction (-) state
-runOperation _ _ DIV _ state = binaryAction quot state
-runOperation _ _ SDIV _ state = binaryAction undefined state
-runOperation _ _ MOD _ state = binaryAction mod state
-runOperation _ _ SMOD _ state = binaryAction undefined state
-runOperation _ _ EXP _ state = binaryAction (^) state
-runOperation _ _ NEG _ state = unaryAction negate state
-runOperation _ _ LT _ state = binaryAction ((bool2Word256 .) . (<)) state
-runOperation _ _ GT _ state = binaryAction ((bool2Word256 .) . (>)) state
-runOperation _ _ SLT _ state = binaryAction undefined state
-runOperation _ _ SGT _ state = binaryAction undefined state
-runOperation _ _ EQ _ state = binaryAction ((bool2Word256 .) . (==)) state
-runOperation _ _ NOT _ state = unaryAction (bool2Word256 . not . word2562Bool) state
-runOperation _ _ AND _ state = binaryAction (.&.) state
-runOperation _ _ OR _ state = binaryAction (.|.) state
-runOperation _ _ XOR _ state = binaryAction xor state
+runOperation _ _ ADD env state = binaryAction (+) env state
+runOperation _ _ MUL env state = binaryAction (*) env state
+runOperation _ _ SUB env state = binaryAction (-) env state
+runOperation _ _ DIV env state = binaryAction quot env state
+runOperation _ _ SDIV env state = binaryAction undefined env state
+runOperation _ _ MOD env state = binaryAction mod env state
+runOperation _ _ SMOD env state = binaryAction undefined env state
+runOperation _ _ EXP env state = binaryAction (^) env state
+runOperation _ _ NEG env state = unaryAction negate env state
+runOperation _ _ LT env state = binaryAction ((bool2Word256 .) . (<)) env state
+runOperation _ _ GT env state = binaryAction ((bool2Word256 .) . (>)) env state
+runOperation _ _ SLT env state = binaryAction undefined env state
+runOperation _ _ SGT env state = binaryAction undefined env state
+runOperation _ _ EQ env state = binaryAction ((bool2Word256 .) . (==)) env state
+runOperation _ _ NOT env state = unaryAction (bool2Word256 . not . word2562Bool) env state
+runOperation _ _ AND env state = binaryAction (.&.) env state
+runOperation _ _ OR env state = binaryAction (.|.) env state
+runOperation _ _ XOR env state = binaryAction xor env state
 
-runOperation _ _ BYTE _ state = binaryAction (\x y -> y `shiftR` fromIntegral x .&. 0xFF) state
+runOperation _ _ BYTE env state = binaryAction (\x y -> y `shiftR` fromIntegral x .&. 0xFF) env state
 
 runOperation _ _ SHA3 _ state@VMState{stack=(p:size:rest)} = do
   SHA theHash <- hash <$> mLoadByteString (memory state) p size
@@ -132,7 +131,7 @@ runOperation sdb p BALANCE _ state@VMState{stack=(x:rest)} = do
   maybeAddressState <- runResourceT $ do
                     getAddressState sdb p (Address $ fromIntegral x)
   return state{stack=(fromIntegral $ fromMaybe 0 $ balance <$> maybeAddressState):rest}
-runOperation _ _ BALANCE _ state = addErr "stack did not contain enough elements" state
+runOperation _ _ BALANCE env state = addErr "stack did not contain enough elements" (envCode env) state
 
 runOperation _ _ ORIGIN Environment{envSender=Address sender} state = return state{stack=fromIntegral sender:stack state}
 
@@ -168,13 +167,13 @@ runOperation _ _ DIFFICULTY Environment{envBlock=Block{blockData=bd}} state = re
 runOperation _ _ GASLIMIT Environment{envBlock=Block{blockData=bd}} state = return state{stack=fromIntegral (gasLimit bd):stack state}
 
 runOperation _ _ POP _ state@VMState{stack=_:rest} = return state{stack=rest}
-runOperation _ _ POP _ state = addErr "Stack did not contain any items" state
+runOperation _ _ POP env state = addErr "Stack did not contain any items" (envCode env) state
 
 runOperation _ _ DUP _ state@VMState{stack=x:rest} = return state{stack=x:x:rest}
-runOperation _ _ DUP _ state = addErr "Stack did not contain any items" state
+runOperation _ _ DUP env state = addErr "Stack did not contain any items" (envCode env) state
 
 runOperation _ _ SWAP _ state@VMState{stack=x:y:rest} = return state{stack=y:x:rest}
-runOperation _ _ SWAP _ state = addErr "Stack did not contain enough items" state
+runOperation _ _ SWAP env state = addErr "Stack did not contain enough items" (envCode env) state
 
 runOperation _ _ MLOAD _ state@VMState{stack=(p:rest)} = do
   bytes <- mLoad (memory state) p --sequence $ readArray (memory state) <$> fromIntegral <$> [p..p+31]
@@ -245,7 +244,7 @@ decreaseGas _ state = state{ vmGasRemaining = vmGasRemaining state - 1 }
 
 runCode::StateDB->SHAPtr->Environment->VMState->IO VMState
 runCode sdb p env state = do
-  let (op, len) = getOperationAt (code state) (pc state)
+  let (op, len) = getOperationAt (envCode env) (pc state)
   result <- runOperation sdb p op env state
   case result of
     VMState{vmError=Just _} -> return result
@@ -268,7 +267,7 @@ getReturnValue state = do
   
 
 
-runCodeFromStart::StateDB->SHAPtr->Code->Address->Environment->IO VMState
-runCodeFromStart sdb p rom add env = do
-  s <- startingState rom add
+runCodeFromStart::StateDB->SHAPtr->Address->Environment->IO VMState
+runCodeFromStart sdb p add env = do
+  s <- startingState add
   runCode sdb p env s
