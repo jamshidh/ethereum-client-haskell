@@ -134,7 +134,21 @@ runOperation sdb p BALANCE _ state@VMState{stack=(x:rest)} = do
   return state{stack=(fromIntegral $ fromMaybe 0 $ balance <$> maybeAddressState):rest}
 runOperation _ _ BALANCE _ state = addErr "stack did not contain enough elements" state
 
---ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY
+runOperation _ _ ORIGIN Environment{envSender=Address sender} state = return state{stack=fromIntegral sender:stack state}
+
+runOperation _ _ CALLER Environment{envOwner=Address owner} state = return state{stack=fromIntegral owner:stack state}
+
+runOperation _ _ CALLVALUE Environment{envValue=val} state = return state{stack=fromIntegral val:stack state}
+
+runOperation _ _ CALLDATALOAD Environment{envInputData=d} state@VMState{stack=p:rest} = do
+  let val = bytes2Integer $ B.unpack $ B.take 32 $ B.drop (fromIntegral p) d
+  return state{stack=fromIntegral val:rest}
+
+runOperation _ _ CALLDATASIZE Environment{envInputData=d} state = return state{stack=fromIntegral (B.length d):stack state}
+
+runOperation _ _ CALLDATACOPY Environment{envInputData=d} state@VMState{stack=memP:codeP:size:rest} = do
+  mStoreByteString (memory state) memP $ B.take (fromIntegral size) $ B.drop (fromIntegral codeP) d
+  return state{stack=rest}
 
 runOperation _ _ CODESIZE Environment{envCode=c} state = return state{stack=fromIntegral (codeLength c):stack state}
 

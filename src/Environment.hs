@@ -9,8 +9,8 @@ import Code
 
 data Environment =
     Environment {
+      envOwner::Address,
       envOrigin::Address,
-      envCaller::Address,
       envGasPrice::Integer,
       envInputData::B.ByteString,
       envSender::Address,
