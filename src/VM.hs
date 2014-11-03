@@ -1,5 +1,7 @@
 
-module VM where
+module VM (
+  runCodeFromStart
+  ) where
 
 import Prelude hiding (LT, GT, EQ)
 
@@ -18,59 +20,13 @@ import Block
 import Code
 import DBs
 import Environment
-import Format
 import Memory
 import Opcodes
 import SHA
 import Util
+import VMState
 
 --import Debug.Trace
-
-
-
-
-data VMError = VMError String deriving (Show)
-
-data VMState =
-  VMState {
-    pc::Int,
-    done::Bool,
-    vmError::Maybe VMError,
-    vmGasRemaining::Integer,
-    vars::M.Map String String,
-    stack::[Word256],
-    --memory::IOArray Integer Word8,
-    memory::Memory,
-    storage::M.Map Word256 Word256,
-    address::Address,
-    markedForSuicide::Bool
-    }
-
-instance Format VMState where
-  format state =
-    "pc: " ++ show (pc state) ++ "\n" ++
-    "done: " ++ show (done state) ++ "\n" ++
-    "gasRemaining: " ++ show (vmGasRemaining state) ++ "\n" ++
-    "stack: " ++ show (stack state) ++ "\n"
-
-startingState::Address->IO VMState
-startingState a = do
-  m <- newMemory
-  return VMState { pc = 0, done=False, vmError=Nothing, vmGasRemaining=0, vars=M.empty, stack=[], memory=m, storage = M.empty, address = a, markedForSuicide=False }
-
-
-
-
-
-
-
-
---SHA3 | ADDRESS | BALANCE | ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | PREVHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | POP | DUP | SWAP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | JUMP | JUMPI | PC | MSIZE | GAS
-
---               | PUSH1 Word8 | PUSH2 | PUSH3 | PUSH4 | PUSH5 | PUSH6 | PUSH7 | PUSH8 | PUSH9 | PUSH10 | PUSH11 | PUSH12 | PUSH13 | PUSH14 | PUSH15 | PUSH16 | PUSH17 | PUSH18 | PUSH19 | PUSH20 | PUSH21 | PUSH22 | PUSH23 | PUSH24 | PUSH25 | PUSH26 | PUSH27 | PUSH28 | PUSH29 | PUSH30 | PUSH31 | PUSH32
-
-
-
 
 bool2Word256::Bool->Word256
 bool2Word256 True = 1
@@ -79,11 +35,6 @@ bool2Word256 False = 0
 word2562Bool::Word256->Bool
 word2562Bool 1 = True
 word2562Bool _ = False
-
-addErr::String->Code->VMState->IO VMState
-addErr message c state = do
-  let (op, _) = getOperationAt c (pc state)
-  return state{vmError=Just $ VMError (message ++ " for a call to " ++ show op)}
 
 binaryAction::(Word256->Word256->Word256)->Environment->VMState->IO VMState
 binaryAction action _ state@VMState{stack=(x:y:rest)} = return state{stack=(x `action` y:rest)}
@@ -123,9 +74,7 @@ runOperation _ _ SHA3 _ state@VMState{stack=(p:size:rest)} = do
   SHA theHash <- hash <$> mLoadByteString (memory state) p size
   return state{stack=theHash:rest}
 
-runOperation _ _ ADDRESS _ state = return state{stack=fromIntegral a:stack state}
-    where
-      Address a = address state
+runOperation _ _ ADDRESS Environment{envOwner=Address a} state = return state{stack=fromIntegral a:stack state}
 
 runOperation sdb p BALANCE _ state@VMState{stack=(x:rest)} = do
   maybeAddressState <- runResourceT $ do
@@ -226,12 +175,14 @@ runOperation _ _ RETURN _ state =
 runOperation _ _ SUICIDE _ state =
   return $ state { done=True, markedForSuicide=True }
 
-
-
-
-
-
 runOperation _ _ x _ _ = error $ "Missing case in runOperation: " ++ show x
+
+
+
+-------------------
+
+
+
 
 movePC::VMState->Int->VMState
 movePC state l = state{ pc=pc state + l }
@@ -251,23 +202,7 @@ runCode sdb p env state = do
     VMState{done=True} -> return $ decreaseGas op $ movePC result len
     state2 -> runCode sdb p env $ decreaseGas op $ movePC state2 len
 
-getReturnValue::VMState->IO (Either VMError B.ByteString)
-getReturnValue state = do
-  case vmError state of
-    Just err -> return $ Left err
-    Nothing -> do
-      --TODO- This needs better error handling other than to just crash if the stack isn't 2 items long
-      vals <- 
-        case stack state of
-          [add, size] ->
-            sequence $ mLoad8 (memory state) <$> fromIntegral <$> [add..add+size-1]
-          [] -> return [] --Happens when STOP is called
-          _ -> error $ "Error in getReturnValue: VM ended with stack in an unsupported case"
-      return $ Right $ B.pack vals
-  
+runCodeFromStart::StateDB->SHAPtr->Environment->IO VMState
+runCodeFromStart sdb p env = do
+  runCode sdb p env =<< startingState
 
-
-runCodeFromStart::StateDB->SHAPtr->Address->Environment->IO VMState
-runCodeFromStart sdb p add env = do
-  s <- startingState add
-  runCode sdb p env s

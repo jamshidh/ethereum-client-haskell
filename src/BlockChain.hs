@@ -19,7 +19,6 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import Data.Functor
-import qualified Data.Map as M
 import Data.Maybe
 import Data.Time
 import Data.Time.Clock.POSIX
@@ -41,6 +40,7 @@ import SHA
 import Transaction
 import TransactionReceipt
 import VM
+import VMState
 
 --import Debug.Trace
 
@@ -116,10 +116,6 @@ checkValidity bdb sdb b = do
 -}
 
 
-addVars::StateDB->SHAPtr->M.Map String String->SHAPtr
---addVars sdb p vars = p
-addVars _ p _ = p
-
 chargeForCodeRun::StateDB->SHAPtr->Address->Address->Integer->ResourceT IO SHAPtr
 chargeForCodeRun sdb p a theCoinbase val = do
   p2 <- addToBalance sdb p a (-val)
@@ -129,11 +125,11 @@ runCodeForTransaction::StateDB->SHAPtr->Block->Transaction->ResourceT IO SHAPtr
 runCodeForTransaction _ p _ Transaction{tInit=Code c} | B.null c = return p
 runCodeForTransaction sdb p b t = do
   vmState <-
-    liftIO $ runCodeFromStart sdb p (whoSignedThisTransaction t)
+    liftIO $ runCodeFromStart sdb p
     Environment{
       envGasPrice=gasPrice t,
       envBlock=b,
-      envOwner = undefined,
+      envOwner = whoSignedThisTransaction t,
       envOrigin = undefined,
       envInputData = undefined,
       envSender = undefined,
@@ -155,11 +151,10 @@ runCodeForTransaction sdb p b t = do
       p2 <- if value t == 0
             then addNewAccount sdb p newAddress resultBytes
             else return p
-      let p3 = addVars sdb p2 (vars vmState)
       liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
       let usedGas = tGasLimit t - vmGasRemaining vmState
       liftIO $ putStrLn $ "gasUsed: " ++ show usedGas
-      chargeForCodeRun sdb p3 (whoSignedThisTransaction t) (coinbase $ blockData b) (usedGas * gasPrice t)
+      chargeForCodeRun sdb p2 (whoSignedThisTransaction t) (coinbase $ blockData b) (usedGas * gasPrice t)
 
 runAllCode::StateDB->SHAPtr->Block->Transaction->ResourceT IO SHAPtr
 runAllCode sdb p b t = runCodeForTransaction sdb p b t
