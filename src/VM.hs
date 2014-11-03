@@ -43,7 +43,8 @@ data VMState =
     --memory::IOArray Integer Word8,
     memory::Memory,
     storage::M.Map Word256 Word256,
-    address::Address
+    address::Address,
+    markedForSuicide::Bool
     }
 
 instance Format VMState where
@@ -56,7 +57,7 @@ instance Format VMState where
 startingState::Code->Address->IO VMState
 startingState c a = do
   m <- newMemory
-  return VMState { code = c, pc = 0, done=False, vmError=Nothing, vmGasRemaining=0, vars=M.empty, stack=[], memory=m, storage = M.empty, address = a }
+  return VMState { code = c, pc = 0, done=False, vmError=Nothing, vmGasRemaining=0, vars=M.empty, stack=[], memory=m, storage = M.empty, address = a, markedForSuicide=False }
 
 
 
@@ -69,7 +70,6 @@ startingState c a = do
 
 --               | PUSH1 Word8 | PUSH2 | PUSH3 | PUSH4 | PUSH5 | PUSH6 | PUSH7 | PUSH8 | PUSH9 | PUSH10 | PUSH11 | PUSH12 | PUSH13 | PUSH14 | PUSH15 | PUSH16 | PUSH17 | PUSH18 | PUSH19 | PUSH20 | PUSH21 | PUSH22 | PUSH23 | PUSH24 | PUSH25 | PUSH26 | PUSH27 | PUSH28 | PUSH29 | PUSH30 | PUSH31 | PUSH32
 
---               | CREATE | CALL | RETURN | SUICIDE deriving (Show, Eq, Ord)
 
 
 
@@ -214,8 +214,24 @@ runOperation _ _ GAS _ state =
 runOperation _ _ (PUSH vals) _ state =
   return $
   state { stack=(fromIntegral <$> vals) ++ stack state }
+
+
+
+--               | CREATE | CALL | RETURN | SUICIDE deriving (Show, Eq, Ord)
+
+
+
 runOperation _ _ RETURN _ state =
   return $ state { done=True }
+
+runOperation _ _ SUICIDE _ state =
+  return $ state { done=True, markedForSuicide=True }
+
+
+
+
+
+
 runOperation _ _ x _ _ = error $ "Missing case in runOperation: " ++ show x
 
 movePC::VMState->Int->VMState
