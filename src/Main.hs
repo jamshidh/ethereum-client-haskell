@@ -44,6 +44,8 @@ import SHA
 import Util
 import Wire
 
+import SampleTransactions
+
 --import Debug.Trace
 
 
@@ -200,22 +202,7 @@ main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
 
         }
 
-  {-
-  let tx = Transaction {
-         tNonce = 28,
-         gasPrice = 0x9184e72a000,
-         tGasLimit = 550,
-         to = Address 0, --0x5b42bd01ff7b368cd80a477cb1cf0d407e2b1cbe,
-         value = 3,
-         tInit = 0x600260005460206000f2,
-         v = 0,
-         r = 0,
-         s = 0
-         }
-
-  signedTx <- withSource devURandom $
-                   signTransaction prvKey tx
-  -}
+  --signedTx <- withSource devURandom $ signTransaction prvKey simpleTX
 
   {-
   let b = Block{blockData=
