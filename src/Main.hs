@@ -10,7 +10,6 @@ import qualified Crypto.Hash.SHA3 as C
 import Data.Binary.Put
 import Data.Bits
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
 import Data.ByteString.Internal
 import Data.Function
@@ -37,13 +36,11 @@ import EthDB
 import Format
 import ModifyStateDB
 import RLP
-import SampleTransaction
+import SampleTransactions
 import SHA
 import SignedTransaction
 import Util
 import Wire
-
-import SampleTransactions
 
 --import Debug.Trace
 
