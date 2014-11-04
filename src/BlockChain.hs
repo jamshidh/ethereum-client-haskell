@@ -37,6 +37,7 @@ import Format
 import ModifyStateDB
 import RLP
 import SHA
+import SignedTransaction
 import Transaction
 import TransactionReceipt
 import VM
@@ -121,20 +122,20 @@ chargeForCodeRun sdb p a theCoinbase val = do
   p2 <- addToBalance sdb p a (-val)
   addToBalance sdb p2 theCoinbase val
 
-runCodeForTransaction::StateDB->SHAPtr->Block->Transaction->ResourceT IO SHAPtr
-runCodeForTransaction _ p _ Transaction{tInit=Code c} | B.null c = return p
-runCodeForTransaction sdb p b t = do
+runCodeForTransaction::StateDB->SHAPtr->Block->SignedTransaction->ResourceT IO SHAPtr
+runCodeForTransaction _ p _ SignedTransaction{unsignedTransaction=Transaction{tInit=Code c}} | B.null c = return p
+runCodeForTransaction sdb p b t@SignedTransaction{unsignedTransaction=ut} = do
   vmState <-
     liftIO $ runCodeFromStart sdb p
     Environment{
-      envGasPrice=gasPrice t,
+      envGasPrice=gasPrice ut,
       envBlock=b,
       envOwner = whoSignedThisTransaction t,
       envOrigin = undefined,
       envInputData = undefined,
       envSender = undefined,
       envValue = undefined,
-      envCode = tInit t
+      envCode = tInit ut
       }
   result <- liftIO $ getReturnValue vmState
   case result of
@@ -148,17 +149,13 @@ runCodeForTransaction sdb p b t = do
       --when value doesn't equal 0....  I am mimicking this here so that I can work with that
       --client, but I really should either try to understand this better or if I convince myself
       --that there is a bug, report it.
-      p2 <- if value t == 0
+      p2 <- if value ut == 0
             then addNewAccount sdb p newAddress resultBytes
             else return p
       liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
-      let usedGas = tGasLimit t - vmGasRemaining vmState
+      let usedGas = tGasLimit ut - vmGasRemaining vmState
       liftIO $ putStrLn $ "gasUsed: " ++ show usedGas
-      chargeForCodeRun sdb p2 (whoSignedThisTransaction t) (coinbase $ blockData b) (usedGas * gasPrice t)
-
-runAllCode::StateDB->SHAPtr->Block->Transaction->ResourceT IO SHAPtr
-runAllCode sdb p b t = runCodeForTransaction sdb p b t
- 
+      chargeForCodeRun sdb p2 (whoSignedThisTransaction t) (coinbase $ blockData b) (usedGas * gasPrice ut)
 
 addBlocks::[Block]->IO ()
 addBlocks blocks = runResourceT $ do
@@ -168,31 +165,31 @@ addBlocks blocks = runResourceT $ do
   sdb <- DB.open (homeDir ++ stateDBPath) options
   forM_ blocks (addBlock bdb ddb sdb)
 
-getNewAddress::Transaction->Address
+getNewAddress::SignedTransaction->Address
 getNewAddress t =
-  let theHash = hash $ rlpSerialize $ RLPArray [rlpEncode $ whoSignedThisTransaction t, rlpEncode $ tNonce t]
+  let theHash = hash $ rlpSerialize $ RLPArray [rlpEncode $ whoSignedThisTransaction t, rlpEncode $ tNonce $ unsignedTransaction t]
   in decode $ BL.drop 12 $ encode $ theHash
 
-isTransactionValid::StateDB->SHAPtr->Transaction->ResourceT IO Bool
+isTransactionValid::StateDB->SHAPtr->SignedTransaction->ResourceT IO Bool
 isTransactionValid sdb p t = do
   maybeAddressState <- getAddressState sdb p $ whoSignedThisTransaction t
   case maybeAddressState of
-    Nothing -> return (0 == tNonce t)
-    Just addressState -> return (addressStateNonce addressState == tNonce t)
+    Nothing -> return (0 == tNonce (unsignedTransaction t))
+    Just addressState -> return (addressStateNonce addressState == tNonce (unsignedTransaction t))
 
-addTransaction::StateDB->SHAPtr->Block->Transaction->ResourceT IO SHAPtr
+addTransaction::StateDB->SHAPtr->Block->SignedTransaction->ResourceT IO SHAPtr
 addTransaction sdb sr b t = do
   liftIO $ putStrLn "adding to nonces"
   let signAddress = whoSignedThisTransaction t
   sr2 <- addNonce sdb sr signAddress
   sr3 <- chargeFees sdb sr2 (coinbase $ blockData b) t
   sr4 <- chargeForCodeSize sdb sr3 (coinbase $ blockData b) t
-  sr5 <- if to t == Address 0
-         then addToBalance sdb sr4 signAddress (-value t)
-         else transferEther sdb sr4 signAddress (to t) (value t)
-  runAllCode sdb sr5 b t
+  sr5 <- if to (unsignedTransaction t) == Address 0
+         then addToBalance sdb sr4 signAddress (-value (unsignedTransaction t))
+         else transferEther sdb sr4 signAddress (to $ unsignedTransaction t) (value (unsignedTransaction t))
+  runCodeForTransaction sdb sr5 b t
 
-addTransactions::StateDB->SHAPtr->Block->[Transaction]->ResourceT IO SHAPtr
+addTransactions::StateDB->SHAPtr->Block->[SignedTransaction]->ResourceT IO SHAPtr
 addTransactions _ sr _ [] = return sr
 addTransactions sdb sr b (t:rest) = do
   valid <- isTransactionValid sdb sr t
@@ -227,15 +224,15 @@ addBlock bdb ddb sdb b = do
   replaceBestIfBetter bdb ddb b
 
 
-chargeFees::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPtr
+chargeFees::StateDB->SHAPtr->Address->SignedTransaction->ResourceT IO SHAPtr
 chargeFees sdb sr theCoinbase t = do
   sr2 <- addToBalance sdb sr theCoinbase (5*finney)
   addToBalance sdb sr2 (whoSignedThisTransaction t) (-5*finney)
   
-chargeForCodeSize::StateDB->SHAPtr->Address->Transaction->ResourceT IO SHAPtr
+chargeForCodeSize::StateDB->SHAPtr->Address->SignedTransaction->ResourceT IO SHAPtr
 chargeForCodeSize sdb sr theCoinbase t = do
-  let codeSize = codeLength $ tInit t
-  let val = 5 * (gasPrice t) * fromIntegral codeSize
+  let codeSize = codeLength $ tInit $ unsignedTransaction t
+  let val = 5 * (gasPrice $ unsignedTransaction t) * fromIntegral codeSize
   sr2 <- addToBalance sdb sr theCoinbase val
   addToBalance sdb sr2 (whoSignedThisTransaction t) (-val)
   

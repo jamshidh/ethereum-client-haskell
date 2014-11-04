@@ -25,9 +25,6 @@ import Numeric
 import System.Directory
 import System.IO
 
---remove this
---import Data.Time
-
 import Network.Simple.TCP
 
 import Address
@@ -40,7 +37,7 @@ import Format
 import ModifyStateDB
 import RLP
 import SHA
---import Transaction
+import SignedTransaction
 import Util
 import Wire
 
@@ -202,7 +199,7 @@ main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
 
         }
 
-  --signedTx <- withSource devURandom $ signTransaction prvKey simpleTX
+  signedTx <- withSource devURandom $ signTransaction prvKey simpleTX
 
   {-
   let b = Block{blockData=
@@ -235,7 +232,7 @@ main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
   --sendMessage socket $ Blocks [addNonceToBlock newBlock theNonce]
 
 
-  --sendMessage socket $ Transactions [signedTx]
+  sendMessage socket $ Transactions [signedTx]
 
   requestNewBlocks socket
   --sendMessage socket $ GetChain [blockHash genesisBlock] 0x40

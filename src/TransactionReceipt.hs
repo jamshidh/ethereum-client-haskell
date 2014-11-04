@@ -6,7 +6,7 @@ module TransactionReceipt(
 
 import Colors
 import Format
-import Transaction
+import SignedTransaction
 import RLP
 
 data PostTransactionState = PostTransactionState String deriving (Show)
@@ -18,7 +18,7 @@ instance RLPSerializable PostTransactionState where
 
 data TransactionReceipt =
   TransactionReceipt {
-    theTransaction::Transaction,
+    theTransaction::SignedTransaction,
     postTransactionState::PostTransactionState,
     cumulativeGasUsed::Integer
     } deriving (Show)
