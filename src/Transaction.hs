@@ -1,20 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Transaction (
-  Transaction(..),
-  signTransaction,
-  whoSignedThisTransaction
+  Transaction(..)
   ) where
-
-import qualified Crypto.Hash.SHA3 as C
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Base16 as B16
-import Data.Binary
-import Data.ByteString.Internal
-import Network.Haskoin.Internals hiding (Address)
-import Numeric
-
-import ExtendedECDSA
 
 import Address
 import Code
@@ -34,10 +22,7 @@ data Transaction =
     tGasLimit::Integer,
     to::Address,
     value::Integer,
-    tInit::Code,
-    v::Word8,
-    r::Integer,
-    s::Integer
+    tInit::Code
     } deriving (Show)
 
 instance Format Transaction where
@@ -50,54 +35,17 @@ instance Format Transaction where
       "tGasLimit: " ++ show (tGasLimit x) ++ "\n" ++
       "to: " ++ format (to x) ++ "\n" ++
       "value: " ++ show (value x) ++ "\n" ++
-      "tInit: " ++ tab ("\n" ++ format (tInit x)) ++ "\n" ++
-      "v: " ++ show (v x) ++ "\n" ++
-      "r: " ++ show (r x) ++ "\n" ++
-      "s: " ++ show (s x) ++ "\n")
-
-addLeadingZerosTo64::String->String
-addLeadingZerosTo64 x = replicate (64 - length x) '0' ++ x
-
-signTransaction::Monad m=>PrvKey->Transaction->SecretT m Transaction
-signTransaction privKey t = do
-  ExtendedSignature signature yIsOdd <- extSignMsg theHash privKey
-
-  return $ t {
-    v = if yIsOdd then 0x1c else 0x1b,
-    r =
-      case B16.decode $ B.pack $ map c2w $ addLeadingZerosTo64 $ showHex (sigR signature) "" of
-        (val, "") -> byteString2Integer val
-        _ -> error ("error: sigR is: " ++ showHex (sigR signature) ""),
-    s = 
-      case B16.decode $ B.pack $ map c2w $ addLeadingZerosTo64 $ showHex (sigS signature) "" of
-        (val, "") -> byteString2Integer val
-        _ -> error ("error: sigS is: " ++ showHex (sigS signature) "")
-    }
-  where
-    theData = rlpSerialize $
-              RLPArray [
-                rlpEncode $ tNonce t,
-                rlpEncode $ gasPrice t,
-                rlpEncode $ toInteger $ tGasLimit t,
-                rlpEncode $ to t,
-                rlpEncode $ value t,
-                rlpEncode $ tInit t
-                ]
-    theHash = fromInteger $ byteString2Integer $ C.hash 256 theData
-
+      "tInit: " ++ tab ("\n" ++ format (tInit x)) ++ "\n")
 
 instance RLPSerializable Transaction where
-  rlpDecode (RLPArray [n, gp, gl, toAddr, val, i, vVal, rVal, sVal]) =
+  rlpDecode (RLPArray [n, gp, gl, toAddr, val, i]) =
     Transaction {
       tNonce = rlpDecode n,
       gasPrice = rlpDecode gp,
       tGasLimit = fromInteger $ rlpDecode gl,
       to = rlpDecode toAddr,
       value = rlpDecode val,
-      tInit = rlpDecode i,
-      v = fromInteger $ rlpDecode vVal,
-      r = rlpDecode rVal,
-      s = rlpDecode sVal
+      tInit = rlpDecode i
       }
   rlpDecode x = error ("rlpDecode for Transaction called on non block object: " ++ show x)
 
@@ -108,24 +56,5 @@ instance RLPSerializable Transaction where
         rlpEncode $ toInteger $ tGasLimit t,
         rlpEncode $ to t,
         rlpEncode $ value t,
-        rlpEncode $ tInit t,
-        rlpEncode $ toInteger $ v t,
-        rlpEncode $ r t,
-        rlpEncode $ s t
+        rlpEncode $ tInit t
         ]
-
-whoSignedThisTransaction::Transaction->Address
-whoSignedThisTransaction t =
-  pubKey2Address (getPubKeyFromSignature xSignature (fromInteger $ byteString2Integer $ C.hash 256 (theData t)))
-      where
-        xSignature = ExtendedSignature (Signature (fromInteger $ r t) (fromInteger $ s t)) (0x1c == v t)
-        theData t' = rlpSerialize $
-              RLPArray [
-                rlpEncode $ tNonce t',
-                rlpEncode $ gasPrice t',
-                rlpEncode $ toInteger $ tGasLimit t',
-                rlpEncode $ to t',
-                rlpEncode $ value t',
-                rlpEncode $ tInit t'
-                ]
-  

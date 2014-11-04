@@ -26,9 +26,6 @@ import System.Directory
 import System.Entropy
 import System.IO
 
---remove this
---import Data.Time
-
 import Network.Simple.TCP
 
 import Address
@@ -42,7 +39,7 @@ import ModifyStateDB
 import RLP
 import SampleTransaction
 import SHA
---import Transaction
+import SignedTransaction
 import Util
 import Wire
 
@@ -210,6 +207,7 @@ main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
   sendHello socket
 
   signedTx <- withSource devURandom $ signTransaction prvKey simpleTX
+
   sendMessage socket $ Transactions [signedTx]
 
   requestNewBlocks socket

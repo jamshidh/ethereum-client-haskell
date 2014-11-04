@@ -19,7 +19,7 @@ import Format
 import Peer
 import RLP
 import SHA
-import Transaction
+import SignedTransaction
 import Util
 
 --import Debug.Trace
@@ -40,7 +40,7 @@ data Message =
   Pong |
   GetPeers |
   Peers [Peer] |
-  Transactions [Transaction] | 
+  Transactions [SignedTransaction] | 
   Blocks [Block] |
   GetChain { parentSHAs::[SHA], numChildItems::Integer } |
   NotInChain [SHA] |
