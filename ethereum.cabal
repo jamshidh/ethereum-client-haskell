@@ -9,21 +9,22 @@ extra-source-files: ""
 executable ethereumH
     build-depends: 
                    base -any
-                 , cryptohash
+                 , base16-bytestring
                  , binary
                  , bytestring
-                 , time
-                 , network-simple
+                 , containers
+                 , cryptohash
+                 , data-default
+                 , directory
+                 , entropy
                  , haskoin
-                 , base16-bytestring
+                 , leveldb-haskell
                  , mtl
                  , network
-                 , transformers
+                 , network-simple
                  , resourcet
-                 , data-default
-                 , leveldb-haskell
-                 , directory
-                 , containers
+                 , time
+                 , transformers
     main-is: Main.hs
     C-sources: fastNonceFinder/nonceFinder.c
     --ghc-options: -threaded

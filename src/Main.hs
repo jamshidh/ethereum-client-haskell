@@ -23,6 +23,7 @@ import Network.Haskoin.Crypto hiding (Address)
 import Network.Socket (socketToHandle)
 import Numeric
 import System.Directory
+import System.Entropy
 import System.IO
 
 --remove this
@@ -39,6 +40,7 @@ import EthDB
 import Format
 import ModifyStateDB
 import RLP
+import SampleTransaction
 import SHA
 --import Transaction
 import Util
@@ -186,60 +188,31 @@ requestNewBlocks socket = do
 
   sendMessage socket $ GetChain [bestBlockHash] 0x40
 
-main::IO ()    
-main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
---main1 = connect "192.168.0.2" "30303" $ \(socket, _) -> do
-  putStrLn "Connected"
+sendHello::Socket->IO ()
+sendHello socket = do
+  peerId <- getEntropy 64
 
   sendMessage socket $ Hello {
         version = 23,
-        clientId = "Ethereum(G)/v0.6.4//linux/Go",
+        clientId = "Ethereum(G)/v0.6.4//linux/Haskell",
         capability = [ProvidesPeerDiscoveryService,
                       ProvidesTransactionRelayingService,
                       ProvidesBlockChainQueryingService],
         port = 30303,
-        nodeId = fromIntegral $ byteString2Integer $ BC.pack "Q\211(_#\141\158\211\163]G\168\DC1\241\215\221\GSo\224\182\227J\235\246\\\188eH$Zu\228\SYN\244\154\151qH\233\249C\t\147\157V\237\DC2\223XQ\191\242`>\186OG`\190 \230}\162o"
+        nodeId = fromIntegral $ byteString2Integer peerId
 
         }
 
-  --signedTx <- withSource devURandom $ signTransaction prvKey simpleTX
+main::IO ()    
+main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
+--main = connect "192.168.0.2" "30303" $ \(socket, _) -> do
+  putStrLn "Connected"
+  sendHello socket
 
-  {-
-  let b = Block{blockData=
-                   BlockData {
-                     parentHash=SHA 0,
-                     unclesHash=hash $ B.pack [0xc0],
-                     coinbase=prvKey2Address prvKey,
-                     stateRoot = SHAPtr $ B.pack $ integer2Bytes 1,
-                     transactionsTrie = 0,
-                     difficulty = 13269813,
-                     number = 0,
-                     minGasPrice = 10000000000000,
-                     gasLimit = 125000,
-                     gasUsed = 0,
-                     timestamp = posixSecondsToUTCTime $ fromIntegral (1411763223::Integer), --ts,
-                     extraData = 0,
-                     nonce = SHA 5
-                     },
-                receiptTransactions=[],
-                blockUncles=[]
-               }
--}
-
-  --let newBlock = testGetNextBlock genesisBlock ts
-  --let powVal = byteString2Integer $ BC.pack $ powFunc newBlock
-  --putStrLn $ "powFunc = " ++ show (showHex powVal "")
-  --let passed = powVal * (difficulty $ blockData newBlock) < 2^256
-  --putStrLn (red "Passed: " ++ show passed)
-  --theNonce <- (fastFindNonce newBlock)::IO Integer
-  --sendMessage socket $ Blocks [addNonceToBlock newBlock theNonce]
-
-
-  --sendMessage socket $ Transactions [signedTx]
+  signedTx <- withSource devURandom $ signTransaction prvKey simpleTX
+  sendMessage socket $ Transactions [signedTx]
 
   requestNewBlocks socket
-  --sendMessage socket $ GetChain [blockHash genesisBlock] 0x40
-  putStrLn "Transaction has been sent"
 
   readAndOutput socket
   
