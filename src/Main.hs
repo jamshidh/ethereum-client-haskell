@@ -13,7 +13,9 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.ByteString.Internal
 import Data.Function
+import Data.Functor
 import Data.List
+import Data.Maybe
 import Data.Time.Clock
 import Data.Time.Clock.POSIX
 import Data.Word
@@ -33,7 +35,7 @@ import Block
 import BlockChain
 import Colors
 import Constants
-import EthDB
+import DBs
 import Format
 import ModifyStateDB
 import RLP
@@ -209,11 +211,12 @@ main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
   sendHello socket
 
 
-  {-
-  runResourceT $ do
-    sDB <- open stateDB
-    addressState <- getAddressState sDB p (prvKeyToAddress prvKey)
--}
+  addressState <-
+      runResourceT $ do
+        dbs <- openDBs
+        --bestBlockHash <- getBestBlockHash'
+        b <- fromMaybe (error "Missing best block") <$> getBestBlock (blockDB dbs) (detailsDB dbs)
+        getAddressState (stateDB dbs) (stateRoot $ blockData b) (prvKey2Address prvKey)
 
   signedTx <- withSource devURandom $ signTransaction prvKey simpleTX -- {nonce=addressStateNonce addressState}
 
