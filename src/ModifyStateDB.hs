@@ -9,7 +9,6 @@ module ModifyStateDB (
                       addNonce
 ) where
 
-import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
@@ -17,11 +16,9 @@ import Data.Default
 import Data.Functor
 import Data.Maybe
 import qualified Database.LevelDB as DB
-import System.Directory
 
 import Address
 import AddressState
-import Constants
 import DBs
 import SHA
 
@@ -40,32 +37,30 @@ startingAddressState =
       codeHash=hash B.empty
       }
 
-initializeBlankStateDB::String->ResourceT IO (DB.DB, SHAPtr)
-initializeBlankStateDB dbPath = do
-  db <- DB.open dbPath DB.defaultOptions{DB.createIfMissing=True}
-  DB.put db def startingRoot B.empty
-  return (db, SHAPtr startingRoot)
+initializeBlankStateDB::DB->ResourceT IO SHAPtr
+initializeBlankStateDB db = do
+  DB.put (stateDB db) def startingRoot B.empty
+  return $ SHAPtr startingRoot
 
-initializeStateDB::IO ()
-initializeStateDB = do
-    runResourceT $ do
-      homeDir <- liftIO $ getHomeDirectory
-      (db, startingRoot2) <- initializeBlankStateDB (homeDir ++ stateDBPath)
+initializeStateDB::DB->ResourceT IO SHAPtr
+initializeStateDB db = do
+  sr <- initializeBlankStateDB db
 
-      let addresses = Address <$> [
-                       0x51ba59315b3a95761d0863b05ccc7a7f54703d99,
-                       0xe6716f9544a56c530d868e4bfbacb172315bdead,
-                       0xb9c015918bdaba24b4ff057a92a3873d6eb201be,
-                       0x1a26338f0d905e295fccb71fa9ea849ffa12aaf4,
-                       0x2ef47100e0787b915105fd5e3f4ff6752079d5cb,
-                       0xcd2a3d9f938e13cd947ec05abc7fe734df8dd826,
-                       0x6c386a4b26f73c802f34673f7248bb118f97424a,
-                       0xe4157b34ea9615cfbde6b4fda419828124b70c78
-                      ]
+  let addresses = Address <$> [
+                        0x51ba59315b3a95761d0863b05ccc7a7f54703d99,
+                        0xe6716f9544a56c530d868e4bfbacb172315bdead,
+                        0xb9c015918bdaba24b4ff057a92a3873d6eb201be,
+                        0x1a26338f0d905e295fccb71fa9ea849ffa12aaf4,
+                        0x2ef47100e0787b915105fd5e3f4ff6752079d5cb,
+                        0xcd2a3d9f938e13cd947ec05abc7fe734df8dd826,
+                        0x6c386a4b26f73c802f34673f7248bb118f97424a,
+                        0xe4157b34ea9615cfbde6b4fda419828124b70c78
+                       ]
 
-      _ <- putAddressStates DB{stateDB = db} startingRoot2 addresses
-        startingAddressState{balance=0x0100000000000000000000000000000000000000000000000000}
-      return ()
+  putAddressStates db sr addresses
+                   startingAddressState{balance=0x0100000000000000000000000000000000000000000000000000}
+
+  
 
 putAddressStates::DB->SHAPtr->[Address]->AddressState->ResourceT IO SHAPtr
 putAddressStates _ stateRoot [] _ = return stateRoot

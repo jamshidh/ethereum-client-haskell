@@ -5,8 +5,7 @@ module BlockChain (
   addBlock,
   addBlocks,
   getBestBlock,
-  getBestBlockHash,
-  withBlockDB
+  getBestBlockHash
   ) where
 
 import Control.Monad
@@ -23,7 +22,6 @@ import Data.Maybe
 import Data.Time
 import Data.Time.Clock.POSIX
 import qualified Database.LevelDB as DB
-import System.Directory
 
 import Address
 import AddressState
@@ -45,19 +43,11 @@ import VMState
 
 --import Debug.Trace
 
-options::DB.Options
-options = DB.defaultOptions {
-  DB.createIfMissing=True, DB.cacheSize=1024}
-
-initializeBlockChain::IO ()
-initializeBlockChain = do
-  homeDir <- liftIO $ getHomeDirectory                     
-  runResourceT $ do
-    bdb <- DB.open (homeDir ++ blockDBPath) options
-    ddb <- DB.open (homeDir ++ detailsDBPath) options
-    let bytes = rlpSerialize $ rlpEncode genesisBlock
-    DB.put bdb def (C.hash 256 bytes) bytes
-    DB.put ddb def "best" (BL.toStrict $ encode $ blockHash genesisBlock)
+initializeBlockChain::DB->ResourceT IO ()
+initializeBlockChain db = do
+  let bytes = rlpSerialize $ rlpEncode genesisBlock
+  DB.put (blockDB db) def (C.hash 256 bytes) bytes
+  DB.put (detailsDB db) def "best" (BL.toStrict $ encode $ blockHash genesisBlock)
 
 nextDifficulty::Integer->UTCTime->UTCTime->Integer
 nextDifficulty oldDifficulty oldTime newTime =
@@ -256,10 +246,3 @@ replaceBestIfBetter db b = do
     _ -> runResourceT $ do
       DB.put (detailsDB db) def "best" (BL.toStrict $ encode $ blockHash b)
 
-withBlockDB::(MonadIO m, MonadThrow m, MonadBaseControl IO m) =>
-     (DB.DB -> ResourceT m a)-> m a
-withBlockDB f = do
-  runResourceT $ do
-    homeDir <- liftIO $ getHomeDirectory
-    bdb  <- DB.open (homeDir ++ detailsDBPath) options
-    f bdb

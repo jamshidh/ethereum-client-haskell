@@ -170,8 +170,8 @@ getBestBlockHash' db = do
 
   case maybeBestBlockHash of
     Nothing -> do
-      liftIO $ initializeBlockChain
-      _ <- liftIO $ initializeStateDB
+      initializeBlockChain db
+      _ <- initializeStateDB db
       return $ blockHash genesisBlock
     Just x -> return x
 
