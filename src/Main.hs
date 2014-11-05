@@ -19,11 +19,9 @@ import Data.Maybe
 import Data.Time.Clock
 import Data.Time.Clock.POSIX
 import Data.Word
-import qualified Database.LevelDB as DB
 import Network.Haskoin.Crypto hiding (Address)
 import Network.Socket (socketToHandle)
 import Numeric
-import System.Directory
 import System.Entropy
 import System.IO
 
@@ -42,6 +40,7 @@ import RLP
 import SampleTransactions
 import SHA
 import SignedTransaction
+import Transaction
 import Util
 import Wire
 
@@ -70,14 +69,10 @@ sendMessage socket msg = do
   putStrLn (green "msg>>>>>: " ++ format msg)
   sendCommand socket $ rlpSerialize $ wireMessage2Obj msg
 
-getNextBlock::Block->UTCTime->IO Block
-getNextBlock b ts = do
+getNextBlock::DB->Block->UTCTime->ResourceT IO Block
+getNextBlock db b ts = do
   let theCoinbase = prvKey2Address prvKey
-  newStateRoot <- runResourceT $ do
-    homeDir <- liftIO getHomeDirectory
-    sdb <- DB.open (homeDir ++ stateDBPath) DB.defaultOptions {
-      DB.createIfMissing=True, DB.cacheSize=1024}
-    addToBalance DB{ stateDB=sdb } (stateRoot bd) theCoinbase (1500*finney)
+  newStateRoot <- addToBalance db (stateRoot bd) theCoinbase (1500*finney)
 
   return $ Block{
                blockData=testGetNextBlockData newStateRoot,
@@ -110,19 +105,19 @@ getNextBlock b ts = do
     bd = blockData b
 
 
-submitNextBlock::Socket->Block->IO()
-submitNextBlock socket b = do
-        ts <- getCurrentTime
-        newBlock <- getNextBlock b ts
-        print newBlock
-        n <- fastFindNonce newBlock
+submitNextBlock::Socket->DB->Block->ResourceT IO()
+submitNextBlock socket db b = do
+        ts <- liftIO getCurrentTime
+        newBlock <- getNextBlock db b ts
+        liftIO $ print newBlock
+        n <- liftIO $ fastFindNonce newBlock
 
-        print $ showHex (powFunc $ addNonceToBlock newBlock n) ""
+        liftIO $ print $ showHex (powFunc $ addNonceToBlock newBlock n) ""
         let theBytes = headerHashWithoutNonce newBlock `B.append` B.pack (integer2Bytes n)
-        print $ format theBytes
-        print $ format $ C.hash 256 theBytes
+        liftIO $ print $ format theBytes
+        liftIO $ print $ format $ C.hash 256 theBytes
         let theNewBlock = addNonceToBlock newBlock n
-        sendMessage socket $ Blocks [theNewBlock]
+        liftIO $ sendMessage socket $ Blocks [theNewBlock]
         liftIO $ addBlocks [theNewBlock]
 
 
@@ -140,7 +135,7 @@ handlePayload socket db payload = do
     Blocks blocks -> do
       liftIO $ addBlocks $ sortBy (compare `on` number . blockData) blocks
       case blocks of
-        [b] -> liftIO $ submitNextBlock socket b
+        [b] -> submitNextBlock socket db b
         _ -> requestNewBlocks socket db
       
       --sendMessage socket $ Blocks [addNonceToBlock newBlock n]
@@ -214,9 +209,9 @@ main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
     db <- openDBs
     --bestBlockHash <- getBestBlockHash'
     b <- fromMaybe (error "Missing best block") <$> getBestBlock db
-    addressState <- getAddressState db (stateRoot $ blockData b) (prvKey2Address prvKey)
+    addressState <- fromMaybe (error "Missing user addressState") <$> getAddressState db (stateRoot $ blockData b) (prvKey2Address prvKey)
     requestNewBlocks socket db
-    signedTx <- liftIO $ withSource devURandom $ signTransaction prvKey simpleTX -- {nonce=addressStateNonce addressState}
+    signedTx <- liftIO $ withSource devURandom $ signTransaction prvKey simpleTX{tNonce=addressStateNonce addressState}
                 
     liftIO $ sendMessage socket $ Transactions [signedTx]
 
