@@ -135,6 +135,7 @@ handlePayload socket db payload = do
     Blocks blocks -> do
       addBlocks db $ sortBy (compare `on` number . blockData) blocks
       case blocks of
+        [] -> return ()
         [b] -> submitNextBlock socket db b
         _ -> requestNewBlocks socket db
       
@@ -211,7 +212,8 @@ main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
     requestNewBlocks socket db
     b <- fromMaybe (error "Missing best block") <$> getBestBlock db
     userNonce <- fromMaybe 0 <$> fmap addressStateNonce <$> getAddressState db (stateRoot $ blockData b) (prvKey2Address prvKey)
-    signedTx <- liftIO $ withSource devURandom $ signTransaction prvKey simpleTX{tNonce=userNonce}
+    --signedTx <- liftIO $ withSource devURandom $ signTransaction prvKey simpleTX{tNonce=userNonce}
+    signedTx <- liftIO $ withSource devURandom $ signTransaction prvKey simpleStorageTX{tNonce=userNonce}
                 
     liftIO $ sendMessage socket $ Transactions [signedTx]
 
