@@ -202,7 +202,8 @@ runCode db p env state = do
     VMState{done=True} -> return $ decreaseGas op $ movePC result len
     state2 -> runCode db p env $ decreaseGas op $ movePC state2 len
 
-runCodeFromStart::DB->SHAPtr->Environment->IO VMState
-runCodeFromStart db p env = do
-  runCode db p env =<< startingState
+runCodeFromStart::DB->SHAPtr->Integer->Environment->IO VMState
+runCodeFromStart db p gasLimit env = do
+  vmState <- startingState
+  runCode db p env vmState{vmGasRemaining=gasLimit}
 

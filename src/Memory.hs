@@ -33,7 +33,7 @@ mLoad8::Memory->Word256->IO Word8
 mLoad8 (Memory _ arr) p = readArray arr p
 
 mLoadByteString::Memory->Word256->Word256->IO B.ByteString
-mLoadByteString (Memory _ arr) p size = fmap B.pack $ sequence $ readArray arr <$> [p..p+size] 
+mLoadByteString (Memory _ arr) p size = fmap B.pack $ sequence $ readArray arr <$> [p..p+size-1] 
 
 
 mStore::Memory->Word256->Word256->IO ()

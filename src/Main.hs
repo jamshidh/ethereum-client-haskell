@@ -206,12 +206,12 @@ main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
   sendHello socket
 
   runResourceT $ do
-    db <- openDBs
+    db <- openDBs False
     --bestBlockHash <- getBestBlockHash' db
     requestNewBlocks socket db
     b <- fromMaybe (error "Missing best block") <$> getBestBlock db
-    addressState <- fromMaybe (error "Missing user addressState") <$> getAddressState db (stateRoot $ blockData b) (prvKey2Address prvKey)
-    signedTx <- liftIO $ withSource devURandom $ signTransaction prvKey simpleTX{tNonce=addressStateNonce addressState}
+    userNonce <- fromMaybe 0 <$> fmap addressStateNonce <$> getAddressState db (stateRoot $ blockData b) (prvKey2Address prvKey)
+    signedTx <- liftIO $ withSource devURandom $ signTransaction prvKey simpleTX{tNonce=userNonce}
                 
     liftIO $ sendMessage socket $ Transactions [signedTx]
 

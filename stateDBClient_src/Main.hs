@@ -17,6 +17,6 @@ main = do
   args <- getArgs
   let stateRoot = SHAPtr $ fst $ B16.decode $ BC.pack $ head args
   DB.runResourceT $ do
-    db <- openDBs
+    db <- openDBs False --True = .ethereum, False = .ethereumH
     kvs <- getKeyVals db stateRoot ""
     liftIO $ putStrLn $ intercalate "\n" ((\(k, v) -> format k ++ ": " ++ format (rlpDeserialize v)) <$> kvs)

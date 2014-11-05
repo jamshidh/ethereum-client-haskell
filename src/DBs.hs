@@ -46,10 +46,10 @@ options::DB.Options
 options = DB.defaultOptions {
   DB.createIfMissing=True, DB.cacheSize=1024}
 
-openDBs::ResourceT IO DB
-openDBs = do
+openDBs::Bool->ResourceT IO DB
+openDBs useCppDBs = do
   homeDir <- liftIO $ getHomeDirectory                     
-  bdb <- DB.open (homeDir ++ blockDBPath) options
-  ddb <- DB.open (homeDir ++ detailsDBPath) options
-  sdb <- DB.open (homeDir ++ stateDBPath) options
+  bdb <- DB.open (homeDir ++ dbDir useCppDBs ++ blockDBPath) options
+  ddb <- DB.open (homeDir ++ dbDir useCppDBs ++ detailsDBPath) options
+  sdb <- DB.open (homeDir ++ dbDir useCppDBs ++ stateDBPath) options
   return $ DB bdb ddb sdb

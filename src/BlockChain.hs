@@ -116,7 +116,7 @@ runCodeForTransaction::DB->SHAPtr->Block->SignedTransaction->ResourceT IO SHAPtr
 runCodeForTransaction _ p _ SignedTransaction{unsignedTransaction=Transaction{tInit=Code c}} | B.null c = return p
 runCodeForTransaction db p b t@SignedTransaction{unsignedTransaction=ut} = do
   vmState <-
-    liftIO $ runCodeFromStart db p
+    liftIO $ runCodeFromStart db p (tGasLimit $ unsignedTransaction t)
     Environment{
       envGasPrice=gasPrice ut,
       envBlock=b,
@@ -128,6 +128,7 @@ runCodeForTransaction db p b t@SignedTransaction{unsignedTransaction=ut} = do
       envCode = tInit ut
       }
   result <- liftIO $ getReturnValue vmState
+  liftIO $ putStrLn $ "Result: " ++ show result
   case result of
     Left err -> do
       liftIO $ putStrLn $ red $ show err

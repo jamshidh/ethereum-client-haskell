@@ -25,12 +25,16 @@ wei = 1
 
 
 blockDBPath::String
-blockDBPath="/.ethereumH/blocks/"
+blockDBPath="/blocks/"
 
 detailsDBPath::String
-detailsDBPath="/.ethereumH/details/"
+detailsDBPath="/details/"
 
 stateDBPath::String
-stateDBPath="/.ethereumH/state/"
+stateDBPath="/state/"
+
+dbDir::Bool->String
+dbDir True = "/.ethereum"
+dbDir False = "/.ethereumH"
 
 --"/Users/hutong/Library/Application Support/Ethereum/state/"
