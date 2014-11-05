@@ -77,7 +77,7 @@ getNextBlock b ts = do
     homeDir <- liftIO getHomeDirectory
     sdb <- DB.open (homeDir ++ stateDBPath) DB.defaultOptions {
       DB.createIfMissing=True, DB.cacheSize=1024}
-    addToBalance sdb (stateRoot bd) theCoinbase (1500*finney)
+    addToBalance DB{ stateDB=sdb } (stateRoot bd) theCoinbase (1500*finney)
 
   return $ Block{
                blockData=testGetNextBlockData newStateRoot,
@@ -123,30 +123,30 @@ submitNextBlock socket b = do
         print $ format $ C.hash 256 theBytes
         let theNewBlock = addNonceToBlock newBlock n
         sendMessage socket $ Blocks [theNewBlock]
-        addBlocks [theNewBlock]
+        liftIO $ addBlocks [theNewBlock]
 
 
 
-handlePayload::Socket->B.ByteString->IO ()
-handlePayload socket payload = do
+handlePayload::Socket->DB->B.ByteString->ResourceT IO ()
+handlePayload socket db payload = do
   let rlpObject = rlpDeserialize payload
   let msg = obj2WireMessage rlpObject
-  putStrLn (red "msg<<<<: " ++ format msg)
+  liftIO $ putStrLn (red "msg<<<<: " ++ format msg)
   case msg of
-    Ping -> sendMessage socket Pong
+    Ping -> liftIO $ sendMessage socket Pong
     GetPeers -> do
-      sendMessage socket $ Peers []
-      sendMessage socket $ GetPeers
+      liftIO $ sendMessage socket $ Peers []
+      liftIO $ sendMessage socket $ GetPeers
     Blocks blocks -> do
-      addBlocks $ sortBy (compare `on` number . blockData) blocks
+      liftIO $ addBlocks $ sortBy (compare `on` number . blockData) blocks
       case blocks of
-        [b] -> submitNextBlock socket b
-        _ -> requestNewBlocks socket
+        [b] -> liftIO $ submitNextBlock socket b
+        _ -> requestNewBlocks socket db
       
       --sendMessage socket $ Blocks [addNonceToBlock newBlock n]
     GetTransactions -> do
-      sendMessage socket $ Transactions []
-      sendMessage socket $ GetTransactions
+      liftIO $ sendMessage socket $ Transactions []
+      liftIO $ sendMessage socket $ GetTransactions
 
     _-> return ()
 
@@ -158,36 +158,36 @@ getPayloads (0x22:0x40:0x08:0x91:s1:s2:s3:s4:remainder) =
     payloadLength = shift (fromIntegral s1) 24 + shift (fromIntegral s2) 16 + shift (fromIntegral s3) 8 + fromIntegral s4
 getPayloads _ = error "Malformed data sent to getPayloads"
 
-readAndOutput::Socket->IO()
-readAndOutput socket = do
-  h <- socketToHandle socket ReadWriteMode
-  payloads <- BL.hGetContents h
+readAndOutput::Socket->DB->ResourceT IO ()
+readAndOutput socket db = do
+  h <- liftIO $ socketToHandle socket ReadWriteMode
+  payloads <- liftIO $ BL.hGetContents h
   handleAllPayloads $ getPayloads $ BL.unpack payloads
   where
     handleAllPayloads [] = error "Server has closed the connection"
     handleAllPayloads (pl:rest) = do
-      handlePayload socket $ B.pack pl
+      handlePayload socket db $ B.pack pl
       handleAllPayloads rest
 
-getBestBlockHash'::IO SHA
-getBestBlockHash' = do
-  maybeBestBlockHash <- withBlockDB getBestBlockHash
+getBestBlockHash'::DB->ResourceT IO SHA
+getBestBlockHash' db = do
+  maybeBestBlockHash <- getBestBlockHash db
 
   case maybeBestBlockHash of
     Nothing -> do
-      initializeBlockChain
-      _ <- initializeStateDB
+      liftIO $ initializeBlockChain
+      _ <- liftIO $ initializeStateDB
       return $ blockHash genesisBlock
     Just x -> return x
 
-requestNewBlocks::Socket->IO ()
-requestNewBlocks socket = do
+requestNewBlocks::Socket->DB->ResourceT IO ()
+requestNewBlocks socket db = do
 
-  bestBlockHash <- getBestBlockHash'
+  bestBlockHash <- getBestBlockHash' db
 
-  putStrLn $ "Best block hash: " ++ format bestBlockHash
+  liftIO $ putStrLn $ "Best block hash: " ++ format bestBlockHash
 
-  sendMessage socket $ GetChain [bestBlockHash] 0x40
+  liftIO $ sendMessage socket $ GetChain [bestBlockHash] 0x40
 
 sendHello::Socket->IO ()
 sendHello socket = do
@@ -210,20 +210,17 @@ main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
   putStrLn "Connected"
   sendHello socket
 
+  runResourceT $ do
+    db <- openDBs
+    --bestBlockHash <- getBestBlockHash'
+    b <- fromMaybe (error "Missing best block") <$> getBestBlock db
+    addressState <- getAddressState db (stateRoot $ blockData b) (prvKey2Address prvKey)
+    requestNewBlocks socket db
+    signedTx <- liftIO $ withSource devURandom $ signTransaction prvKey simpleTX -- {nonce=addressStateNonce addressState}
+                
+    liftIO $ sendMessage socket $ Transactions [signedTx]
 
-  addressState <-
-      runResourceT $ do
-        dbs <- openDBs
-        --bestBlockHash <- getBestBlockHash'
-        b <- fromMaybe (error "Missing best block") <$> getBestBlock (blockDB dbs) (detailsDB dbs)
-        getAddressState (stateDB dbs) (stateRoot $ blockData b) (prvKey2Address prvKey)
+    readAndOutput socket db
 
-  signedTx <- withSource devURandom $ signTransaction prvKey simpleTX -- {nonce=addressStateNonce addressState}
-
-  sendMessage socket $ Transactions [signedTx]
-
-  requestNewBlocks socket
-
-  readAndOutput socket
   
 

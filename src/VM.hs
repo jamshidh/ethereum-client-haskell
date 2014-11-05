@@ -5,13 +5,13 @@ module VM (
 
 import Prelude hiding (LT, GT, EQ)
 
+import Control.Monad.Trans.Resource
 import Data.Bits
 import qualified Data.ByteString as B
 import Data.Functor
 import qualified Data.Map as M
 import Data.Maybe
 import Data.Time.Clock.POSIX
-import Database.LevelDB
 import Network.Haskoin.Crypto (Word256)
 
 import Address
@@ -46,7 +46,7 @@ unaryAction _ env state = addErr "stack did not contain enough elements" (envCod
 
 
 
-runOperation::StateDB->SHAPtr->Operation->Environment->VMState->IO VMState
+runOperation::DB->SHAPtr->Operation->Environment->VMState->IO VMState
 runOperation _ _ STOP _ state = return state{done=True}
 
 runOperation _ _ ADD env state = binaryAction (+) env state
@@ -76,9 +76,9 @@ runOperation _ _ SHA3 _ state@VMState{stack=(p:size:rest)} = do
 
 runOperation _ _ ADDRESS Environment{envOwner=Address a} state = return state{stack=fromIntegral a:stack state}
 
-runOperation sdb p BALANCE _ state@VMState{stack=(x:rest)} = do
+runOperation db p BALANCE _ state@VMState{stack=(x:rest)} = do
   maybeAddressState <- runResourceT $ do
-                    getAddressState sdb p (Address $ fromIntegral x)
+                    getAddressState db p (Address $ fromIntegral x)
   return state{stack=(fromIntegral $ fromMaybe 0 $ balance <$> maybeAddressState):rest}
 runOperation _ _ BALANCE env state = addErr "stack did not contain enough elements" (envCode env) state
 
@@ -193,16 +193,16 @@ decreaseGas MSTORE state = state{ vmGasRemaining = vmGasRemaining state - 2 }
 decreaseGas _ state = state{ vmGasRemaining = vmGasRemaining state - 1 }
 
 
-runCode::StateDB->SHAPtr->Environment->VMState->IO VMState
-runCode sdb p env state = do
+runCode::DB->SHAPtr->Environment->VMState->IO VMState
+runCode db p env state = do
   let (op, len) = getOperationAt (envCode env) (pc state)
-  result <- runOperation sdb p op env state
+  result <- runOperation db p op env state
   case result of
     VMState{vmError=Just _} -> return result
     VMState{done=True} -> return $ decreaseGas op $ movePC result len
-    state2 -> runCode sdb p env $ decreaseGas op $ movePC state2 len
+    state2 -> runCode db p env $ decreaseGas op $ movePC state2 len
 
-runCodeFromStart::StateDB->SHAPtr->Environment->IO VMState
-runCodeFromStart sdb p env = do
-  runCode sdb p env =<< startingState
+runCodeFromStart::DB->SHAPtr->Environment->IO VMState
+runCodeFromStart db p env = do
+  runCode db p env =<< startingState
 

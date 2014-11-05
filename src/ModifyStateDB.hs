@@ -46,7 +46,7 @@ initializeBlankStateDB dbPath = do
   DB.put db def startingRoot B.empty
   return (db, SHAPtr startingRoot)
 
-initializeStateDB::IO SHAPtr
+initializeStateDB::IO ()
 initializeStateDB = do
     runResourceT $ do
       homeDir <- liftIO $ getHomeDirectory
@@ -63,38 +63,39 @@ initializeStateDB = do
                        0xe4157b34ea9615cfbde6b4fda419828124b70c78
                       ]
 
-      putAddressStates db startingRoot2 addresses
+      _ <- putAddressStates DB{stateDB = db} startingRoot2 addresses
         startingAddressState{balance=0x0100000000000000000000000000000000000000000000000000}
+      return ()
 
-putAddressStates::DB.DB->SHAPtr->[Address]->AddressState->ResourceT IO SHAPtr
+putAddressStates::DB->SHAPtr->[Address]->AddressState->ResourceT IO SHAPtr
 putAddressStates _ stateRoot [] _ = return stateRoot
 putAddressStates db stateRoot (address:rest) addressState = do
     newStateRoot <- putAddressState db stateRoot address addressState
     putAddressStates db newStateRoot rest addressState
 
 
-addToBalance::StateDB->SHAPtr->Address->Integer->ResourceT IO SHAPtr
-addToBalance sdb stateRoot address val = do
-  addressState <- fromMaybe startingAddressState <$> getAddressState sdb stateRoot address
-  putAddressState sdb stateRoot address
+addToBalance::DB->SHAPtr->Address->Integer->ResourceT IO SHAPtr
+addToBalance db stateRoot address val = do
+  addressState <- fromMaybe startingAddressState <$> getAddressState db stateRoot address
+  putAddressState db stateRoot address
     addressState{ balance = balance addressState + fromIntegral val }
 
-transferEther::StateDB->SHAPtr->Address->Address->Integer->ResourceT IO SHAPtr
-transferEther sdb sr fromAddress toAddress val = do
-  sr2 <- addToBalance sdb sr fromAddress (-val)
-  addToBalance sdb sr2 toAddress val
+transferEther::DB->SHAPtr->Address->Address->Integer->ResourceT IO SHAPtr
+transferEther db sr fromAddress toAddress val = do
+  sr2 <- addToBalance db sr fromAddress (-val)
+  addToBalance db sr2 toAddress val
 
 
-addNewAccount::StateDB->SHAPtr->Address->B.ByteString->ResourceT IO SHAPtr
-addNewAccount sdb stateRoot address code = do
+addNewAccount::DB->SHAPtr->Address->B.ByteString->ResourceT IO SHAPtr
+addNewAccount db stateRoot address code = do
   let addressState = AddressState {addressStateNonce=0, balance=0, contractRoot=0, codeHash=hash code}
-  putAddressState sdb stateRoot address addressState
+  putAddressState db stateRoot address addressState
 
 
-addNonce::StateDB->SHAPtr->Address->ResourceT IO SHAPtr
-addNonce sdb stateRoot address = do
-  addressState <- fromMaybe startingAddressState <$> getAddressState sdb stateRoot address
-  putAddressState sdb stateRoot address
+addNonce::DB->SHAPtr->Address->ResourceT IO SHAPtr
+addNonce db stateRoot address = do
+  addressState <- fromMaybe startingAddressState <$> getAddressState db stateRoot address
+  putAddressState db stateRoot address
     addressState{ addressStateNonce = addressStateNonce addressState + 1 }
 
 

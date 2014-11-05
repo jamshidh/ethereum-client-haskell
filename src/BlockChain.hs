@@ -79,9 +79,9 @@ instance Format BlockValidityError where
     format (BlockDifficultyWrong d expected) = "Block difficulty is wrong, is '" ++ show d ++ "', expected '" ++ show expected ++ "'"
 -}
 
-verifyStateRootExists::StateDB->Block->ResourceT IO Bool
-verifyStateRootExists sdb b = do
-  val <- DB.get sdb def (BL.toStrict $ encode $ stateRoot $ blockData b)
+verifyStateRootExists::DB->Block->ResourceT IO Bool
+verifyStateRootExists db b = do
+  val <- DB.get (stateDB db) def (BL.toStrict $ encode $ stateRoot $ blockData b)
   case val of
     Nothing -> return False
     Just _ -> return True
@@ -96,15 +96,15 @@ checkParentChildValidity Block{blockData=c} Block{blockData=p} = do
              $ fail $ "Block gasLimit is wrong: got '" ++ show (gasLimit c) ++ "', expected '" ++ show (nextGasLimit (gasLimit p) (gasUsed p)) ++ "'"
     return ()
 
-checkValidity::Monad m=>BlockDB->StateDB->Block->ResourceT IO (m ())
-checkValidity bdb sdb b = do
-  maybeParentBlock <- getBlock bdb (parentHash $ blockData b)
+checkValidity::Monad m=>DB->Block->ResourceT IO (m ())
+checkValidity db b = do
+  maybeParentBlock <- getBlock db (parentHash $ blockData b)
   case maybeParentBlock of
     Just parentBlock -> do
           checkParentChildValidity b parentBlock
           unless (nonceIsValid b) $ fail $ "Block nonce is wrong: " ++ format b
           unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"
-          stateRootExists <- verifyStateRootExists sdb b
+          stateRootExists <- verifyStateRootExists db b
           unless stateRootExists $ fail ("Block stateRoot does not exist: " ++ format (stateRoot $ blockData b))
           return $ return ()
     Nothing -> fail ("Parent Block does not exist: " ++ format (parentHash $ blockData b))
@@ -117,16 +117,16 @@ checkValidity bdb sdb b = do
 -}
 
 
-chargeForCodeRun::StateDB->SHAPtr->Address->Address->Integer->ResourceT IO SHAPtr
-chargeForCodeRun sdb p a theCoinbase val = do
-  p2 <- addToBalance sdb p a (-val)
-  addToBalance sdb p2 theCoinbase val
+chargeForCodeRun::DB->SHAPtr->Address->Address->Integer->ResourceT IO SHAPtr
+chargeForCodeRun db p a theCoinbase val = do
+  p2 <- addToBalance db p a (-val)
+  addToBalance db p2 theCoinbase val
 
-runCodeForTransaction::StateDB->SHAPtr->Block->SignedTransaction->ResourceT IO SHAPtr
+runCodeForTransaction::DB->SHAPtr->Block->SignedTransaction->ResourceT IO SHAPtr
 runCodeForTransaction _ p _ SignedTransaction{unsignedTransaction=Transaction{tInit=Code c}} | B.null c = return p
-runCodeForTransaction sdb p b t@SignedTransaction{unsignedTransaction=ut} = do
+runCodeForTransaction db p b t@SignedTransaction{unsignedTransaction=ut} = do
   vmState <-
-    liftIO $ runCodeFromStart sdb p
+    liftIO $ runCodeFromStart db p
     Environment{
       envGasPrice=gasPrice ut,
       envBlock=b,
@@ -150,12 +150,12 @@ runCodeForTransaction sdb p b t@SignedTransaction{unsignedTransaction=ut} = do
       --client, but I really should either try to understand this better or if I convince myself
       --that there is a bug, report it.
       p2 <- if value ut == 0
-            then addNewAccount sdb p newAddress resultBytes
+            then addNewAccount db p newAddress resultBytes
             else return p
       liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
       let usedGas = tGasLimit ut - vmGasRemaining vmState
       liftIO $ putStrLn $ "gasUsed: " ++ show usedGas
-      chargeForCodeRun sdb p2 (whoSignedThisTransaction t) (coinbase $ blockData b) (usedGas * gasPrice ut)
+      chargeForCodeRun db p2 (whoSignedThisTransaction t) (coinbase $ blockData b) (usedGas * gasPrice ut)
 
 addBlocks::[Block]->IO ()
 addBlocks blocks = runResourceT $ do
@@ -163,102 +163,102 @@ addBlocks blocks = runResourceT $ do
   bdb <- DB.open (homeDir ++ blockDBPath) options
   ddb <- DB.open (homeDir ++ detailsDBPath) options
   sdb <- DB.open (homeDir ++ stateDBPath) options
-  forM_ blocks (addBlock bdb ddb sdb)
+  forM_ blocks (addBlock DB{ blockDB=bdb, detailsDB=ddb, stateDB=sdb })
 
 getNewAddress::SignedTransaction->Address
 getNewAddress t =
   let theHash = hash $ rlpSerialize $ RLPArray [rlpEncode $ whoSignedThisTransaction t, rlpEncode $ tNonce $ unsignedTransaction t]
   in decode $ BL.drop 12 $ encode $ theHash
 
-isTransactionValid::StateDB->SHAPtr->SignedTransaction->ResourceT IO Bool
-isTransactionValid sdb p t = do
-  maybeAddressState <- getAddressState sdb p $ whoSignedThisTransaction t
+isTransactionValid::DB->SHAPtr->SignedTransaction->ResourceT IO Bool
+isTransactionValid db p t = do
+  maybeAddressState <- getAddressState db p $ whoSignedThisTransaction t
   case maybeAddressState of
     Nothing -> return (0 == tNonce (unsignedTransaction t))
     Just addressState -> return (addressStateNonce addressState == tNonce (unsignedTransaction t))
 
-addTransaction::StateDB->SHAPtr->Block->SignedTransaction->ResourceT IO SHAPtr
-addTransaction sdb sr b t = do
+addTransaction::DB->SHAPtr->Block->SignedTransaction->ResourceT IO SHAPtr
+addTransaction db sr b t = do
   liftIO $ putStrLn "adding to nonces"
   let signAddress = whoSignedThisTransaction t
-  sr2 <- addNonce sdb sr signAddress
-  sr3 <- chargeFees sdb sr2 (coinbase $ blockData b) t
-  sr4 <- chargeForCodeSize sdb sr3 (coinbase $ blockData b) t
+  sr2 <- addNonce db sr signAddress
+  sr3 <- chargeFees db sr2 (coinbase $ blockData b) t
+  sr4 <- chargeForCodeSize db sr3 (coinbase $ blockData b) t
   sr5 <- if to (unsignedTransaction t) == Address 0
-         then addToBalance sdb sr4 signAddress (-value (unsignedTransaction t))
-         else transferEther sdb sr4 signAddress (to $ unsignedTransaction t) (value (unsignedTransaction t))
-  runCodeForTransaction sdb sr5 b t
+         then addToBalance db sr4 signAddress (-value (unsignedTransaction t))
+         else transferEther db sr4 signAddress (to $ unsignedTransaction t) (value (unsignedTransaction t))
+  runCodeForTransaction db sr5 b t
 
-addTransactions::StateDB->SHAPtr->Block->[SignedTransaction]->ResourceT IO SHAPtr
+addTransactions::DB->SHAPtr->Block->[SignedTransaction]->ResourceT IO SHAPtr
 addTransactions _ sr _ [] = return sr
-addTransactions sdb sr b (t:rest) = do
-  valid <- isTransactionValid sdb sr t
+addTransactions db sr b (t:rest) = do
+  valid <- isTransactionValid db sr t
   sr2 <- if valid
-         then addTransaction sdb sr b t
+         then addTransaction db sr b t
          else return sr
-  addTransactions sdb sr2 b rest
+  addTransactions db sr2 b rest
   
 
-addBlock::BlockDB->DetailsDB->StateDB->Block->ResourceT IO ()
-addBlock bdb ddb sdb b = do
+addBlock::DB->Block->ResourceT IO ()
+addBlock db b = do
   let bd = blockData b
   parentBlock <-
     fromMaybe (error ("Missing parent block in addBlock: " ++ format (parentHash bd))) <$>
-    (getBlock bdb $ parentHash bd)
+    (getBlock db $ parentHash bd)
 
-  sr2 <- addToBalance sdb (stateRoot $ blockData parentBlock) (coinbase bd) (1500*finney)
+  sr2 <- addToBalance db (stateRoot $ blockData parentBlock) (coinbase bd) (1500*finney)
 
   let transactions = theTransaction <$> receiptTransactions b
 
-  sr3 <- addTransactions sdb sr2 b transactions
+  sr3 <- addTransactions db sr2 b transactions
   
 
   liftIO $ putStrLn $ "newStateRoot: " ++ format sr3
 
-  valid <- checkValidity bdb sdb b
+  valid <- checkValidity db b
   case valid of
      Right () -> return ()
      Left err -> error err
   let bytes = rlpSerialize $ rlpEncode b
-  DB.put bdb def (C.hash 256 bytes) bytes
-  replaceBestIfBetter bdb ddb b
+  DB.put (blockDB db) def (C.hash 256 bytes) bytes
+  replaceBestIfBetter db b
 
 
-chargeFees::StateDB->SHAPtr->Address->SignedTransaction->ResourceT IO SHAPtr
-chargeFees sdb sr theCoinbase t = do
-  sr2 <- addToBalance sdb sr theCoinbase (5*finney)
-  addToBalance sdb sr2 (whoSignedThisTransaction t) (-5*finney)
+chargeFees::DB->SHAPtr->Address->SignedTransaction->ResourceT IO SHAPtr
+chargeFees db sr theCoinbase t = do
+  sr2 <- addToBalance db sr theCoinbase (5*finney)
+  addToBalance db sr2 (whoSignedThisTransaction t) (-5*finney)
   
-chargeForCodeSize::StateDB->SHAPtr->Address->SignedTransaction->ResourceT IO SHAPtr
-chargeForCodeSize sdb sr theCoinbase t = do
+chargeForCodeSize::DB->SHAPtr->Address->SignedTransaction->ResourceT IO SHAPtr
+chargeForCodeSize db sr theCoinbase t = do
   let codeSize = codeLength $ tInit $ unsignedTransaction t
   let val = 5 * (gasPrice $ unsignedTransaction t) * fromIntegral codeSize
-  sr2 <- addToBalance sdb sr theCoinbase val
-  addToBalance sdb sr2 (whoSignedThisTransaction t) (-val)
+  sr2 <- addToBalance db sr theCoinbase val
+  addToBalance db sr2 (whoSignedThisTransaction t) (-val)
   
 
-getBestBlockHash::DetailsDB->ResourceT IO (Maybe SHA)
-getBestBlockHash ddb = do
-  fmap (decode . BL.fromStrict) <$> DB.get ddb def "best"
+getBestBlockHash::DB->ResourceT IO (Maybe SHA)
+getBestBlockHash db = do
+  fmap (decode . BL.fromStrict) <$> DB.get (detailsDB db) def "best"
 
-getBlock::BlockDB->SHA->ResourceT IO (Maybe Block)
-getBlock bdb h = 
-  fmap (rlpDecode . rlpDeserialize) <$> DB.get bdb def (BL.toStrict $ encode h)
+getBlock::DB->SHA->ResourceT IO (Maybe Block)
+getBlock db h = 
+  fmap (rlpDecode . rlpDeserialize) <$> DB.get (blockDB db) def (BL.toStrict $ encode h)
 
-getBestBlock::BlockDB->DetailsDB->ResourceT IO (Maybe Block)
-getBestBlock bdb ddb = do
-  maybeH <- getBestBlockHash ddb
+getBestBlock::DB->ResourceT IO (Maybe Block)
+getBestBlock db = do
+  maybeH <- getBestBlockHash db
   case maybeH of
     Nothing -> return Nothing
-    Just h -> getBlock bdb h
+    Just h -> getBlock db h
 
-replaceBestIfBetter::BlockDB->DetailsDB->Block->ResourceT IO ()
-replaceBestIfBetter bdb ddb b = do
-  maybeBest <- getBestBlock bdb ddb
+replaceBestIfBetter::DB->Block->ResourceT IO ()
+replaceBestIfBetter db b = do
+  maybeBest <- getBestBlock db
   case maybeBest of
     Just best | number (blockData best) >= number (blockData b) -> return ()
     _ -> runResourceT $ do
-      DB.put ddb def "best" (BL.toStrict $ encode $ blockHash b)
+      DB.put (detailsDB db) def "best" (BL.toStrict $ encode $ blockHash b)
 
 withBlockDB::(MonadIO m, MonadThrow m, MonadBaseControl IO m) =>
      (DB.DB -> ResourceT m a)-> m a

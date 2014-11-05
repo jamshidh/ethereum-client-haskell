@@ -10,11 +10,11 @@ module AddressState (
 import Control.Monad.Trans.Resource
 import qualified Data.ByteString as B
 import Data.Functor
-import Database.LevelDB
 import Numeric
 
 import Address
 import Colors
+import DBs
 import EthDB
 import Format
 import qualified NibbleString as N
