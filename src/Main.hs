@@ -118,7 +118,7 @@ submitNextBlock socket db b = do
         liftIO $ print $ format $ C.hash 256 theBytes
         let theNewBlock = addNonceToBlock newBlock n
         liftIO $ sendMessage socket $ Blocks [theNewBlock]
-        liftIO $ addBlocks [theNewBlock]
+        addBlocks db [theNewBlock]
 
 
 
@@ -133,7 +133,7 @@ handlePayload socket db payload = do
       liftIO $ sendMessage socket $ Peers []
       liftIO $ sendMessage socket $ GetPeers
     Blocks blocks -> do
-      liftIO $ addBlocks $ sortBy (compare `on` number . blockData) blocks
+      addBlocks db $ sortBy (compare `on` number . blockData) blocks
       case blocks of
         [b] -> submitNextBlock socket db b
         _ -> requestNewBlocks socket db

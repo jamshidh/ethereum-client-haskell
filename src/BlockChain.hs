@@ -157,13 +157,9 @@ runCodeForTransaction db p b t@SignedTransaction{unsignedTransaction=ut} = do
       liftIO $ putStrLn $ "gasUsed: " ++ show usedGas
       chargeForCodeRun db p2 (whoSignedThisTransaction t) (coinbase $ blockData b) (usedGas * gasPrice ut)
 
-addBlocks::[Block]->IO ()
-addBlocks blocks = runResourceT $ do
-  homeDir <- liftIO $ getHomeDirectory                     
-  bdb <- DB.open (homeDir ++ blockDBPath) options
-  ddb <- DB.open (homeDir ++ detailsDBPath) options
-  sdb <- DB.open (homeDir ++ stateDBPath) options
-  forM_ blocks (addBlock DB{ blockDB=bdb, detailsDB=ddb, stateDB=sdb })
+addBlocks::DB->[Block]->ResourceT IO ()
+addBlocks db blocks = do
+  forM_ blocks $ addBlock db
 
 getNewAddress::SignedTransaction->Address
 getNewAddress t =
