@@ -28,6 +28,7 @@ import System.IO
 import Network.Simple.TCP
 
 import Address
+import AddressState
 import Block
 import BlockChain
 import Colors
@@ -166,17 +167,21 @@ readAndOutput socket = do
       handlePayload socket $ B.pack pl
       handleAllPayloads rest
 
-requestNewBlocks::Socket->IO ()
-requestNewBlocks socket = do
+getBestBlockHash'::IO SHA
+getBestBlockHash' = do
   maybeBestBlockHash <- withBlockDB getBestBlockHash
 
-  bestBlockHash <-
-    case maybeBestBlockHash of
-      Nothing -> do
-        initializeBlockChain
-        _ <- initializeStateDB
-        return $ blockHash genesisBlock
-      Just x -> return x
+  case maybeBestBlockHash of
+    Nothing -> do
+      initializeBlockChain
+      _ <- initializeStateDB
+      return $ blockHash genesisBlock
+    Just x -> return x
+
+requestNewBlocks::Socket->IO ()
+requestNewBlocks socket = do
+
+  bestBlockHash <- getBestBlockHash'
 
   putStrLn $ "Best block hash: " ++ format bestBlockHash
 
@@ -203,7 +208,14 @@ main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
   putStrLn "Connected"
   sendHello socket
 
-  signedTx <- withSource devURandom $ signTransaction prvKey simpleTX
+
+  {-
+  runResourceT $ do
+    sDB <- open stateDB
+    addressState <- getAddressState sDB p (prvKeyToAddress prvKey)
+-}
+
+  signedTx <- withSource devURandom $ signTransaction prvKey simpleTX -- {nonce=addressStateNonce addressState}
 
   sendMessage socket $ Transactions [signedTx]
 
