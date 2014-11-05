@@ -130,6 +130,7 @@ op2OpCode op =
 -}
 
 opCode2Op::B.ByteString->(Operation, Int)
+opCode2Op rom | B.null rom = (STOP, 1) --according to the yellowpaper, should return STOP if outside of the code bytestring
 opCode2Op rom =
   case M.lookup (B.head rom) code2OpMap of
     Just (f, len) -> (f $ B.unpack $ B.take (len-1) $ B.tail rom , len)

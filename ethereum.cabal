@@ -16,6 +16,7 @@ executable ethereumH
                  , cryptohash
                  , data-default
                  , directory
+                 , either
                  , entropy
                  , haskoin
                  , leveldb-haskell

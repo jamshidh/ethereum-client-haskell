@@ -5,6 +5,7 @@ module VM (
 
 import Prelude hiding (LT, GT, EQ)
 
+import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import Data.Bits
 import qualified Data.ByteString as B
@@ -187,23 +188,32 @@ runOperation _ _ x _ _ = error $ "Missing case in runOperation: " ++ show x
 movePC::VMState->Int->VMState
 movePC state l = state{ pc=pc state + l }
 
-decreaseGas::Operation->VMState->VMState
-decreaseGas STOP state = state
-decreaseGas MSTORE state = state{ vmGasRemaining = vmGasRemaining state - 2 }
-decreaseGas _ state = state{ vmGasRemaining = vmGasRemaining state - 1 }
+opGasPrice::Operation->Integer
+opGasPrice STOP = 0
+opGasPrice MSTORE = 2
+opGasPrice SSTORE = 100
+opGasPrice _ = 1
 
+decreaseGas::Operation->VMState->IO VMState
+decreaseGas op state = do
+  let val = opGasPrice op
+  if val <= vmGasRemaining state
+    then return (state{ vmGasRemaining = vmGasRemaining state - opGasPrice op })
+    else return (state{ vmGasRemaining = 0,
+                        vmException = Just OutOfGasException })
 
 runCode::DB->SHAPtr->Environment->VMState->IO VMState
 runCode db p env state = do
   let (op, len) = getOperationAt (envCode env) (pc state)
-  result <- runOperation db p op env state
+  state' <- decreaseGas op state
+  result <- liftIO $ runOperation db p op env state'
   case result of
-    VMState{vmError=Just _} -> return result
-    VMState{done=True} -> return $ decreaseGas op $ movePC result len
-    state2 -> runCode db p env $ decreaseGas op $ movePC state2 len
+    VMState{vmException=Just _} -> return result
+    VMState{done=True} -> return $ movePC result len
+    state2 -> runCode db p env $ movePC state2 len
 
 runCodeFromStart::DB->SHAPtr->Integer->Environment->IO VMState
 runCodeFromStart db p gasLimit env = do
-  vmState <- startingState
+  vmState <- liftIO startingState
   runCode db p env vmState{vmGasRemaining=gasLimit}
 

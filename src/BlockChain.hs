@@ -107,46 +107,64 @@ checkValidity db b = do
 -}
 
 
-chargeForCodeRun::DB->SHAPtr->Address->Address->Integer->ResourceT IO SHAPtr
-chargeForCodeRun db p a theCoinbase val = do
-  p2 <- addToBalance db p a (-val)
-  addToBalance db p2 theCoinbase val
+pay::DB->SHAPtr->Address->Address->Integer->ResourceT IO SHAPtr
+pay db p fromAddr toAddr val = do
+  p2 <- addToBalance db p fromAddr (-val)
+  addToBalance db p2 toAddr val
 
 runCodeForTransaction::DB->SHAPtr->Block->SignedTransaction->ResourceT IO SHAPtr
-runCodeForTransaction _ p _ SignedTransaction{unsignedTransaction=Transaction{tInit=Code c}} | B.null c = return p
 runCodeForTransaction db p b t@SignedTransaction{unsignedTransaction=ut} = do
-  vmState <-
-    liftIO $ runCodeFromStart db p (tGasLimit $ unsignedTransaction t)
-    Environment{
-      envGasPrice=gasPrice ut,
-      envBlock=b,
-      envOwner = whoSignedThisTransaction t,
-      envOrigin = undefined,
-      envInputData = undefined,
-      envSender = undefined,
-      envValue = undefined,
-      envCode = tInit ut
-      }
-  result <- liftIO $ getReturnValue vmState
-  liftIO $ putStrLn $ "Result: " ++ show result
-  case result of
-    Left err -> do
-      liftIO $ putStrLn $ red $ show err
-      return p
-    Right resultBytes -> do
-      let newAddress = getNewAddress t
-      liftIO $ putStrLn $ format newAddress ++ ": " ++ format resultBytes
-      --TODO- I think there is an error in the cpp ethereum, no new account it made
-      --when value doesn't equal 0....  I am mimicking this here so that I can work with that
-      --client, but I really should either try to understand this better or if I convince myself
-      --that there is a bug, report it.
-      p2 <- if value ut == 0
-            then addNewAccount db p newAddress resultBytes
-            else return p
+  let tAddr = whoSignedThisTransaction t
+
+  let intrinsicGas = 5*(fromIntegral $ codeLength $ tInit ut) + 500
+
+  liftIO $ putStrLn $ "intrinsicGas: " ++ show intrinsicGas
+  
+  --TODO- return here if not enough gas
+  
+  p2 <- pay db p tAddr (coinbase $ blockData b) (intrinsicGas * gasPrice ut)
+
+  case tInit ut of
+    Code x | B.null x -> return p2
+    theCode -> do
+      let availableGas = tGasLimit ut - intrinsicGas
+      liftIO $ putStrLn $ "availableGas: " ++ show availableGas
+
+      vmState <- 
+        liftIO $ runCodeFromStart db p2 availableGas
+          Environment{
+            envGasPrice=gasPrice ut,
+            envBlock=b,
+            envOwner = tAddr,
+            envOrigin = undefined,
+            envInputData = undefined,
+            envSender = undefined,
+            envValue = undefined,
+            envCode = tInit ut
+            }
+  
       liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
-      let usedGas = tGasLimit ut - vmGasRemaining vmState
+      let usedGas = availableGas - vmGasRemaining vmState
       liftIO $ putStrLn $ "gasUsed: " ++ show usedGas
-      chargeForCodeRun db p2 (whoSignedThisTransaction t) (coinbase $ blockData b) (usedGas * gasPrice ut)
+      p3 <- pay db p2 tAddr (coinbase $ blockData b) (usedGas * gasPrice ut)
+
+
+      case vmException vmState of
+        Just e -> do
+          liftIO $ putStrLn $ red $ show e
+          return p3
+        Nothing -> do
+          result <- liftIO $ getReturnValue vmState
+          liftIO $ putStrLn $ "Result: " ++ show result
+          let newAddress = getNewAddress t
+          liftIO $ putStrLn $ format newAddress ++ ": " ++ format result
+          --TODO- I think there is an error in the cpp ethereum, no new account it made
+          --when value doesn't equal 0....  I am mimicking this here so that I can work with that
+          --client, but I really should either try to understand this better or if I convince myself
+          --that there is a bug, report it.
+          if value ut == 0
+            then addNewAccount db p3 newAddress result
+            else return p3
 
 addBlocks::DB->[Block]->ResourceT IO ()
 addBlocks db blocks = do
@@ -169,11 +187,13 @@ addTransaction db sr b t = do
   liftIO $ putStrLn "adding to nonces"
   let signAddress = whoSignedThisTransaction t
   sr2 <- addNonce db sr signAddress
-  sr3 <- chargeFees db sr2 (coinbase $ blockData b) t
-  sr4 <- chargeForCodeSize db sr3 (coinbase $ blockData b) t
+  --sr3 <- chargeFees db sr2 (coinbase $ blockData b) t
+  --sr4 <- chargeForCodeSize db sr3 (coinbase $ blockData b) t
+  liftIO $ putStrLn "paying value to recipient"
   sr5 <- if to (unsignedTransaction t) == Address 0
-         then addToBalance db sr4 signAddress (-value (unsignedTransaction t))
-         else transferEther db sr4 signAddress (to $ unsignedTransaction t) (value (unsignedTransaction t))
+         then addToBalance db sr2 signAddress (-value (unsignedTransaction t))
+         else transferEther db sr2 signAddress (to $ unsignedTransaction t) (value (unsignedTransaction t))
+  liftIO $ putStrLn "running code"
   runCodeForTransaction db sr5 b t
 
 addTransactions::DB->SHAPtr->Block->[SignedTransaction]->ResourceT IO SHAPtr
@@ -210,7 +230,7 @@ addBlock db b = do
   DB.put (blockDB db) def (C.hash 256 bytes) bytes
   replaceBestIfBetter db b
 
-
+{-
 chargeFees::DB->SHAPtr->Address->SignedTransaction->ResourceT IO SHAPtr
 chargeFees db sr theCoinbase t = do
   sr2 <- addToBalance db sr theCoinbase (5*finney)
@@ -222,7 +242,7 @@ chargeForCodeSize db sr theCoinbase t = do
   let val = 5 * (gasPrice $ unsignedTransaction t) * fromIntegral codeSize
   sr2 <- addToBalance db sr theCoinbase val
   addToBalance db sr2 (whoSignedThisTransaction t) (-val)
-  
+  -}
 
 getBestBlockHash::DB->ResourceT IO (Maybe SHA)
 getBestBlockHash db = do

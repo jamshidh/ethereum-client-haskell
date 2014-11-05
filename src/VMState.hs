@@ -2,7 +2,7 @@
 module VMState (
   VMState(..),
   startingState,
-  VMError,
+  VMException(..),
   addErr,
   getReturnValue
   ) where
@@ -16,23 +16,25 @@ import ExtWord
 import Format
 import Memory
 
-data VMError = VMError String deriving (Show)
+data VMException = OutOfGasException | VMException String deriving (Show)
 
 addErr::String->Code->VMState->IO VMState
 addErr message c state = do
   let (op, _) = getOperationAt c (pc state)
-  return state{vmError=Just $ VMError (message ++ " for a call to " ++ show op)}
+  return state{vmException=Just $ VMException (message ++ " for a call to " ++ show op)}
 
 data VMState =
   VMState {
-    pc::Int,
-    done::Bool,
-    vmError::Maybe VMError,
     vmGasRemaining::Integer,
-    stack::[Word256],
+    pc::Int,
     memory::Memory,
+    stack::[Word256],
+
+    done::Bool,
     storage::M.Map Word256 Word256,
-    markedForSuicide::Bool
+    markedForSuicide::Bool,
+
+    vmException::Maybe VMException
     }
 
 
@@ -49,19 +51,18 @@ startingState = do
   return VMState {
     pc = 0,
     done=False,
-    vmError=Nothing,
+    vmException=Nothing,
     vmGasRemaining=0,
     stack=[],
     memory=m, storage = M.empty, markedForSuicide=False }
 
 
-getReturnValue::VMState->IO (Either VMError B.ByteString)
+getReturnValue::VMState->IO B.ByteString
 getReturnValue state = do
-  case (vmError state, stack state) of
-    (Just err, _) -> return $ Left err
-    (Nothing, [add, size]) -> Right <$> mLoadByteString (memory state) add size
-    (Nothing, []) -> return $ Right B.empty --Happens when STOP is called
-      --TODO- This needs better error handling other than to just crash if the stack isn't 2 items long
+  case stack state of
+    [add, size] -> mLoadByteString (memory state) add size
+    [] -> return B.empty --Happens when STOP is called
+    --TODO- This needs better error handling other than to just crash if the stack isn't 2 items long
     _ -> error $ "Error in getReturnValue: VM ended with stack in an unsupported case"
 
   
