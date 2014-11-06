@@ -280,11 +280,12 @@ instance RLPSerializable NodeData where
 
 
 
-  rlpDecode (RLPArray [a, RLPString val]) = 
+  rlpDecode (RLPArray [a, rlpVal]) = 
     if terminator
-    then ShortcutNodeData s (Right $ BC.pack val)
+    then ShortcutNodeData s (Right $ BC.pack $ val)
     else ShortcutNodeData s (Left $ SHAPtr (BC.pack val))
     where
+      val = rlpDecode rlpVal
       (terminator, s) = string2TermNibbleString $ rlpDecode a
   rlpDecode (RLPArray x) | length x == 17 =
     FullNodeData (fmap getPtr <$> (\p -> case p of RLPScalar 0 -> Nothing; RLPString "" -> Nothing; _ -> Just p) <$> childPointers) val
