@@ -44,7 +44,7 @@ data BlockData = BlockData {
   parentHash::SHA,
   unclesHash::SHA,
   coinbase::Address,
-  stateRoot::SHAPtr,
+  bStateRoot::SHAPtr,
   transactionsTrie::Integer,
   difficulty::Integer,
   number::Integer,
@@ -91,7 +91,7 @@ instance RLPSerializable BlockData where
       parentHash = rlpDecode v1,
       unclesHash = rlpDecode v2,
       coinbase = rlpDecode v3,
-      stateRoot = rlpDecode v4,
+      bStateRoot = rlpDecode v4,
       transactionsTrie = rlpDecode v5,
       difficulty = rlpDecode v6,
       number = rlpDecode v7,
@@ -111,7 +111,7 @@ instance RLPSerializable BlockData where
       rlpEncode $ parentHash bd,
       rlpEncode $ unclesHash bd,
       rlpEncode $ coinbase bd,
-      rlpEncode $ stateRoot bd,
+      rlpEncode $ bStateRoot bd,
       rlpEncode $ transactionsTrie bd,
       rlpEncode $ difficulty bd,
       rlpEncode $ number bd,
@@ -132,7 +132,7 @@ instance Format BlockData where
     "unclesHash: " ++ format (unclesHash b) ++ 
     (if unclesHash b == hash (B.pack [0xc0]) then " (the empty array)\n" else "\n") ++
     "coinbase: " ++ format (coinbase b) ++ "\n" ++
-    "stateRoot: " ++ format (stateRoot b) ++ "\n" ++
+    "stateRoot: " ++ format (bStateRoot b) ++ "\n" ++
     "transactionsTrie: " ++ show (transactionsTrie b) ++ "\n" ++
     "difficulty: " ++ show (difficulty b) ++ "\n" ++
     "minGasPrice: " ++ show (minGasPrice b) ++ "\n" ++
@@ -150,7 +150,7 @@ genesisBlock =
          parentHash = SHA 0,
          unclesHash = hash (B.pack [0xc0]), 
          coinbase = Address 0,
-         stateRoot = SHAPtr $ B.pack $ integer2Bytes 0x8dbd704eb38d1c2b73ee4788715ea5828a030650829703f077729b2b613dd206,
+         bStateRoot = SHAPtr $ B.pack $ integer2Bytes 0x8dbd704eb38d1c2b73ee4788715ea5828a030650829703f077729b2b613dd206,
          transactionsTrie = 0,
          difficulty = 0x400000, --2^22,
          number = 0,
@@ -175,7 +175,7 @@ noncelessBlockData2RLP bd =
       rlpEncode $ parentHash bd,
       rlpEncode $ unclesHash bd,
       rlpEncode $ coinbase bd,
-      rlpEncode $ stateRoot bd,
+      rlpEncode $ bStateRoot bd,
       rlpEncode $ transactionsTrie bd,
       rlpEncode $ difficulty bd,
       rlpEncode $ number bd,

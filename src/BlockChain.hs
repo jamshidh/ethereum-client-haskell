@@ -71,7 +71,7 @@ instance Format BlockValidityError where
 
 verifyStateRootExists::DB->Block->ResourceT IO Bool
 verifyStateRootExists db b = do
-  val <- DB.get (stateDB db) def (BL.toStrict $ encode $ stateRoot $ blockData b)
+  val <- DB.get (stateDB db) def (BL.toStrict $ encode $ bStateRoot $ blockData b)
   case val of
     Nothing -> return False
     Just _ -> return True
@@ -95,7 +95,7 @@ checkValidity db b = do
           unless (nonceIsValid b) $ fail $ "Block nonce is wrong: " ++ format b
           unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"
           stateRootExists <- verifyStateRootExists db b
-          unless stateRootExists $ fail ("Block stateRoot does not exist: " ++ format (stateRoot $ blockData b))
+          unless stateRootExists $ fail ("Block stateRoot does not exist: " ++ format (bStateRoot $ blockData b))
           return $ return ()
     Nothing -> fail ("Parent Block does not exist: " ++ format (parentHash $ blockData b))
 
@@ -107,13 +107,13 @@ checkValidity db b = do
 -}
 
 
-pay::DB->SHAPtr->Address->Address->Integer->ResourceT IO SHAPtr
-pay db p fromAddr toAddr val = do
-  p2 <- addToBalance db p fromAddr (-val)
-  addToBalance db p2 toAddr val
+pay::DB->Address->Address->Integer->ResourceT IO DB
+pay db fromAddr toAddr val = do
+  db' <- addToBalance db fromAddr (-val)
+  addToBalance db' toAddr val
 
-runCodeForTransaction::DB->SHAPtr->Block->SignedTransaction->ResourceT IO SHAPtr
-runCodeForTransaction db p b t@SignedTransaction{unsignedTransaction=ut} = do
+runCodeForTransaction::DB->Block->SignedTransaction->ResourceT IO DB
+runCodeForTransaction db b t@SignedTransaction{unsignedTransaction=ut} = do
   let tAddr = whoSignedThisTransaction t
 
   let intrinsicGas = 5*(fromIntegral $ codeLength $ tInit ut) + 500
@@ -122,16 +122,16 @@ runCodeForTransaction db p b t@SignedTransaction{unsignedTransaction=ut} = do
   
   --TODO- return here if not enough gas
   
-  p2 <- pay db p tAddr (coinbase $ blockData b) (intrinsicGas * gasPrice ut)
+  db2 <- pay db tAddr (coinbase $ blockData b) (intrinsicGas * gasPrice ut)
 
   case tInit ut of
-    Code x | B.null x -> return p2
+    Code x | B.null x -> return db2
     theCode -> do
       let availableGas = tGasLimit ut - intrinsicGas
       liftIO $ putStrLn $ "availableGas: " ++ show availableGas
 
       vmState <- 
-        liftIO $ runCodeFromStart db p2 availableGas
+        liftIO $ runCodeFromStart db2 availableGas
           Environment{
             envGasPrice=gasPrice ut,
             envBlock=b,
@@ -146,13 +146,13 @@ runCodeForTransaction db p b t@SignedTransaction{unsignedTransaction=ut} = do
       liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
       let usedGas = availableGas - vmGasRemaining vmState
       liftIO $ putStrLn $ "gasUsed: " ++ show usedGas
-      p3 <- pay db p2 tAddr (coinbase $ blockData b) (usedGas * gasPrice ut)
+      db3 <- pay db2 tAddr (coinbase $ blockData b) (usedGas * gasPrice ut)
 
 
       case vmException vmState of
         Just e -> do
           liftIO $ putStrLn $ red $ show e
-          return p3
+          return db3
         Nothing -> do
           result <- liftIO $ getReturnValue vmState
           liftIO $ putStrLn $ "Result: " ++ show result
@@ -163,8 +163,8 @@ runCodeForTransaction db p b t@SignedTransaction{unsignedTransaction=ut} = do
           --client, but I really should either try to understand this better or if I convince myself
           --that there is a bug, report it.
           if value ut == 0
-            then addNewAccount db p3 newAddress result
-            else return p3
+            then addNewAccount db3 newAddress result
+            else return db3
 
 addBlocks::DB->[Block]->ResourceT IO ()
 addBlocks db blocks = do
@@ -175,35 +175,33 @@ getNewAddress t =
   let theHash = hash $ rlpSerialize $ RLPArray [rlpEncode $ whoSignedThisTransaction t, rlpEncode $ tNonce $ unsignedTransaction t]
   in decode $ BL.drop 12 $ encode $ theHash
 
-isTransactionValid::DB->SHAPtr->SignedTransaction->ResourceT IO Bool
-isTransactionValid db p t = do
-  maybeAddressState <- getAddressState db p $ whoSignedThisTransaction t
+isTransactionValid::DB->SignedTransaction->ResourceT IO Bool
+isTransactionValid db t = do
+  maybeAddressState <- getAddressState db $ whoSignedThisTransaction t
   case maybeAddressState of
     Nothing -> return (0 == tNonce (unsignedTransaction t))
     Just addressState -> return (addressStateNonce addressState == tNonce (unsignedTransaction t))
 
-addTransaction::DB->SHAPtr->Block->SignedTransaction->ResourceT IO SHAPtr
-addTransaction db sr b t = do
+addTransaction::DB->Block->SignedTransaction->ResourceT IO DB
+addTransaction db b t = do
   liftIO $ putStrLn "adding to nonces"
   let signAddress = whoSignedThisTransaction t
-  sr2 <- addNonce db sr signAddress
-  --sr3 <- chargeFees db sr2 (coinbase $ blockData b) t
-  --sr4 <- chargeForCodeSize db sr3 (coinbase $ blockData b) t
+  db2 <- addNonce db signAddress
   liftIO $ putStrLn "paying value to recipient"
-  sr5 <- if to (unsignedTransaction t) == Address 0
-         then addToBalance db sr2 signAddress (-value (unsignedTransaction t))
-         else transferEther db sr2 signAddress (to $ unsignedTransaction t) (value (unsignedTransaction t))
+  db3 <- if to (unsignedTransaction t) == Address 0
+         then addToBalance db2 signAddress (-value (unsignedTransaction t))
+         else transferEther db2 signAddress (to $ unsignedTransaction t) (value (unsignedTransaction t))
   liftIO $ putStrLn "running code"
-  runCodeForTransaction db sr5 b t
+  runCodeForTransaction db3 b t
 
-addTransactions::DB->SHAPtr->Block->[SignedTransaction]->ResourceT IO SHAPtr
-addTransactions _ sr _ [] = return sr
-addTransactions db sr b (t:rest) = do
-  valid <- isTransactionValid db sr t
-  sr2 <- if valid
-         then addTransaction db sr b t
-         else return sr
-  addTransactions db sr2 b rest
+addTransactions::DB->Block->[SignedTransaction]->ResourceT IO DB
+addTransactions db _ [] = return db
+addTransactions db b (t:rest) = do
+  valid <- isTransactionValid db t
+  db' <- if valid
+         then addTransaction db b t
+         else return db
+  addTransactions db' b rest
   
 
 addBlock::DB->Block->ResourceT IO ()
@@ -213,14 +211,14 @@ addBlock db b = do
     fromMaybe (error ("Missing parent block in addBlock: " ++ format (parentHash bd))) <$>
     (getBlock db $ parentHash bd)
 
-  sr2 <- addToBalance db (stateRoot $ blockData parentBlock) (coinbase bd) (1500*finney)
+  db2 <- addToBalance db{stateRoot=bStateRoot $ blockData parentBlock} (coinbase bd) (1500*finney)
 
   let transactions = theTransaction <$> receiptTransactions b
 
-  sr3 <- addTransactions db sr2 b transactions
+  db3 <- addTransactions db2 b transactions
   
 
-  liftIO $ putStrLn $ "newStateRoot: " ++ format sr3
+  liftIO $ putStrLn $ "newStateRoot: " ++ format (stateRoot db3)
 
   valid <- checkValidity db b
   case valid of
@@ -229,20 +227,6 @@ addBlock db b = do
   let bytes = rlpSerialize $ rlpEncode b
   DB.put (blockDB db) def (C.hash 256 bytes) bytes
   replaceBestIfBetter db b
-
-{-
-chargeFees::DB->SHAPtr->Address->SignedTransaction->ResourceT IO SHAPtr
-chargeFees db sr theCoinbase t = do
-  sr2 <- addToBalance db sr theCoinbase (5*finney)
-  addToBalance db sr2 (whoSignedThisTransaction t) (-5*finney)
-  
-chargeForCodeSize::DB->SHAPtr->Address->SignedTransaction->ResourceT IO SHAPtr
-chargeForCodeSize db sr theCoinbase t = do
-  let codeSize = codeLength $ tInit $ unsignedTransaction t
-  let val = 5 * (gasPrice $ unsignedTransaction t) * fromIntegral codeSize
-  sr2 <- addToBalance db sr theCoinbase val
-  addToBalance db sr2 (whoSignedThisTransaction t) (-val)
-  -}
 
 getBestBlockHash::DB->ResourceT IO (Maybe SHA)
 getBestBlockHash db = do

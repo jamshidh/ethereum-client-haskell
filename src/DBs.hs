@@ -25,7 +25,7 @@ type BlockDB = DB.DB
 type DetailsDB = DB.DB
 type StateDB = DB.DB
 
-data DB = DB { blockDB::BlockDB, detailsDB::DetailsDB, stateDB::StateDB }
+data DB = DB { blockDB::BlockDB, detailsDB::DetailsDB, stateDB::StateDB, stateRoot::SHAPtr }
 
 newtype SHAPtr = SHAPtr B.ByteString deriving (Show, Eq)
 
@@ -52,4 +52,4 @@ openDBs useCppDBs = do
   bdb <- DB.open (homeDir ++ dbDir useCppDBs ++ blockDBPath) options
   ddb <- DB.open (homeDir ++ dbDir useCppDBs ++ detailsDBPath) options
   sdb <- DB.open (homeDir ++ dbDir useCppDBs ++ stateDBPath) options
-  return $ DB bdb ddb sdb
+  return $ DB bdb ddb sdb undefined

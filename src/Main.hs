@@ -72,21 +72,21 @@ sendMessage socket msg = do
 getNextBlock::DB->Block->UTCTime->ResourceT IO Block
 getNextBlock db b ts = do
   let theCoinbase = prvKey2Address prvKey
-  newStateRoot <- addToBalance db (stateRoot bd) theCoinbase (1500*finney)
+  db' <- addToBalance db{stateRoot=bStateRoot bd} theCoinbase (1500*finney)
 
   return $ Block{
-               blockData=testGetNextBlockData newStateRoot,
+               blockData=testGetNextBlockData $ stateRoot db',
                receiptTransactions=[],
                blockUncles=[]
              }
   where
     testGetNextBlockData::SHAPtr->BlockData
-    testGetNextBlockData newStateRoot =
+    testGetNextBlockData sr =
       BlockData {
         parentHash=blockHash b,
         unclesHash=hash $ B.pack [0xc0],
         coinbase=prvKey2Address prvKey,
-        stateRoot = newStateRoot,
+        bStateRoot = sr,
         transactionsTrie = 0,
         difficulty =
           if (round (utcTimeToPOSIXSeconds ts)) >=
@@ -211,7 +211,7 @@ main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
     --bestBlockHash <- getBestBlockHash' db
     requestNewBlocks socket db
     b <- fromMaybe (error "Missing best block") <$> getBestBlock db
-    userNonce <- fromMaybe 0 <$> fmap addressStateNonce <$> getAddressState db (stateRoot $ blockData b) (prvKey2Address prvKey)
+    userNonce <- fromMaybe 0 <$> fmap addressStateNonce <$> getAddressState db{stateRoot=bStateRoot $ blockData b} (prvKey2Address prvKey)
     --signedTx <- liftIO $ withSource devURandom $ signTransaction prvKey simpleTX{tNonce=userNonce}
     signedTx <- liftIO $ withSource devURandom $ signTransaction prvKey simpleStorageTX{tNonce=userNonce}
                 

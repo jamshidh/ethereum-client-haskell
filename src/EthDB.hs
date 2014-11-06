@@ -42,7 +42,7 @@ showAllKeyVal db = do
     showAllKeyVal'::DB.Iterator->ResourceT IO ()
     showAllKeyVal' i = do
       Just key <- DB.iterKey i
-      Just val <- getNodeData db (SHAPtr key)
+      Just val <- getNodeData db{stateRoot=SHAPtr key}
       --Just byteStringValue <- DB.iterValue i
       --let val = (rlpDecode $ rlpDeserialize $ byteStringValue)::NodeData
       liftIO $ putStrLn $ "----------\n" ++ format (SHAPtr key)
@@ -53,8 +53,8 @@ showAllKeyVal db = do
         then showAllKeyVal' i
         else return ()
 
-getNodeData::DB->SHAPtr->ResourceT IO (Maybe NodeData)
-getNodeData db (SHAPtr p) = do
+getNodeData::DB->ResourceT IO (Maybe NodeData)
+getNodeData db@DB{stateRoot=SHAPtr p} = do
   fmap bytes2NodeData <$> DB.get (stateDB db) def p
         where
           bytes2NodeData::B.ByteString->NodeData
@@ -63,26 +63,26 @@ getNodeData db (SHAPtr p) = do
 
 
 
-getKeyVals::DB->SHAPtr->N.NibbleString->ResourceT IO [(N.NibbleString, B.ByteString)]
-getKeyVals db p key = do
-  maybeNodeData <- getNodeData db p
+getKeyVals::DB->N.NibbleString->ResourceT IO [(N.NibbleString, B.ByteString)]
+getKeyVals db key = do
+  maybeNodeData <- getNodeData db
   let nodeData =case maybeNodeData of
-                  Nothing -> error $ "Error calling getKeyVals, stateRoot doesn't exist: " ++ format p
+                  Nothing -> error $ "Error calling getKeyVals, stateRoot doesn't exist: " ++ format (stateRoot db)
                   Just x -> x
   nextVals <- 
     case nodeData of
       FullNodeData {choices=cs} -> do
         if N.null key
-          then concat <$> sequence [fmap (prependToKey (N.singleton nextN)) <$> getKeyVals db nextP ""| (nextN, Just nextP) <- zip [0..] cs]
+          then concat <$> sequence [fmap (prependToKey (N.singleton nextN)) <$> getKeyVals db{stateRoot=nextP} ""| (nextN, Just nextP) <- zip [0..] cs]
           else case cs!!fromIntegral (N.head key) of
-          Just nextP -> fmap (prependToKey $ N.singleton $ N.head key) <$> getKeyVals db nextP (N.tail key)
+          Just nextP -> fmap (prependToKey $ N.singleton $ N.head key) <$> getKeyVals db{stateRoot=nextP} (N.tail key)
           Nothing -> return []
       ShortcutNodeData{nextNibbleString=s,nextVal=Right v} | key `N.isPrefixOf` s ->
         return [(s, v)]
       ShortcutNodeData{nextNibbleString=s,nextVal=Left nextP} | key `N.isPrefixOf` s -> 
-        fmap (prependToKey s) <$> getKeyVals db nextP ""
+        fmap (prependToKey s) <$> getKeyVals db{stateRoot=nextP} ""
       ShortcutNodeData{nextNibbleString=s,nextVal=Left nextP} | s `N.isPrefixOf` key ->
-        fmap (prependToKey s) <$> getKeyVals db nextP (N.drop (N.length s) key)
+        fmap (prependToKey s) <$> getKeyVals db{stateRoot=nextP} (N.drop (N.length s) key)
       _ -> return []
   case (N.null key, nodeData) of
     (True, FullNodeData{nodeVal = Just v}) -> return (("", v):nextVals)
@@ -136,7 +136,7 @@ getNewNodeDataFromPut db key val (FullNodeData options nodeValue)
 getNewNodeDataFromPut db key val (FullNodeData options nodeValue) = do
   let Just conflictingNode = options!!fromIntegral (N.head key)
   --TODO- add nicer error message if stateRoot doesn't exist
-  Just conflictingNodeData <- getNodeData db conflictingNode
+  Just conflictingNodeData <- getNodeData db{stateRoot=conflictingNode}
   newNodeData <- getNewNodeDataFromPut db (N.tail key) val conflictingNodeData
   newNode <- putNodeData db newNodeData
   return $ FullNodeData (replace options (N.head key) $ Just newNode) nodeValue
@@ -172,7 +172,7 @@ getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 (Right val2)) | key2 `
   return $ ShortcutNodeData key2 $ Left midNode
 
 getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 (Left val2)) | key2 `N.isPrefixOf` key1 = do
-  Just nodeData <- getNodeData db val2
+  Just nodeData <- getNodeData db{stateRoot=val2}
   newNodeData <- getNewNodeDataFromPut db (N.drop (N.length key2) key1) val1 nodeData 
   newNode <- putNodeData db newNodeData
   return $ ShortcutNodeData key2 $ Left newNode
@@ -198,19 +198,17 @@ getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) = do
 
 --getNewNodeDataFromPut _ key _ nd = error ("Missing case in getNewNodeDataFromPut: " ++ format nd ++ ", " ++ format key)
 
-putKeyVal::DB->SHAPtr->N.NibbleString->B.ByteString->ResourceT IO SHAPtr
-putKeyVal db p key val = do
+putKeyVal::DB->N.NibbleString->B.ByteString->ResourceT IO DB
+putKeyVal db key val = do
   --TODO- add nicer error message if stateRoot doesn't exist
-  Just curNodeData <- getNodeData db p
+  Just curNodeData <- getNodeData db
   nextNodeData <- getNewNodeDataFromPut db key val curNodeData
   let k = C.hash 256 $ nodeDataSerialize nextNodeData 
   DB.put (stateDB db) def k $ nodeDataSerialize nextNodeData
-  return $ SHAPtr k
+  return db{stateRoot=SHAPtr k}
 
 prependToKey::N.NibbleString->(N.NibbleString, B.ByteString)->(N.NibbleString, B.ByteString)
 prependToKey prefix (key, val) = (prefix `N.append` key, val)
-
---newtype SHAPtr = SHAPtr B.ByteString deriving (Show, Eq)
 
 data NodeData =
   EmptyNodeData |

@@ -15,12 +15,12 @@ import RLP
 
 main = do
   [theType, addr] <- getArgs
-  let stateRoot = SHAPtr $ fst $ B16.decode $ BC.pack addr
+  let sr = SHAPtr $ fst $ B16.decode $ BC.pack addr
   let useCppDb =
         case theType of
           "h" -> False
           "c" -> True
   DB.runResourceT $ do
     db <- openDBs useCppDb --True = .ethereum, False = .ethereumH
-    kvs <- getKeyVals db stateRoot ""
+    kvs <- getKeyVals db{stateRoot=sr} ""
     liftIO $ putStrLn $ intercalate "\n" ((\(k, v) -> format k ++ ": " ++ format (rlpDeserialize v)) <$> kvs)
