@@ -26,3 +26,7 @@ instance RLPSerializable Code where
 
 codeLength::Code->Int
 codeLength (Code c) = B.length c
+
+
+compile::[Operation]->Code
+compile x = Code $ B.pack $ op2OpCode =<< x

@@ -6,15 +6,16 @@ module TransactionReceipt(
 
 import Colors
 import Format
+import SHA
 import SignedTransaction
 import RLP
 
-data PostTransactionState = PostTransactionState String deriving (Show)
+data PostTransactionState = PostTransactionState SHA deriving (Show)
 
 instance RLPSerializable PostTransactionState where
-  rlpDecode (RLPString x) = PostTransactionState x
+  rlpDecode x = PostTransactionState $ rlpDecode x
   rlpDecode x = error ("rlpDecode for PostTransactionState missing case: " ++ show x)
-  rlpEncode (PostTransactionState x) = RLPString x
+  rlpEncode (PostTransactionState x) = rlpEncode x
 
 data TransactionReceipt =
   TransactionReceipt {
@@ -23,9 +24,12 @@ data TransactionReceipt =
     cumulativeGasUsed::Integer
     } deriving (Show)
 
+instance Format PostTransactionState where
+  format (PostTransactionState x) = format x
+
 instance Format TransactionReceipt where
   format (TransactionReceipt t p gasUsed) =
-    blue "TransactionReceipt: " ++ show gasUsed ++ "\n" ++ format t ++ "\n" ++ show p
+    blue "TransactionReceipt: " ++ show gasUsed ++ "\n" ++ format t ++ "\nPostTransactionState: " ++ format p
 
 instance RLPSerializable TransactionReceipt where
   rlpDecode (RLPArray [t, pts, gasUsed]) =

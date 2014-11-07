@@ -191,6 +191,7 @@ getNewAddress t =
 isTransactionValid::DB->SignedTransaction->ResourceT IO Bool
 isTransactionValid db t = do
   maybeAddressState <- getAddressState db $ whoSignedThisTransaction t
+  liftIO $ print maybeAddressState
   case maybeAddressState of
     Nothing -> return (0 == tNonce (unsignedTransaction t))
     Just addressState -> return (addressStateNonce addressState == tNonce (unsignedTransaction t))
@@ -211,6 +212,7 @@ addTransactions::DB->Block->[SignedTransaction]->ResourceT IO DB
 addTransactions db _ [] = return db
 addTransactions db b (t:rest) = do
   valid <- isTransactionValid db t
+  liftIO $ putStrLn $ "Transaction is valid: " ++ show valid
   db' <- if valid
          then addTransaction db b t
          else return db

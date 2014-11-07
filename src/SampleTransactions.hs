@@ -5,6 +5,7 @@ import qualified Data.ByteString as B
 
 import Address
 import Code
+import Opcodes
 import Transaction
 import Util
 
@@ -25,7 +26,7 @@ outOfGasTX =
     tNonce = 28,
     gasPrice = 0x9184e72a000,
     tGasLimit = 550,
-    to = Address 0, --0x5b42bd01ff7b368cd80a477cb1cf0d407e2b1cbe,
+    to = Address 0,
     value = 3,
     tInit = Code $ B.pack $ integer2Bytes 0x6001600057
     }
@@ -36,8 +37,13 @@ simpleStorageTX =
     tNonce = 28,
     gasPrice = 0x9184e72a000,
     tGasLimit = 1000,
-    to = Address 0, --0x5b42bd01ff7b368cd80a477cb1cf0d407e2b1cbe,
+    to = Address 0,
     value = 3,
-    tInit = Code $ B.pack $ integer2Bytes 0x6001600057
+    tInit = compile
+            [
+              PUSH [1],
+              PUSH [0],
+              SSTORE
+            ]
     }
 
