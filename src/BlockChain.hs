@@ -167,15 +167,16 @@ runCodeForTransaction db b t@SignedTransaction{unsignedTransaction=ut} = do
           if value ut == 0 || not (M.null $ storage vmState)
             then do
             storageDB <- addStorageToDB db3 $ storage vmState
-            putAddressState db newAddress
-              AddressState{
-                addressStateNonce=0,
-                balance=0,
-                contractRoot=if (M.null $ storage vmState)
-                                then Nothing
-                                else Just $ stateRoot storageDB,
-                codeHash=hash result
-                }
+            db4 <- putAddressState db3 newAddress
+                   AddressState{
+                     addressStateNonce=0,
+                     balance=0,
+                     contractRoot=if (M.null $ storage vmState)
+                                  then Nothing
+                                  else Just $ stateRoot storageDB,
+                     codeHash=hash result
+                     }
+            pay db4 tAddr newAddress (value ut)
             else return db3
 
 addBlocks::DB->[Block]->ResourceT IO ()
@@ -201,7 +202,7 @@ addTransaction db b t = do
   db2 <- addNonce db signAddress
   liftIO $ putStrLn "paying value to recipient"
   db3 <- if to (unsignedTransaction t) == Address 0
-         then addToBalance db2 signAddress (-value (unsignedTransaction t))
+         then return db2 --addToBalance db2 signAddress (-value (unsignedTransaction t))
          else transferEther db2 signAddress (to $ unsignedTransaction t) (value (unsignedTransaction t))
   liftIO $ putStrLn "running code"
   runCodeForTransaction db3 b t

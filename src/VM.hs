@@ -143,7 +143,13 @@ runOperation _ SLOAD _ state@VMState{stack=(p:rest)} = do
   return $ state { stack=val:rest }
   
 runOperation _ SSTORE _ state@VMState{stack=(p:val:rest)} = do
-  return $ state { stack=rest, storage=M.insert p val $ storage state }
+  let oldVal = fromMaybe 0 $ M.lookup val (storage state)
+  let extraGasUsed =
+        case (oldVal, val) of
+          (0, x) | x /= 0 -> 100
+          (x, 0) | x /= 0 -> -100
+          _ -> 0
+  return $ state { stack=rest, storage=M.insert p val $ storage state, vmGasRemaining = vmGasRemaining state - extraGasUsed }
 
 runOperation _ JUMP _ state@VMState{stack=(p:rest)} =
   return $ state { stack=rest, pc=fromIntegral p }
