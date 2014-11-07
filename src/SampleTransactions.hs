@@ -73,3 +73,14 @@ createContractTX =
             ]
     }
 
+sendMessageTX::Transaction
+sendMessageTX =
+  Transaction {
+    tNonce = 28,
+    gasPrice = 0x9184e72a000,
+    tGasLimit = 1000,
+    to = Address 0x35de23aac6469dc7fafd36a4d49186ea7e216baf,
+    value = 1000*finney,
+    tInit = Code $ B.pack $ word256ToBytes 0x1234
+    }
+
