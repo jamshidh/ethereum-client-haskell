@@ -125,8 +125,8 @@ code2OpMap::M.Map Word8 Operation
 code2OpMap=M.fromList $ (\(OPData opcode op _ _ _) -> (opcode, op)) <$> opDatas
 
 op2OpCode::Operation->[Word8]
-op2OpCode (PUSH theList) | length theList <= 32 =
-  0x60 + fromIntegral (length theList):theList
+op2OpCode (PUSH theList) | length theList <= 32 && length theList >= 1 =
+  0x5F + fromIntegral (length theList):theList
 op2OpCode (PUSH theList) = error "PUSH can only take up to 32 words"
 op2OpCode op =
   case M.lookup op op2CodeMap of
@@ -138,7 +138,7 @@ opCode2Op rom | B.null rom = (STOP, 1) --according to the yellowpaper, should re
 opCode2Op rom =
   let opcode = B.head rom in
   if opcode >= 0x60 && opcode <= 0x7f
-  then (PUSH $ B.unpack $ B.take (fromIntegral $ opcode-0x60) $ B.tail rom, fromIntegral $ opcode - 0x5F)
+  then (PUSH $ B.unpack $ B.take (fromIntegral $ opcode-0x5F) $ B.tail rom, fromIntegral $ opcode - 0x5E)
   else
     let op = fromMaybe (error $ "code is missing in code2OpMap: " ++ show (B.head rom)) 
              $ M.lookup opcode code2OpMap in

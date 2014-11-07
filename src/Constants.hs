@@ -35,6 +35,8 @@ stateDBPath="/state/"
 
 dbDir::Bool->String
 dbDir True = "/.ethereum"
+--dbDir True = "/Library/Application Support/Ethereum"
 dbDir False = "/.ethereumH"
+
 
 --"/Users/hutong/Library/Application Support/Ethereum/state/"
