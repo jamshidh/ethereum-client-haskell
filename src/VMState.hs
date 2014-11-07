@@ -30,10 +30,11 @@ data VMState =
     memory::Memory,
     stack::[Word256],
 
-    done::Bool,
     storage::M.Map Word256 Word256,
     markedForSuicide::Bool,
-
+    done::Bool,
+    returnVal::Maybe B.ByteString,
+    
     vmException::Maybe VMException
     }
 
@@ -51,6 +52,7 @@ startingState = do
   return VMState {
     pc = 0,
     done=False,
+    returnVal=Nothing,
     vmException=Nothing,
     vmGasRemaining=0,
     stack=[],

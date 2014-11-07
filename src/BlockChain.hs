@@ -156,7 +156,7 @@ runCodeForTransaction db b t@SignedTransaction{unsignedTransaction=ut} = do
           liftIO $ putStrLn $ red $ show e
           return db3
         Nothing -> do
-          result <- liftIO $ getReturnValue vmState
+          let result = fromMaybe B.empty $ returnVal vmState
           liftIO $ putStrLn $ "Result: " ++ show result
           let newAddress = getNewAddress t
           liftIO $ putStrLn $ format newAddress ++ ": " ++ format result
@@ -164,8 +164,9 @@ runCodeForTransaction db b t@SignedTransaction{unsignedTransaction=ut} = do
           --when value doesn't equal 0....  I am mimicking this here so that I can work with that
           --client, but I really should either try to understand this better or if I convince myself
           --that there is a bug, report it.
-          if value ut == 0 || not (M.null $ storage vmState)
+          if True -- value ut == 0 || not (M.null $ storage vmState)
             then do
+            liftIO $ putStrLn $ "adding storage " ++ show (storage vmState)
             storageDB <- addStorageToDB db3 $ storage vmState
             db4 <- putAddressState db3 newAddress
                    AddressState{
@@ -176,6 +177,7 @@ runCodeForTransaction db b t@SignedTransaction{unsignedTransaction=ut} = do
                                   else Just $ stateRoot storageDB,
                      codeHash=hash result
                      }
+            liftIO $ putStrLn $ "paying: " ++ show (value ut)
             pay db4 tAddr newAddress (value ut)
             else return db3
 

@@ -176,8 +176,9 @@ runOperation _ (PUSH vals) _ state =
 
 
 
-runOperation _ RETURN _ state =
-  return $ state { done=True }
+runOperation _ RETURN _ state = do
+  retVal <- liftIO $ getReturnValue state
+  return $ state { done=True, returnVal=Just retVal }
 
 runOperation _ SUICIDE _ state =
   return $ state { done=True, markedForSuicide=True }
