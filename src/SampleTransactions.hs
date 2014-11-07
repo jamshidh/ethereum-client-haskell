@@ -5,6 +5,7 @@ import qualified Data.ByteString as B
 
 import Address
 import Code
+import Constants
 import Opcodes
 import Transaction
 import Util
@@ -44,6 +45,31 @@ simpleStorageTX =
               PUSH [1],
               PUSH [0],
               SSTORE
+            ]
+    }
+
+
+createContractTX::Transaction
+createContractTX =
+  Transaction {
+    tNonce = 28,
+    gasPrice = 0x9184e72a000,
+    tGasLimit = 1000,
+    to = Address 0,
+    value = 1000*finney,
+    tInit = compile
+            [
+              PUSH [5],
+              PUSH [12],
+              PUSH [0],
+              CODECOPY,
+              PUSH [5],
+              PUSH [0],
+              RETURN,
+              CALLDATALOAD,
+              PUSH [0],
+              SSTORE,
+              RETURN
             ]
     }
 

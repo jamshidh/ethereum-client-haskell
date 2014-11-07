@@ -102,8 +102,14 @@ runOperation _ CALLDATACOPY Environment{envInputData=d} state@VMState{stack=memP
 runOperation _ CODESIZE Environment{envCode=c} state = return state{stack=fromIntegral (codeLength c):stack state}
 
 runOperation _ CODECOPY Environment{envCode=Code c} state@VMState{stack=memP:codeP:size:rest} = do
+  beforeMemSize <- getSize $ memory state
   mStoreByteString (memory state) memP $ B.take (fromIntegral size) $ B.drop (fromIntegral codeP) c
-  return state{stack=rest}
+  afterMemory <- getSize (memory state)
+  let extraMemory = afterMemory - beforeMemSize 
+  liftIO $ putStrLn $ "before: " ++ show beforeMemSize
+  liftIO $ putStrLn $ "after: " ++ show afterMemory
+  liftIO $ putStrLn $ "extra: " ++ show extraMemory
+  return state{stack=rest, vmGasRemaining = vmGasRemaining state - fromIntegral extraMemory}
 
 runOperation _ GASPRICE Environment{envGasPrice=gp} state = return state{stack=fromIntegral gp:stack state}
 
@@ -160,8 +166,9 @@ runOperation _ JUMPI _ state@VMState{stack=(p:cond:rest)} =
 runOperation _ PC _ state =
   return state{stack=fromIntegral (pc state):stack state}
 
-runOperation _ MSIZE _ state@VMState{memory=Memory mSize _} =
-  return state{stack=mSize:stack state}
+runOperation _ MSIZE _ state@VMState{memory=m} = do
+  memSize <- getSize m
+  return state{stack=memSize:stack state}
 
 runOperation _ GAS _ state =
   return $ state { stack=fromInteger (vmGasRemaining state):stack state }
