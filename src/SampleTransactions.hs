@@ -12,33 +12,30 @@ import Util
 
 simpleTX::Transaction
 simpleTX =
-  Transaction {
+  ContractCreationTX {
     tNonce = 28,
     gasPrice = 0x9184e72a000,
     tGasLimit = 550,
-    to = Address 0, --0x5b42bd01ff7b368cd80a477cb1cf0d407e2b1cbe,
     value = 3,
     tInit = Code $ B.pack $ integer2Bytes 0x600260005460206000f2
     }
 
 outOfGasTX::Transaction
 outOfGasTX =
-  Transaction {
+  ContractCreationTX {
     tNonce = 28,
     gasPrice = 0x9184e72a000,
     tGasLimit = 550,
-    to = Address 0,
     value = 3,
     tInit = Code $ B.pack $ integer2Bytes 0x6001600057
     }
 
 simpleStorageTX::Transaction
 simpleStorageTX =
-  Transaction {
+  ContractCreationTX {
     tNonce = 28,
     gasPrice = 0x9184e72a000,
     tGasLimit = 1000,
-    to = Address 0,
     value = 3,
     tInit = compile
             [
@@ -51,11 +48,10 @@ simpleStorageTX =
 
 createContractTX::Transaction
 createContractTX =
-  Transaction {
+  ContractCreationTX {
     tNonce = 28,
     gasPrice = 0x9184e72a000,
     tGasLimit = 1000,
-    to = Address 0,
     value = 1000*finney,
     tInit = compile
             [
@@ -75,12 +71,12 @@ createContractTX =
 
 sendMessageTX::Transaction
 sendMessageTX =
-  Transaction {
+  MessageTX {
     tNonce = 28,
     gasPrice = 0x9184e72a000,
     tGasLimit = 1000,
     to = Address 0x35de23aac6469dc7fafd36a4d49186ea7e216baf,
     value = 1000*finney,
-    tInit = Code $ B.pack $ word256ToBytes 0x1234
+    tData = B.pack $ word256ToBytes 0x1234
     }
 

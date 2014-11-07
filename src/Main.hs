@@ -213,9 +213,9 @@ main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
     b <- fromMaybe (error "Missing best block") <$> getBestBlock db
     userNonce <- fromMaybe 0 <$> fmap addressStateNonce <$> getAddressState db{stateRoot=bStateRoot $ blockData b} (prvKey2Address prvKey)
     --signedTx <- liftIO $ withSource devURandom $ signTransaction prvKey simpleTX{tNonce=userNonce}
-    signedTx <- liftIO $ withSource devURandom $ signTransaction prvKey sendMessageTX{tNonce=userNonce}
+    --signedTx <- liftIO $ withSource devURandom $ signTransaction prvKey sendMessageTX{tNonce=userNonce}
                 
-    liftIO $ sendMessage socket $ Transactions [signedTx]
+    --liftIO $ sendMessage socket $ Transactions [signedTx]
 
     readAndOutput socket db
 

@@ -27,7 +27,6 @@ import qualified Database.LevelDB as DB
 import Address
 import AddressState
 import Block
-import Code
 import Colors
 import Constants
 import DBs
@@ -114,26 +113,14 @@ pay db fromAddr toAddr val = do
   db' <- addToBalance db fromAddr (-val)
   addToBalance db' toAddr val
 
-runCodeForTransaction::DB->Block->SignedTransaction->ResourceT IO DB
-runCodeForTransaction db b t@SignedTransaction{unsignedTransaction=ut} = do
+runCodeForTransaction::DB->Block->Integer->SignedTransaction->ResourceT IO DB
+runCodeForTransaction db b availableGas t@SignedTransaction{unsignedTransaction=ut@ContractCreationTX{}} = do
   let tAddr = whoSignedThisTransaction t
 
-  let intrinsicGas = 5*(fromIntegral $ codeLength $ tInit ut) + 500
+  liftIO $ putStrLn $ "availableGas: " ++ show availableGas
 
-  liftIO $ putStrLn $ "intrinsicGas: " ++ show intrinsicGas
-  
-  --TODO- return here if not enough gas
-  
-  db2 <- pay db tAddr (coinbase $ blockData b) (intrinsicGas * gasPrice ut)
-
-  case tInit ut of
-    Code x | B.null x -> return db2
-    theCode -> do
-      let availableGas = tGasLimit ut - intrinsicGas
-      liftIO $ putStrLn $ "availableGas: " ++ show availableGas
-
-      vmState <- 
-        liftIO $ runCodeFromStart db2 availableGas
+  vmState <- 
+    liftIO $ runCodeFromStart db availableGas
           Environment{
             envGasPrice=gasPrice ut,
             envBlock=b,
@@ -145,16 +132,16 @@ runCodeForTransaction db b t@SignedTransaction{unsignedTransaction=ut} = do
             envCode = tInit ut
             }
   
-      liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
-      let usedGas = availableGas - vmGasRemaining vmState
-      liftIO $ putStrLn $ "gasUsed: " ++ show usedGas
-      db3 <- pay db2 tAddr (coinbase $ blockData b) (usedGas * gasPrice ut)
+  liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
+  let usedGas = availableGas - vmGasRemaining vmState
+  liftIO $ putStrLn $ "gasUsed: " ++ show usedGas
+  db2 <- pay db tAddr (coinbase $ blockData b) (usedGas * gasPrice ut)
 
 
-      case vmException vmState of
+  case vmException vmState of
         Just e -> do
           liftIO $ putStrLn $ red $ show e
-          return db3
+          addToBalance db2 tAddr (-value ut) --zombie account, money lost forever
         Nothing -> do
           let result = fromMaybe B.empty $ returnVal vmState
           liftIO $ putStrLn $ "Result: " ++ show result
@@ -167,8 +154,8 @@ runCodeForTransaction db b t@SignedTransaction{unsignedTransaction=ut} = do
           if True -- value ut == 0 || not (M.null $ storage vmState)
             then do
             liftIO $ putStrLn $ "adding storage " ++ show (storage vmState)
-            storageDB <- addStorageToDB db3 $ storage vmState
-            db4 <- putAddressState db3 newAddress
+            storageDB <- addStorageToDB db2 $ storage vmState
+            db3 <- putAddressState db2 newAddress
                    AddressState{
                      addressStateNonce=0,
                      balance=0,
@@ -178,8 +165,11 @@ runCodeForTransaction db b t@SignedTransaction{unsignedTransaction=ut} = do
                      codeHash=hash result
                      }
             liftIO $ putStrLn $ "paying: " ++ show (value ut)
-            pay db4 tAddr newAddress (value ut)
-            else return db3
+            pay db3 tAddr newAddress (value ut)
+            else return db2
+
+runCodeForTransaction db _ _ t@SignedTransaction{unsignedTransaction=ut@MessageTX{}} =
+  pay db (whoSignedThisTransaction t) (to ut) (value ut)
 
 addBlocks::DB->[Block]->ResourceT IO ()
 addBlocks db blocks = do
@@ -199,16 +189,19 @@ isTransactionValid db t = do
     Just addressState -> return (addressStateNonce addressState == tNonce (unsignedTransaction t))
 
 addTransaction::DB->Block->SignedTransaction->ResourceT IO DB
-addTransaction db b t = do
+addTransaction db b t@SignedTransaction{unsignedTransaction=ut} = do
   liftIO $ putStrLn "adding to nonces"
   let signAddress = whoSignedThisTransaction t
   db2 <- addNonce db signAddress
   liftIO $ putStrLn "paying value to recipient"
-  db3 <- if to (unsignedTransaction t) == Address 0
-         then return db2 --addToBalance db2 signAddress (-value (unsignedTransaction t))
-         else transferEther db2 signAddress (to $ unsignedTransaction t) (value (unsignedTransaction t))
+
+  let intrinsicGas = 5*(fromIntegral $ codeOrDataLength ut) + 500
+  liftIO $ putStrLn $ "intrinsicGas: " ++ show intrinsicGas
+  --TODO- return here if not enough gas
+  db3 <- pay db2 signAddress (coinbase $ blockData b) (intrinsicGas * gasPrice ut)
+
   liftIO $ putStrLn "running code"
-  runCodeForTransaction db3 b t
+  runCodeForTransaction db3 b (tGasLimit ut - intrinsicGas) t
 
 addTransactions::DB->Block->[SignedTransaction]->ResourceT IO DB
 addTransactions db _ [] = return db
@@ -220,30 +213,28 @@ addTransactions db b (t:rest) = do
          else return db
   addTransactions db' b rest
   
-
 addBlock::DB->Block->ResourceT IO ()
-addBlock db b = do
-  let bd = blockData b
-  parentBlock <-
-    fromMaybe (error ("Missing parent block in addBlock: " ++ format (parentHash bd))) <$>
-    (getBlock db $ parentHash bd)
+addBlock db b@Block{blockData=bd} = do
+  maybeParent <- getBlock db $ parentHash bd
+  case maybeParent of
+    Nothing ->
+      liftIO $ putStrLn $ "Missing parent block in addBlock: " ++ format (parentHash bd) ++ "\n" ++
+      "Block will not be added now, but will be requested and added later"
+    Just parentBlock -> do
+      db2 <- addToBalance db{stateRoot=bStateRoot $ blockData parentBlock} (coinbase bd) (1500*finney)
 
-  db2 <- addToBalance db{stateRoot=bStateRoot $ blockData parentBlock} (coinbase bd) (1500*finney)
-
-  let transactions = theTransaction <$> receiptTransactions b
-
-  db3 <- addTransactions db2 b transactions
+      let transactions = theTransaction <$> receiptTransactions b
+      db3 <- addTransactions db2 b transactions
   
+      liftIO $ putStrLn $ "newStateRoot: " ++ format (stateRoot db3)
 
-  liftIO $ putStrLn $ "newStateRoot: " ++ format (stateRoot db3)
-
-  valid <- checkValidity db b
-  case valid of
-     Right () -> return ()
-     Left err -> error err
-  let bytes = rlpSerialize $ rlpEncode b
-  DB.put (blockDB db) def (C.hash 256 bytes) bytes
-  replaceBestIfBetter db b
+      valid <- checkValidity db b
+      case valid of
+        Right () -> return ()
+        Left err -> error err
+      let bytes = rlpSerialize $ rlpEncode b
+      DB.put (blockDB db) def (C.hash 256 bytes) bytes
+      replaceBestIfBetter db b
 
 getBestBlockHash::DB->ResourceT IO (Maybe SHA)
 getBestBlockHash db = do

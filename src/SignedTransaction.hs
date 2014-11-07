@@ -39,12 +39,7 @@ instance Format SignedTransaction where
       blue "Transaction" ++
            tab (
                 "\n" ++
-                "tNonce: " ++ show (tNonce x) ++ "\n" ++
-                "gasPrice: " ++ show (gasPrice x) ++ "\n" ++
-                "tGasLimit: " ++ show (tGasLimit x) ++ "\n" ++
-                "to: " ++ format (to x) ++ "\n" ++
-                "value: " ++ show (value x) ++ "\n" ++
-                "tInit: " ++ tab ("\n" ++ format (tInit x)) ++ "\n" ++
+                format x ++
                 "v: " ++ show v' ++ "\n" ++
                 "r: " ++ show r' ++ "\n" ++
                 "s: " ++ show s' ++ "\n")

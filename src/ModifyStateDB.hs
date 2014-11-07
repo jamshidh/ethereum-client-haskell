@@ -4,10 +4,10 @@ module ModifyStateDB (
                       initializeBlankStateDB,
                       initializeStateDB,
                       addToBalance,
-                      transferEther,
                       addNonce
 ) where
 
+import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
@@ -71,11 +71,6 @@ addToBalance::DB->Address->Integer->ResourceT IO DB
 addToBalance db address val = do
   addressState <- fromMaybe startingAddressState <$> getAddressState db address
   putAddressState db address addressState{ balance = balance addressState + fromIntegral val }
-
-transferEther::DB->Address->Address->Integer->ResourceT IO DB
-transferEther db fromAddress toAddress val = do
-  db2 <- addToBalance db fromAddress (-val)
-  addToBalance db2 toAddress val
 
 addNonce::DB->Address->ResourceT IO DB
 addNonce db address = do

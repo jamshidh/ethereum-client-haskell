@@ -7,6 +7,7 @@ module AddressState (
   putAddressState
   ) where
 
+import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import qualified Data.ByteString as B
 import Data.Functor

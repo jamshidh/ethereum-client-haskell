@@ -149,13 +149,7 @@ runOperation _ SLOAD _ state@VMState{stack=(p:rest)} = do
   return $ state { stack=val:rest }
   
 runOperation _ SSTORE _ state@VMState{stack=(p:val:rest)} = do
-  let oldVal = fromMaybe 0 $ M.lookup val (storage state)
-  let extraGasUsed =
-        case (oldVal, val) of
-          (0, x) | x /= 0 -> 100
-          (x, 0) | x /= 0 -> -100
-          _ -> 0
-  return $ state { stack=rest, storage=M.insert p val $ storage state, vmGasRemaining = vmGasRemaining state - extraGasUsed }
+  return $ state { stack=rest, storage=M.insert p val $ storage state }
 
 runOperation _ JUMP _ state@VMState{stack=(p:rest)} =
   return $ state { stack=rest, pc=fromIntegral p }
@@ -202,17 +196,23 @@ runOperation _ x _ _ = error $ "Missing case in runOperation: " ++ show x
 movePC::VMState->Int->VMState
 movePC state l = state{ pc=pc state + l }
 
-opGasPrice::Operation->Integer
-opGasPrice STOP = 0
-opGasPrice MSTORE = 2
-opGasPrice SSTORE = 100
-opGasPrice _ = 1
+opGasPrice::VMState->Operation->IO Integer
+opGasPrice _ STOP = return 0
+opGasPrice _ MSTORE = return 2
+opGasPrice state@VMState{ stack=_:val:_ } SSTORE = do
+  let oldVal = fromMaybe 0 $ M.lookup val (storage state)
+  return $
+    case (oldVal, val) of
+      (0, x) | x /= 0 -> 200
+      (x, 0) | x /= 0 -> 0
+      _ -> 100
+opGasPrice _ _ = return 1
 
 decreaseGas::Operation->VMState->IO VMState
 decreaseGas op state = do
-  let val = opGasPrice op
+  val <- opGasPrice state op
   if val <= vmGasRemaining state
-    then return (state{ vmGasRemaining = vmGasRemaining state - opGasPrice op })
+    then return (state{ vmGasRemaining = vmGasRemaining state - val })
     else return (state{ vmGasRemaining = 0,
                         vmException = Just OutOfGasException })
 
@@ -220,7 +220,7 @@ runCode::DB->Environment->VMState->IO VMState
 runCode db env state = do
   let (op, len) = getOperationAt (envCode env) (pc state)
   state' <- decreaseGas op state
-  result <- liftIO $ runOperation db op env state'
+  result <- runOperation db op env state'
   case result of
     VMState{vmException=Just _} -> return result
     VMState{done=True} -> return $ movePC result len
