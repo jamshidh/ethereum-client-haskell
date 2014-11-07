@@ -1,11 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module EthDB (
-  showAllKeyVal,
+  --showAllKeyVal,
   SHAPtr(..),
   getKeyVals,
   putKeyVal,
-  kvFormat
 ) where
 
 import Control.Monad.IO.Class
@@ -30,6 +29,7 @@ import RLP
 
 --import Debug.Trace
 
+{-
 showAllKeyVal::DB->ResourceT IO ()
 showAllKeyVal db = do
   i <- DB.iterOpen (stateDB db) def
@@ -42,7 +42,7 @@ showAllKeyVal db = do
     showAllKeyVal'::DB.Iterator->ResourceT IO ()
     showAllKeyVal' i = do
       Just key <- DB.iterKey i
-      Just val <- getNodeData db{stateRoot=SHAPtr key}
+      Just val <- (getNodeData db{stateRoot=SHAPtr key})::ResourceT IO (Maybe (NodeData B.ByteString))
       --Just byteStringValue <- DB.iterValue i
       --let val = (rlpDecode $ rlpDeserialize $ byteStringValue)::NodeData
       liftIO $ putStrLn $ "----------\n" ++ format (SHAPtr key)
@@ -52,6 +52,7 @@ showAllKeyVal db = do
       if v
         then showAllKeyVal' i
         else return ()
+-}
 
 getNodeData::DB->ResourceT IO (Maybe NodeData)
 getNodeData db@DB{stateRoot=SHAPtr p} = do
@@ -63,7 +64,7 @@ getNodeData db@DB{stateRoot=SHAPtr p} = do
 
 
 
-getKeyVals::DB->N.NibbleString->ResourceT IO [(N.NibbleString, B.ByteString)]
+getKeyVals::DB->N.NibbleString->ResourceT IO [(N.NibbleString, RLPObject)]
 getKeyVals db key = do
   maybeNodeData <- getNodeData db
   let nodeData =case maybeNodeData of
@@ -123,7 +124,7 @@ getCommonPrefix (c1:rest1) (c2:rest2) | c1 == c2 = prefixTheCommonPrefix c1 (get
 getCommonPrefix x y = ([], x, y)
 
 
-getNewNodeDataFromPut::DB->N.NibbleString->B.ByteString->NodeData->ResourceT IO NodeData
+getNewNodeDataFromPut::DB->N.NibbleString->RLPObject->NodeData->ResourceT IO NodeData
 --getNewNodeDataFromPut _ key val nd | trace ("getNewNodeDataFromPut: " ++ format key ++ ", " ++ format val ++ ", " ++ format nd) False = undefined
 getNewNodeDataFromPut _ key val EmptyNodeData = return $
   ShortcutNodeData key $ Right val
@@ -136,7 +137,7 @@ getNewNodeDataFromPut db key val (FullNodeData options nodeValue)
 getNewNodeDataFromPut db key val (FullNodeData options nodeValue) = do
   let Just conflictingNode = options!!fromIntegral (N.head key)
   --TODO- add nicer error message if stateRoot doesn't exist
-  Just conflictingNodeData <- getNodeData db{stateRoot=conflictingNode}
+  Just conflictingNodeData <- (getNodeData db{stateRoot=conflictingNode}::ResourceT IO (Maybe NodeData))
   newNodeData <- getNewNodeDataFromPut db (N.tail key) val conflictingNodeData
   newNode <- putNodeData db newNodeData
   return $ FullNodeData (replace options (N.head key) $ Just newNode) nodeValue
@@ -198,7 +199,7 @@ getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) = do
 
 --getNewNodeDataFromPut _ key _ nd = error ("Missing case in getNewNodeDataFromPut: " ++ format nd ++ ", " ++ format key)
 
-putKeyVal::DB->N.NibbleString->B.ByteString->ResourceT IO DB
+putKeyVal::DB->N.NibbleString->RLPObject->ResourceT IO DB
 putKeyVal db key val = do
   --TODO- add nicer error message if stateRoot doesn't exist
   Just curNodeData <- getNodeData db
@@ -207,21 +208,21 @@ putKeyVal db key val = do
   DB.put (stateDB db) def k $ nodeDataSerialize nextNodeData
   return db{stateRoot=SHAPtr k}
 
-prependToKey::N.NibbleString->(N.NibbleString, B.ByteString)->(N.NibbleString, B.ByteString)
+prependToKey::N.NibbleString->(N.NibbleString, RLPObject)->(N.NibbleString, RLPObject)
 prependToKey prefix (key, val) = (prefix `N.append` key, val)
 
 data NodeData =
   EmptyNodeData |
   FullNodeData {
     choices::[Maybe SHAPtr],
-    nodeVal::Maybe B.ByteString
+    nodeVal::Maybe RLPObject
   } |
   ShortcutNodeData {
     nextNibbleString::N.NibbleString,
-    nextVal::Either SHAPtr B.ByteString
+    nextVal::Either SHAPtr RLPObject
   } deriving Show
 
-formatVal::Maybe B.ByteString->String
+formatVal::Maybe RLPObject->String
 formatVal Nothing = red "NULL"
 formatVal (Just x) = green (format x)
 
@@ -266,8 +267,9 @@ instance RLPSerializable NodeData where
     where
       encodeChoice Nothing = rlpEncode (0::Integer)
       encodeChoice (Just (SHAPtr x)) = rlpEncode x
+      encodeVal::Maybe RLPObject->RLPObject
       encodeVal Nothing = rlpEncode (0::Integer)
-      encodeVal (Just x) = rlpEncode x
+      encodeVal (Just x) = x
   rlpEncode (ShortcutNodeData {nextNibbleString=s, nextVal=val}) = 
     RLPArray[rlpEncode $ BC.unpack $ termNibbleString2String terminator s, encodeVal val] 
     where
@@ -276,16 +278,15 @@ instance RLPSerializable NodeData where
           Left _ -> False
           Right _ -> True
       encodeVal (Left (SHAPtr x)) = rlpEncode x
-      encodeVal (Right x) = rlpEncode x
+      encodeVal (Right x) = x
 
 
 
-  rlpDecode (RLPArray [a, rlpVal]) = 
+  rlpDecode (RLPArray [a, val]) = 
     if terminator
-    then ShortcutNodeData s (Right $ BC.pack $ val)
-    else ShortcutNodeData s (Left $ SHAPtr (BC.pack val))
+    then ShortcutNodeData s $ Right val
+    else ShortcutNodeData s (Left $ SHAPtr (BC.pack $ rlpDecode val))
     where
-      val = rlpDecode rlpVal
       (terminator, s) = string2TermNibbleString $ rlpDecode a
   rlpDecode (RLPArray x) | length x == 17 =
     FullNodeData (fmap getPtr <$> (\p -> case p of RLPScalar 0 -> Nothing; RLPString "" -> Nothing; _ -> Just p) <$> childPointers) val
@@ -294,14 +295,8 @@ instance RLPSerializable NodeData where
       val = case last x of
         RLPScalar 0 -> Nothing
         RLPString "" -> Nothing
-        RLPString s -> Just $ BC.pack s
-        _ -> error "Malformed RLP data in call to rlpDecode for NodeData: value of FullNodeData is a RLPArray"
+        x' -> Just x'
       getPtr::RLPObject->SHAPtr
       getPtr p = SHAPtr $ rlpDecode p
   rlpDecode x = error ("Missing case in rlpDecode for NodeData: " ++ format x)
-
-kvFormat::(N.NibbleString, B.ByteString)->String
-kvFormat (k, v) = format k ++ ": " ++ format rlpVal
-  where
-    rlpVal = rlpDeserialize v
 

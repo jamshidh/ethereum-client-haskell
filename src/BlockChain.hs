@@ -18,6 +18,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import Data.Functor
+import qualified Data.Map as M
 import Data.Maybe
 import Data.Time
 import Data.Time.Clock.POSIX
@@ -36,6 +37,7 @@ import ModifyStateDB
 import RLP
 import SHA
 import SignedTransaction
+import Storage
 import Transaction
 import TransactionReceipt
 import VM
@@ -158,12 +160,22 @@ runCodeForTransaction db b t@SignedTransaction{unsignedTransaction=ut} = do
           liftIO $ putStrLn $ "Result: " ++ show result
           let newAddress = getNewAddress t
           liftIO $ putStrLn $ format newAddress ++ ": " ++ format result
-          --TODO- I think there is an error in the cpp ethereum, no new account it made
+          --TODO- I think there is an error in the cpp ethereum, no new account is made
           --when value doesn't equal 0....  I am mimicking this here so that I can work with that
           --client, but I really should either try to understand this better or if I convince myself
           --that there is a bug, report it.
-          if value ut == 0
-            then addNewAccount db3 newAddress result
+          if value ut == 0 || not (M.null $ storage vmState)
+            then do
+            storageDB <- addStorageToDB db3 $ storage vmState
+            putAddressState db newAddress
+              AddressState{
+                addressStateNonce=0,
+                balance=0,
+                contractRoot=if (M.null $ storage vmState)
+                                then Nothing
+                                else Just $ stateRoot storageDB,
+                codeHash=hash result
+                }
             else return db3
 
 addBlocks::DB->[Block]->ResourceT IO ()

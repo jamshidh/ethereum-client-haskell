@@ -22,23 +22,33 @@ import RLP
 import SHA
 import Util
 
-data AddressState = AddressState { addressStateNonce::Integer, balance::Integer, contractRoot::Integer, codeHash::SHA } deriving (Show)
+data AddressState = AddressState { addressStateNonce::Integer, balance::Integer, contractRoot::Maybe SHAPtr, codeHash::SHA } deriving (Show)
 
 instance Format AddressState where
   format a = blue "AddressState" ++
              tab("\nnonce: " ++ showHex (addressStateNonce a) "" ++
                  "\nbalance: " ++ show (toInteger $ balance a) ++
-                 "\ncontractRoot: " ++ showHex (contractRoot a) "" ++
+                 "\ncontractRoot: " ++ formatCR (contractRoot a) ++
                  "\ncodeHash: " ++ format (codeHash a))
+    where
+      formatCR::Maybe SHAPtr->String
+      formatCR Nothing = "0x0"
+      formatCR (Just x) = format x
   
 instance RLPSerializable AddressState where
-  rlpEncode a = RLPArray [rlpEncode $ toInteger $ addressStateNonce a, rlpEncode $ toInteger $ balance a, rlpEncode $ toInteger $ contractRoot a, rlpEncode $ codeHash a]
+  rlpEncode a = RLPArray [
+    rlpEncode $ toInteger $ addressStateNonce a,
+    rlpEncode $ toInteger $ balance a,
+    case contractRoot a of
+         Nothing -> rlpEncode (0::Integer)
+         Just x -> rlpEncode x,
+    rlpEncode $ codeHash a]
 
   rlpDecode (RLPArray [n, b, cr, ch]) =
     AddressState {
       addressStateNonce=fromInteger $ rlpDecode n,
       balance=fromInteger $ rlpDecode b,
-      contractRoot=fromInteger $ rlpDecode cr,
+      contractRoot=if rlpDecode cr == (0::Integer) then Nothing else Just (rlpDecode cr),
       codeHash=rlpDecode ch
       } 
   rlpDecode x = error $ "Missing case in rlpDecode for AddressState: " ++ format x
@@ -51,18 +61,18 @@ getAddressState db address = do
   states <- getKeyVals db $ addressAsNibbleString address
   case states of
     [] -> return Nothing
-    [state] -> return $ Just $ rlpDecode $ rlpDeserialize $ snd state
+    [state] -> return $ Just $ rlpDecode $ rlpDeserialize $ rlpDecode $ snd state
     _ -> error ("getAddressStates found multiple states for: " ++ format address)
   
 
 getAllAddressStates::DB->ResourceT IO [(N.NibbleString, AddressState)]
 getAllAddressStates db = do
   states <- getKeyVals db ""
-  return $ fmap (rlpDecode . rlpDeserialize) <$> states
+  return $ fmap rlpDecode <$> states
 
   
 
 putAddressState::DB->Address->AddressState->ResourceT IO DB
 putAddressState db address newState = do
-  putKeyVal db (addressAsNibbleString address) (rlpSerialize $ rlpEncode newState)
+  putKeyVal db (addressAsNibbleString address) $ rlpEncode $ rlpSerialize $ rlpEncode newState
 

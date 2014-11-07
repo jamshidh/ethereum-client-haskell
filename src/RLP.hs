@@ -128,5 +128,6 @@ instance RLPSerializable String where
 instance RLPSerializable B.ByteString where
     rlpEncode s = RLPString $ BC.unpack s
       
+    rlpDecode (RLPScalar x) = B.singleton x
     rlpDecode (RLPString s) = BC.pack s
     rlpDecode x = error ("rlpDecode for ByteString not defined for: " ++ show x)

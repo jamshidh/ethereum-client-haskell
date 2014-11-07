@@ -9,6 +9,7 @@ module NibbleString (
   length,
   pack,
   unpack,
+  byte2Nibbles,
   isPrefixOf,
   head,
   tail,
@@ -104,9 +105,9 @@ pack x = EvenNibbleString $ B.pack (nibbles2Bytes x)
 unpack::NibbleString->[Nibble]
 unpack (OddNibbleString c rest) = c:unpack (EvenNibbleString rest)
 unpack (EvenNibbleString x) = byte2Nibbles =<< B.unpack x
-    where
-      byte2Nibbles y = [y `shiftR` 4, y .&. 0xF]
 
+byte2Nibbles::Word8->[Nibble]
+byte2Nibbles x = [x `shiftR` 4, x .&. 0xF]
 
 isPrefixOf::NibbleString->NibbleString->Bool
 --isPrefixOf a b | trace ("isPrefixOf: " ++ format a ++ ", " ++ format b) False = undefined

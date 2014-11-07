@@ -5,7 +5,6 @@ module ModifyStateDB (
                       initializeStateDB,
                       addToBalance,
                       transferEther,
-                      addNewAccount,
                       addNonce
 ) where
 
@@ -33,7 +32,7 @@ startingAddressState =
       AddressState {
       addressStateNonce=0,
       balance= 0,
-      contractRoot=0,
+      contractRoot=Nothing,
       codeHash=hash B.empty
       }
 
@@ -77,12 +76,6 @@ transferEther::DB->Address->Address->Integer->ResourceT IO DB
 transferEther db fromAddress toAddress val = do
   db2 <- addToBalance db fromAddress (-val)
   addToBalance db2 toAddress val
-
-
-addNewAccount::DB->Address->B.ByteString->ResourceT IO DB
-addNewAccount db address code = 
-  putAddressState db address AddressState{addressStateNonce=0, balance=0, contractRoot=0, codeHash=hash code}
-
 
 addNonce::DB->Address->ResourceT IO DB
 addNonce db address = do
