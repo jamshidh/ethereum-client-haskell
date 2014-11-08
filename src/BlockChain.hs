@@ -27,6 +27,7 @@ import qualified Database.LevelDB as DB
 import Address
 import AddressState
 import Block
+import Code
 import CodeDB
 import Colors
 import Constants
@@ -170,8 +171,50 @@ runCodeForTransaction db b availableGas t@SignedTransaction{unsignedTransaction=
             pay db3 tAddr newAddress (value ut)
             else return db2
 
-runCodeForTransaction db _ _ t@SignedTransaction{unsignedTransaction=ut@MessageTX{}} =
-  pay db (whoSignedThisTransaction t) (to ut) (value ut)
+runCodeForTransaction db b availableGas t@SignedTransaction{unsignedTransaction=ut@MessageTX{}} = do
+  recipientAddressState <- 
+      fromMaybe (error $ "message is being sent to an unknown address: " ++ show (to ut)) <$>
+                getAddressState db (to ut)
+
+  liftIO $ putStrLn $ "Looking for contract code for: " ++ format (to ut)
+  liftIO $ putStrLn $ "codeHash is: " ++ format (sha2SHAPtr $ codeHash recipientAddressState)
+
+  contractCode <- 
+      fromMaybe (error "no contract code") <$>
+                (getCode db $ sha2SHAPtr $ codeHash recipientAddressState)
+
+  let tAddr = whoSignedThisTransaction t
+
+  liftIO $ putStrLn $ "availableGas: " ++ show availableGas
+
+  vmState <- 
+          liftIO $ runCodeFromStart db availableGas
+                 Environment{
+                           envGasPrice=gasPrice ut,
+                           envBlock=b,
+                           envOwner = tAddr,
+                           envOrigin = undefined,
+                           envInputData = tData ut,
+                           envSender = undefined,
+                           envValue = undefined,
+                           envCode = Code contractCode
+                         }
+
+  liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
+  let usedGas = availableGas - vmGasRemaining vmState
+  liftIO $ putStrLn $ "gasUsed: " ++ show usedGas
+  db2 <- pay db tAddr (coinbase $ blockData b) (usedGas * gasPrice ut)
+
+  case vmException vmState of
+        Just e -> do
+          liftIO $ putStrLn $ red $ show e
+          --addToBalance db tAddr (-value ut) --zombie account, money lost forever
+          pay db2 (whoSignedThisTransaction t) (to ut) (value ut)
+        Nothing -> do
+          pay db2 (whoSignedThisTransaction t) (to ut) (value ut)
+
+
+
 
 addBlocks::DB->[Block]->ResourceT IO ()
 addBlocks db blocks = do

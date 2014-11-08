@@ -92,6 +92,7 @@ runOperation _ CALLVALUE Environment{envValue=val} state = return state{stack=fr
 runOperation _ CALLDATALOAD Environment{envInputData=d} state@VMState{stack=p:rest} = do
   let val = bytes2Integer $ B.unpack $ B.take 32 $ B.drop (fromIntegral p) d
   return state{stack=fromIntegral val:rest}
+runOperation _ CALLDATALOAD _ s = return s{ vmException=Just StackTooSmallException } 
 
 runOperation _ CALLDATASIZE Environment{envInputData=d} state = return state{stack=fromIntegral (B.length d):stack state}
 
@@ -222,7 +223,7 @@ runCode db env state = do
   state' <- decreaseGas op state
   result <- runOperation db op env state'
   case result of
-    VMState{vmException=Just _} -> return result
+    VMState{vmException=Just _} -> return result{ vmGasRemaining = 0 } 
     VMState{done=True} -> return $ movePC result len
     state2 -> runCode db env $ movePC state2 len
 

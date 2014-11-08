@@ -5,7 +5,8 @@ module DBs (
             StateDB,
             DetailsDB,
             BlockDB,
-            SHAPtr(..)
+            SHAPtr(..),
+            sha2SHAPtr
            )where
 
 import Control.Monad.IO.Class
@@ -20,6 +21,8 @@ import Colors
 import Constants
 import Format
 import RLP
+import SHA
+import Util
 
 type BlockDB = DB.DB
 type DetailsDB = DB.DB
@@ -37,6 +40,9 @@ instance Binary SHAPtr where
       sequence_ $ put <$> B.unpack x
   get = do
     error "get undefined for SHAPtr"
+
+sha2SHAPtr::SHA->SHAPtr
+sha2SHAPtr (SHA x) = SHAPtr $ B.pack $ word256ToBytes x
 
 instance RLPSerializable SHAPtr where
     rlpEncode (SHAPtr x) = rlpEncode x

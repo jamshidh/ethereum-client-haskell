@@ -8,7 +8,6 @@ module VMState (
   ) where
 
 import qualified Data.ByteString as B
-import Data.Functor
 import qualified Data.Map as M
 
 import Code
@@ -16,7 +15,7 @@ import ExtWord
 import Format
 import Memory
 
-data VMException = OutOfGasException | VMException String deriving (Show)
+data VMException = OutOfGasException | StackTooSmallException | VMException String deriving (Show)
 
 addErr::String->Code->VMState->IO VMState
 addErr message c state = do
