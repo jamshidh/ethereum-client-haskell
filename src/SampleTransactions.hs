@@ -65,7 +65,7 @@ createContractTX =
               CALLDATALOAD,
               PUSH [0],
               SSTORE,
-              RETURN
+              STOP
             ]
     }
 
@@ -75,7 +75,7 @@ sendMessageTX =
     tNonce = 28,
     gasPrice = 0x9184e72a000,
     tGasLimit = 1000,
-    to = Address 0x35de23aac6469dc7fafd36a4d49186ea7e216baf,
+    to = Address 0x9f840fe058ce3d84e319b8c747accc1e52f69426,
     value = 1000*finney,
     tData = B.pack $ word256ToBytes 0x1234
     }

@@ -27,6 +27,7 @@ import qualified Database.LevelDB as DB
 import Address
 import AddressState
 import Block
+import CodeDB
 import Colors
 import Constants
 import DBs
@@ -155,6 +156,7 @@ runCodeForTransaction db b availableGas t@SignedTransaction{unsignedTransaction=
             then do
             liftIO $ putStrLn $ "adding storage " ++ show (storage vmState)
             storageDB <- addStorageToDB db2 $ storage vmState
+            addCode db2 result
             db3 <- putAddressState db2 newAddress
                    AddressState{
                      addressStateNonce=0,
