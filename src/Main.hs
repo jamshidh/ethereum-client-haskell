@@ -216,7 +216,7 @@ main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
     --signedTx <- liftIO $ withSource devURandom $ signTransaction prvKey createContractTX{tNonce=userNonce}
     signedTx <- liftIO $ withSource devURandom $ signTransaction prvKey sendMessageTX{tNonce=userNonce}
                 
-    --liftIO $ sendMessage socket $ Transactions [signedTx]
+    liftIO $ sendMessage socket $ Transactions [signedTx]
 
     readAndOutput socket db
 

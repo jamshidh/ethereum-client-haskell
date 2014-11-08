@@ -41,6 +41,7 @@ import SignedTransaction
 import Storage
 import Transaction
 import TransactionReceipt
+import Util
 import VM
 import VMState
 
@@ -183,6 +184,8 @@ runCodeForTransaction db b availableGas t@SignedTransaction{unsignedTransaction=
       fromMaybe (error "no contract code") <$>
                 (getCode db $ sha2SHAPtr $ codeHash recipientAddressState)
 
+  liftIO $ putStrLn $ "running code: " ++ tab (magenta ("\n" ++ format (Code contractCode)))
+
   let tAddr = whoSignedThisTransaction t
 
   liftIO $ putStrLn $ "availableGas: " ++ show availableGas
@@ -211,7 +214,15 @@ runCodeForTransaction db b availableGas t@SignedTransaction{unsignedTransaction=
           --addToBalance db tAddr (-value ut) --zombie account, money lost forever
           pay db2 (whoSignedThisTransaction t) (to ut) (value ut)
         Nothing -> do
-          pay db2 (whoSignedThisTransaction t) (to ut) (value ut)
+          addressState <- fromMaybe (error "to address in message transaction doesn't exist") <$> getAddressState db2 (to ut)
+          storageDB <- addStorageToDB db2 $ storage vmState
+          db3 <- putAddressState db2 (to ut)
+                 addressState{
+                             contractRoot=if (M.null $ storage vmState)
+                                  then Nothing
+                                  else Just $ stateRoot storageDB
+                           }
+          pay db3 (whoSignedThisTransaction t) (to ut) (value ut)
 
 
 

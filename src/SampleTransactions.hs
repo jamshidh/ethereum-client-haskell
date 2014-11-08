@@ -55,13 +55,14 @@ createContractTX =
     value = 1000*finney,
     tInit = compile
             [
-              PUSH [5],
+              PUSH [7],
               PUSH [12],
               PUSH [0],
               CODECOPY,
-              PUSH [5],
+              PUSH [7],
               PUSH [0],
               RETURN,
+              PUSH [0],
               CALLDATALOAD,
               PUSH [0],
               SSTORE,
