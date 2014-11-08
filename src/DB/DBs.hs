@@ -1,5 +1,5 @@
 
-module DBs (
+module DB.DBs (
             DB(..),
             openDBs,
             StateDB,
@@ -20,7 +20,7 @@ import System.Directory
 import Colors
 import Constants
 import Format
-import RLP
+import Data.RLP
 import SHA
 import Util
 

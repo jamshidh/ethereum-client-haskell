@@ -1,5 +1,5 @@
 
-module Peer (
+module Data.Peer (
   Peer(..)
   ) where
 
@@ -7,7 +7,7 @@ import Data.ByteString.Internal
 import Data.Word
 
 import Format
-import RLP
+import Data.RLP
 
 --import Debug.Trace
 

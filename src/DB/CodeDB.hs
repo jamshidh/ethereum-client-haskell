@@ -1,5 +1,5 @@
 
-module CodeDB (
+module DB.CodeDB (
                addCode,
                getCode
               ) where
@@ -11,7 +11,7 @@ import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import qualified Database.LevelDB as DB
 
-import DBs
+import DB.DBs
 import SHA
 
 addCode::DB->B.ByteString->ResourceT IO ()

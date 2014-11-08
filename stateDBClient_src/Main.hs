@@ -8,11 +8,11 @@ import Data.List
 import qualified Database.LevelDB as DB
 import System.Environment
 
-import DBs
-import EthDB
+import DB.DBs
+import DB.EthDB
 import Format
 import qualified NibbleString as N
-import RLP
+import Data.RLP
 
 main = do
   [theType, addr] <- getArgs

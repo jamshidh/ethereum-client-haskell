@@ -1,5 +1,5 @@
 
-module Address (
+module Data.Address (
   Address(..),
   prvKey2Address,
   pubKey2Address
@@ -17,7 +17,7 @@ import Numeric
 
 import Colors
 import Format
-import RLP
+import Data.RLP
 import Util
 
 newtype Address = Address Word160 deriving (Show, Eq)

@@ -1,5 +1,5 @@
 
-module Wire (
+module Data.Wire (
   Message(..),
   Capability(..),
   obj2WireMessage,
@@ -13,13 +13,13 @@ import Data.Word
 import Network.Haskoin.Crypto
 import Numeric
 
-import Block
+import Data.Block
 import Colors
 import Format
-import Peer
-import RLP
+import Data.Peer
+import Data.RLP
 import SHA
-import SignedTransaction
+import Data.SignedTransaction
 import Util
 
 --import Debug.Trace

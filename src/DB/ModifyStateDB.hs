@@ -1,13 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module ModifyStateDB (
+module DB.ModifyStateDB (
                       initializeBlankStateDB,
                       initializeStateDB,
                       addToBalance,
                       addNonce
 ) where
 
-import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
@@ -16,9 +15,9 @@ import Data.Functor
 import Data.Maybe
 import qualified Database.LevelDB as DB
 
-import Address
-import AddressState
-import DBs
+import Data.Address
+import Data.AddressState
+import DB.DBs
 import SHA
 
 --import Debug.Trace

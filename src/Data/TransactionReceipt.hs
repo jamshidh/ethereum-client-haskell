@@ -1,5 +1,5 @@
 
-module TransactionReceipt(
+module Data.TransactionReceipt(
   TransactionReceipt(..),
   PostTransactionState(..)
   ) where
@@ -7,14 +7,13 @@ module TransactionReceipt(
 import Colors
 import Format
 import SHA
-import SignedTransaction
-import RLP
+import Data.SignedTransaction
+import Data.RLP
 
 data PostTransactionState = PostTransactionState SHA deriving (Show)
 
 instance RLPSerializable PostTransactionState where
   rlpDecode x = PostTransactionState $ rlpDecode x
-  rlpDecode x = error ("rlpDecode for PostTransactionState missing case: " ++ show x)
   rlpEncode (PostTransactionState x) = rlpEncode x
 
 data TransactionReceipt =

@@ -1,11 +1,11 @@
 
-module Code where
+module VM.Code where
 
 import qualified Data.ByteString as B
 
 import Format
-import Opcodes
-import RLP
+import VM.Opcodes
+import Data.RLP
 
 newtype Code = Code B.ByteString deriving (Show)
 

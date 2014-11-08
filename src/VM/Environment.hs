@@ -1,11 +1,11 @@
 
-module Environment where
+module VM.Environment where
 
 import qualified Data.ByteString as B
 
-import Address
-import Block
-import Code
+import Data.Address
+import Data.Block
+import VM.Code
 
 data Environment =
     Environment {

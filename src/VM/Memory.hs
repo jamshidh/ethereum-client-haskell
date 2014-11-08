@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
-module Memory (
+module VM.Memory (
   Memory(..),
   newMemory,
   getSize,
@@ -30,7 +30,7 @@ newMemory = do
   return $ Memory m size
 
 getSize::Memory->IO Word256
-getSize (Memory _ size) = (ceiling . (/ 32) . fromIntegral) <$> readIORef size
+getSize (Memory _ size) = (ceiling . (/ (32::Double)) . fromIntegral) <$> readIORef size
 
 setNewMaxSize::Memory->Word256->IO()
 setNewMaxSize (Memory _ size) newVal = do

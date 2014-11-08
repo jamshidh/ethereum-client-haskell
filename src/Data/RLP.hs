@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module RLP (
+module Data.RLP (
   RLPObject(..),
   RLPSerializable(..),
   rlpSerialize,

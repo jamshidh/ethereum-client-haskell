@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module SignedTransaction (
+module Data.SignedTransaction (
   SignedTransaction(..),
   signTransaction,
   whoSignedThisTransaction
@@ -15,12 +15,12 @@ import Numeric
 
 import ExtendedECDSA
 
-import Address
+import Data.Address
 import Colors
 import Format
-import RLP
+import Data.RLP
 import SHA
-import Transaction
+import Data.Transaction
 import Util
 
 --import Debug.Trace

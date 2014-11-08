@@ -27,22 +27,22 @@ import System.IO
 
 import Network.Simple.TCP
 
-import Address
-import AddressState
-import Block
+import Data.Address
+import Data.AddressState
+import Data.Block
 import BlockChain
 import Colors
 import Constants
-import DBs
+import DB.DBs
 import Format
-import ModifyStateDB
-import RLP
+import DB.ModifyStateDB
+import Data.RLP
 import SampleTransactions
 import SHA
-import SignedTransaction
-import Transaction
+import Data.SignedTransaction
+import Data.Transaction
 import Util
-import Wire
+import Data.Wire
 
 --import Debug.Trace
 

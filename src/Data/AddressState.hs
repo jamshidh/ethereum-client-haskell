@@ -1,25 +1,24 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module AddressState (
+module Data.AddressState (
   AddressState(..),
   getAddressState,
   getAllAddressStates,
   putAddressState
   ) where
 
-import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import qualified Data.ByteString as B
 import Data.Functor
 import Numeric
 
-import Address
+import Data.Address
 import Colors
-import DBs
-import EthDB
+import DB.DBs
+import DB.EthDB
 import Format
 import qualified NibbleString as N
-import RLP
+import Data.RLP
 import SHA
 import Util
 

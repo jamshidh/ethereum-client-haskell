@@ -24,26 +24,26 @@ import Data.Time
 import Data.Time.Clock.POSIX
 import qualified Database.LevelDB as DB
 
-import Address
-import AddressState
-import Block
-import Code
-import CodeDB
+import Data.Address
+import Data.AddressState
+import Data.Block
+import VM.Code
+import DB.CodeDB
 import Colors
 import Constants
-import DBs
-import Environment
+import DB.DBs
+import VM.Environment
 import Format
-import ModifyStateDB
-import RLP
+import DB.ModifyStateDB
+import Data.RLP
 import SHA
-import SignedTransaction
-import Storage
-import Transaction
-import TransactionReceipt
+import Data.SignedTransaction
+import VM.Storage
+import Data.Transaction
+import Data.TransactionReceipt
 import Util
 import VM
-import VMState
+import VM.VMState
 
 --import Debug.Trace
 

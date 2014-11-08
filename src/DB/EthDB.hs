@@ -1,13 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module EthDB (
+module DB.EthDB (
   --showAllKeyVal,
   SHAPtr(..),
   getKeyVals,
   putKeyVal,
 ) where
 
-import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import qualified Crypto.Hash.SHA3 as C
 import Data.Bits
@@ -22,10 +21,10 @@ import qualified Database.LevelDB as DB
 import Numeric
 
 import Colors
-import DBs
+import DB.DBs
 import Format
 import qualified NibbleString as N
-import RLP
+import Data.RLP
 
 --import Debug.Trace
 

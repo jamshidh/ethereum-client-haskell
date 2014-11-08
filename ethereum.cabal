@@ -32,7 +32,6 @@ executable ethereumH
     ghc-options: -Wall
     buildable: True
     hs-source-dirs: src
-    other-modules: RLP Wire
 
 executable stateDBClient
     build-depends: 

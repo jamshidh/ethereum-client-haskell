@@ -3,11 +3,11 @@ module SampleTransactions where
 
 import qualified Data.ByteString as B
 
-import Address
-import Code
+import Data.Address
+import VM.Code
 import Constants
-import Opcodes
-import Transaction
+import VM.Opcodes
+import Data.Transaction
 import Util
 
 simpleTX::Transaction

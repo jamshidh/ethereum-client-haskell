@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, ForeignFunctionInterface #-}
 
-module Block (
+module Data.Block (
   BlockData(..),
   Block(..),
   blockHash,
@@ -29,13 +29,13 @@ import Foreign
 import Foreign.ForeignPtr.Unsafe
 import Numeric
 
-import Address
+import Data.Address
 import Colors
-import EthDB
+import DB.EthDB
 import Format
-import RLP
+import Data.RLP
 import SHA
-import TransactionReceipt
+import Data.TransactionReceipt
 import Util
 
 --import Debug.Trace

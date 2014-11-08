@@ -15,17 +15,17 @@ import Data.Maybe
 import Data.Time.Clock.POSIX
 import Network.Haskoin.Crypto (Word256)
 
-import Address
-import AddressState
-import Block
-import Code
-import DBs
-import Environment
-import Memory
-import Opcodes
+import Data.Address
+import Data.AddressState
+import Data.Block
+import VM.Code
+import DB.DBs
+import VM.Environment
+import VM.Memory
+import VM.Opcodes
 import SHA
 import Util
-import VMState
+import VM.VMState
 
 --import Debug.Trace
 
@@ -228,7 +228,7 @@ runCode db env state = do
     state2 -> runCode db env $ movePC state2 len
 
 runCodeFromStart::DB->Integer->Environment->IO VMState
-runCodeFromStart db gasLimit env = do
+runCodeFromStart db gasLimit' env = do
   vmState <- liftIO startingState
-  runCode db env vmState{vmGasRemaining=gasLimit}
+  runCode db env vmState{vmGasRemaining=gasLimit'}
 

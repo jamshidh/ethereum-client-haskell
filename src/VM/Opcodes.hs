@@ -1,5 +1,5 @@
 
-module Opcodes where
+module VM.Opcodes where
 
 import Prelude hiding (LT, GT, EQ)
 
@@ -127,7 +127,7 @@ code2OpMap=M.fromList $ (\(OPData opcode op _ _ _) -> (opcode, op)) <$> opDatas
 op2OpCode::Operation->[Word8]
 op2OpCode (PUSH theList) | length theList <= 32 && length theList >= 1 =
   0x5F + fromIntegral (length theList):theList
-op2OpCode (PUSH theList) = error "PUSH can only take up to 32 words"
+op2OpCode (PUSH _) = error "PUSH can only take up to 32 words"
 op2OpCode op =
   case M.lookup op op2CodeMap of
     Just x -> [x]

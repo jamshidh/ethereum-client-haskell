@@ -1,17 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Transaction (
+module Data.Transaction (
   Transaction(..),
   codeOrDataLength
   ) where
 
 import qualified Data.ByteString as B
 
-import Address
-import Code
+import Data.Address
+import VM.Code
 import Colors
 import Format
-import RLP
+import Data.RLP
 import Util
 --import VM
 

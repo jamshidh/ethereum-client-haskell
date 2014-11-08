@@ -1,5 +1,5 @@
 
-module VMState (
+module VM.VMState (
   VMState(..),
   startingState,
   VMException(..),
@@ -10,10 +10,10 @@ module VMState (
 import qualified Data.ByteString as B
 import qualified Data.Map as M
 
-import Code
+import VM.Code
 import ExtWord
 import Format
-import Memory
+import VM.Memory
 
 data VMException = OutOfGasException | StackTooSmallException | VMException String deriving (Show)
 

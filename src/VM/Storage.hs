@@ -1,20 +1,19 @@
 
-module Storage (
+module VM.Storage (
   addStorageToDB
   ) where
 
 import Control.Arrow
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
-import qualified Data.ByteString as B
 import qualified Data.Map as M
 
-import DBs
-import EthDB
+import DB.DBs
+import DB.EthDB
 import ExtWord
-import ModifyStateDB
+import DB.ModifyStateDB
 import qualified NibbleString as N
-import RLP
+import Data.RLP
 import Util
 
 type Storage = M.Map Word256 Word256

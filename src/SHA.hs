@@ -18,7 +18,7 @@ import Numeric
 
 import Colors
 import Format
-import RLP
+import Data.RLP
 import Util
 
 newtype SHA = SHA Word256 deriving (Show, Eq)
