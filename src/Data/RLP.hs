@@ -103,7 +103,7 @@ rlpDeserialize::B.ByteString->RLPObject
 rlpDeserialize s = 
   case rlpSplit $ B.unpack s of
     (o, []) -> o
-    _ -> error ("parse error converting ByteString to an RLP Object: " ++ show s)
+    _ -> error ("parse error converting ByteString to an RLP Object: " ++ format s)
 
 
 rlpSerialize::RLPObject->B.ByteString

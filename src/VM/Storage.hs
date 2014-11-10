@@ -31,4 +31,4 @@ addStorageToDB::DB->Storage->ResourceT IO DB
 addStorageToDB db storage = do
   liftIO $ print storage
   db' <- initializeBlankStateDB db
-  addItems db' $ map (N.pack . (N.byte2Nibbles =<<) . word256ToBytes *** rlpEncode . toInteger) $ M.toList storage
+  addItems db' $ map (N.pack . (N.byte2Nibbles =<<) . word256ToBytes *** rlpEncode . rlpSerialize . rlpEncode . toInteger) $ M.toList storage

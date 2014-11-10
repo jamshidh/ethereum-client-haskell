@@ -178,27 +178,33 @@ getBestBlockHash' db = do
 
 requestNewBlocks::Socket->DB->ResourceT IO ()
 requestNewBlocks socket db = do
-
   bestBlockHash <- getBestBlockHash' db
-
   liftIO $ putStrLn $ "Best block hash: " ++ format bestBlockHash
-
   liftIO $ sendMessage socket $ GetChain [bestBlockHash] 0x40
 
-sendHello::Socket->IO ()
-sendHello socket = do
+mkHello::IO Message
+mkHello = do
   peerId <- getEntropy 64
+  return Hello {
+               version = 23,
+               clientId = "Ethereum(G)/v0.6.4//linux/Haskell",
+               capability = [ProvidesPeerDiscoveryService,
+                             ProvidesTransactionRelayingService,
+                             ProvidesBlockChainQueryingService],
+               port = 30303,
+               nodeId = fromIntegral $ byteString2Integer peerId
+             }
 
-  sendMessage socket $ Hello {
-        version = 23,
-        clientId = "Ethereum(G)/v0.6.4//linux/Haskell",
-        capability = [ProvidesPeerDiscoveryService,
-                      ProvidesTransactionRelayingService,
-                      ProvidesBlockChainQueryingService],
-        port = 30303,
-        nodeId = fromIntegral $ byteString2Integer peerId
 
-        }
+sendHello::Socket->IO ()
+sendHello socket = 
+  sendMessage socket =<< mkHello
+
+createTransaction::DB->Transaction->ResourceT IO SignedTransaction
+createTransaction db t = do
+    b <- fromMaybe (error "Missing best block") <$> getBestBlock db
+    userNonce <- fromMaybe 0 <$> fmap addressStateNonce <$> getAddressState db{stateRoot=bStateRoot $ blockData b} (prvKey2Address prvKey)
+    liftIO $ withSource devURandom $ signTransaction prvKey t{tNonce=userNonce}
 
 main::IO ()    
 main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
@@ -208,13 +214,10 @@ main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
 
   runResourceT $ do
     db <- openDBs False
-    --bestBlockHash <- getBestBlockHash' db
     requestNewBlocks socket db
-    b <- fromMaybe (error "Missing best block") <$> getBestBlock db
-    userNonce <- fromMaybe 0 <$> fmap addressStateNonce <$> getAddressState db{stateRoot=bStateRoot $ blockData b} (prvKey2Address prvKey)
-    --signedTx <- liftIO $ withSource devURandom $ signTransaction prvKey simpleTX{tNonce=userNonce}
-    --signedTx <- liftIO $ withSource devURandom $ signTransaction prvKey createContractTX{tNonce=userNonce}
-    signedTx <- liftIO $ withSource devURandom $ signTransaction prvKey sendMessageTX{tNonce=userNonce}
+
+    --signedTx <- createTransaction db createContractTX
+    signedTx <- createTransaction db sendMessageTX
                 
     liftIO $ sendMessage socket $ Transactions [signedTx]
 
