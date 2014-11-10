@@ -276,7 +276,7 @@ instance RLPSerializable NodeData where
         case val of
           Left _ -> False
           Right _ -> True
-      encodeVal (Left (SHAPtr x)) = rlpEncode x
+      encodeVal (Left x) = rlpEncode x
       encodeVal (Right x) = x
 
 
