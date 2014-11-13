@@ -2,13 +2,19 @@
 module SampleTransactions where
 
 import qualified Data.ByteString as B
+import Data.Functor
+import Data.List
 
 import Data.Address
-import VM.Code
-import Constants
-import VM.Opcodes
 import Data.Transaction
+import Constants
+import Format
+import JCommand
 import Util
+import VM.Code
+import VM.Opcodes
+
+import Debug.Trace
 
 createContract::Integer->Integer->Code->Transaction
 createContract val gl code = ContractCreationTX  {
@@ -65,22 +71,22 @@ simpleStorageTX =
     ]
 
 createInit::[Operation]->[Operation]->Code
-createInit init contract =
+createInit initFunc contract = trace (intercalate "-" $ show <$> contract) $ 
   Code $ B.pack $ initBytes ++ copyCodeBytes ++ contractBytes
   where
-    initBytes = op2OpCode =<< init
-    contractBytes = op2OpCode =<< contract
+    initBytes = op2OpCode =<< addLoc 0 initFunc
+    contractBytes = op2OpCode =<< addLoc 0 contract
     copyCode =
       [
-        PUSH $ integer2Bytes $ toInteger $ length contractBytes,
-        PUSH $ integer2Bytes $ toInteger $ length initBytes + length copyCode,
+        PUSH $ integer2Bytes1 $ toInteger $ length contractBytes,
+        PUSH $ integer2Bytes1 $ toInteger $ length initBytes + length copyCode,
         PUSH [0],
         CODECOPY,
-        PUSH $ integer2Bytes $ toInteger $ length contractBytes,
+        PUSH $ integer2Bytes1 $ toInteger $ length contractBytes,
         PUSH [0],
         RETURN
       ]
-    copyCodeBytes = op2OpCode =<< copyCode
+    copyCodeBytes = op2OpCode =<< addLoc 0 copyCode
 
 createContractTX::Transaction
 createContractTX =
@@ -104,7 +110,25 @@ sendMessageTX =
 paymentContract::Transaction
 paymentContract =
   createContract (1000*finney) 1000
-  $ compile 
-    [
-    
-    ]
+                     $ createInit
+                           (j 
+                            [
+                             PermStorage Sender :=: Number 1000
+                            ]
+                           )
+                           (
+                            let
+                                toAddr = Input 0
+                                fromAddr = Sender
+                                val = Input 1
+                            in
+                              j
+                              [
+                               If (PermVal fromAddr :>=: val) 
+                                      [
+                                       PermStorage fromAddr :=: PermVal fromAddr :-: val,
+                                       PermStorage toAddr :=: PermVal toAddr :-: val
+                                      ]
+                             
+                            ]
+                           )

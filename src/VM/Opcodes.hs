@@ -9,11 +9,19 @@ import Data.Functor
 import qualified Data.Map as M
 import Data.Maybe
 
+import ExtWord
+
 --import Debug.Trace
 
-data Operation = STOP | ADD | MUL | SUB | DIV | SDIV | MOD | SMOD | EXP | NEG | LT | GT | SLT | SGT | EQ | NOT | AND | OR | XOR | BYTE | SHA3 | ADDRESS | BALANCE | ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | PREVHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | POP | DUP | SWAP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | JUMP | JUMPI | PC | MSIZE | GAS
-               | PUSH [Word8]
-               | CREATE | CALL | RETURN | SUICIDE deriving (Show, Eq, Ord)
+data Operation = 
+    STOP | ADD | MUL | SUB | DIV | SDIV | MOD | SMOD | EXP | NEG | LT | GT | SLT | SGT | EQ | NOT | AND | OR | XOR | BYTE | SHA3 | 
+    ADDRESS | BALANCE | ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | 
+    PREVHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | POP | DUP | SWAP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | 
+    JUMP | JUMPI | PC | MSIZE | GAS | 
+    PUSH [Word8] | 
+    CREATE | CALL | RETURN | SUICIDE |
+    --Pseudo Opcodes
+    RelativeLoc Word256 deriving (Show, Eq, Ord)
 
 data OPData = OPData Word8 Operation Int Int String
 
@@ -127,11 +135,16 @@ code2OpMap=M.fromList $ (\(OPData opcode op _ _ _) -> (opcode, op)) <$> opDatas
 op2OpCode::Operation->[Word8]
 op2OpCode (PUSH theList) | length theList <= 32 && length theList >= 1 =
   0x5F + fromIntegral (length theList):theList
-op2OpCode (PUSH _) = error "PUSH can only take up to 32 words"
+op2OpCode (PUSH []) = error $ "PUSH needs at least one word"
+op2OpCode (PUSH x) = error $ "PUSH can only take up to 32 words: " ++ show x
 op2OpCode op =
   case M.lookup op op2CodeMap of
     Just x -> [x]
     Nothing -> error $ "op is missing in op2CodeMap: " ++ show op
+
+opLen::Operation->Word256
+opLen (PUSH x) = 1 + fromIntegral (length x)
+opLen _ = 1
 
 opCode2Op::B.ByteString->(Operation, Int)
 opCode2Op rom | B.null rom = (STOP, 1) --according to the yellowpaper, should return STOP if outside of the code bytestring

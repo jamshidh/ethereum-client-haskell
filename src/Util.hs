@@ -3,6 +3,7 @@ module Util (
   byteString2Integer,
   bytes2Integer,
   integer2Bytes,
+  integer2Bytes1,
   word160ToBytes,
   word256ToBytes,
   padZeros,
@@ -27,6 +28,11 @@ bytes2Integer (byte:rest) = fromIntegral byte `shift` (8 * length rest) + bytes2
 integer2Bytes::Integer->[Word8]
 integer2Bytes 0 = []
 integer2Bytes x = integer2Bytes (x `shiftR` 8) ++ [fromInteger (x .&. 255)]
+
+--integer2Bytes1 is integer2Bytes, but with the extra condition that the output be of length 1 or more.
+integer2Bytes1::Integer->[Word8]
+integer2Bytes1 0 = [0]
+integer2Bytes1 x = integer2Bytes x
 
 word256ToBytes::Word256->[Word8]
 word256ToBytes x =
