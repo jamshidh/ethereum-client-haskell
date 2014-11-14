@@ -217,7 +217,7 @@ main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
     requestNewBlocks socket db
 
     --signedTx <- createTransaction db createContractTX
-    signedTx <- createTransaction db paymentContract
+    signedTx <- createTransaction db sendCoinTX
                 
     liftIO $ sendMessage socket $ Transactions [signedTx]
 

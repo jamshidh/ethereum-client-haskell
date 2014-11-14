@@ -10,7 +10,6 @@ import Control.Monad.Trans.Resource
 import Data.Bits
 import qualified Data.ByteString as B
 import Data.Functor
-import qualified Data.Map as M
 import Data.Maybe
 import Data.Time.Clock.POSIX
 import Network.Haskoin.Crypto (Word256)
@@ -18,13 +17,16 @@ import Network.Haskoin.Crypto (Word256)
 import Data.Address
 import Data.AddressState
 import Data.Block
-import VM.Code
 import DB.DBs
+import DB.EthDB
+import qualified NibbleString as N
+import Data.RLP
+import SHA
+import Util
+import VM.Code
 import VM.Environment
 import VM.Memory
 import VM.Opcodes
-import SHA
-import Util
 import VM.VMState
 
 --import Debug.Trace
@@ -85,7 +87,7 @@ runOperation _ BALANCE env state = addErr "stack did not contain enough elements
 
 runOperation _ ORIGIN Environment{envSender=Address sender} state = return state{stack=fromIntegral sender:stack state}
 
-runOperation _ CALLER Environment{envOwner=Address owner} state = return state{stack=fromIntegral owner:stack state}
+runOperation _ CALLER Environment{envOrigin=Address owner} state = return state{stack=fromIntegral owner:stack state}
 
 runOperation _ CALLVALUE Environment{envValue=val} state = return state{stack=fromIntegral val:stack state}
 
@@ -145,12 +147,18 @@ runOperation _ MSTORE8 _ state@VMState{stack=(p:val:rest)} = do
   return $
     state { stack=rest }
 
-runOperation _ SLOAD _ state@VMState{stack=(p:rest)} = do
-  let val = fromMaybe 0 $ M.lookup p (storage state)
+runOperation db SLOAD _ state@VMState{stack=(p:rest)} = do
+  vals <-  runResourceT $ getKeyVals db{stateRoot=storageRoot state} (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
+  let val = case vals of
+              [] -> 0
+              [x] -> fromInteger $ rlpDecode $ snd x
+              _ -> error "Multiple values in storage"
+
   return $ state { stack=val:rest }
   
-runOperation _ SSTORE _ state@VMState{stack=(p:val:rest)} = do
-  return $ state { stack=rest, storage=M.insert p val $ storage state }
+runOperation db SSTORE _ state@VMState{stack=(p:val:rest)} = do
+  db' <- runResourceT $ putKeyVal db{stateRoot=storageRoot state} (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p) (rlpEncode $ rlpSerialize $ rlpEncode $ toInteger val)
+  return $ state { stack=rest, storageRoot=stateRoot db' }
 
 runOperation _ JUMP _ state@VMState{stack=(p:rest)} =
   return $ state { stack=rest, pc=fromIntegral p }
@@ -170,7 +178,7 @@ runOperation _ GAS _ state =
 
 runOperation _ (PUSH vals) _ state =
   return $
-  state { stack=(fromIntegral <$> vals) ++ stack state }
+  state { stack=fromIntegral (bytes2Integer vals):stack state }
 
 
 
@@ -197,21 +205,26 @@ runOperation _ x _ _ = error $ "Missing case in runOperation: " ++ show x
 movePC::VMState->Int->VMState
 movePC state l = state{ pc=pc state + l }
 
-opGasPrice::VMState->Operation->IO Integer
-opGasPrice _ STOP = return 0
-opGasPrice _ MSTORE = return 2
-opGasPrice state@VMState{ stack=_:val:_ } SSTORE = do
-  let oldVal = fromMaybe 0 $ M.lookup val (storage state)
+opGasPrice::DB->VMState->Operation->IO Integer
+opGasPrice _ _ STOP = return 0
+opGasPrice _ _ MSTORE = return 2
+opGasPrice db state@VMState{ stack=p:val:_ } SSTORE = do
+  oldVals <- runResourceT $ getKeyVals db{stateRoot=storageRoot state} (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
+  let oldVal =
+          case oldVals of
+            [] -> 0::Word256
+            [x] -> fromInteger $ rlpDecode $ snd x
+            _ -> error "multiple values in storage"
   return $
     case (oldVal, val) of
       (0, x) | x /= 0 -> 200
       (x, 0) | x /= 0 -> 0
       _ -> 100
-opGasPrice _ _ = return 1
+opGasPrice _ _ _ = return 1
 
-decreaseGas::Operation->VMState->IO VMState
-decreaseGas op state = do
-  val <- opGasPrice state op
+decreaseGas::DB->Operation->VMState->IO VMState
+decreaseGas db op state = do
+  val <- opGasPrice db state op
   if val <= vmGasRemaining state
     then return (state{ vmGasRemaining = vmGasRemaining state - val })
     else return (state{ vmGasRemaining = 0,
@@ -220,15 +233,15 @@ decreaseGas op state = do
 runCode::DB->Environment->VMState->IO VMState
 runCode db env state = do
   let (op, len) = getOperationAt (envCode env) (pc state)
-  state' <- decreaseGas op state
+  state' <- decreaseGas db op state
   result <- runOperation db op env state'
   case result of
     VMState{vmException=Just _} -> return result{ vmGasRemaining = 0 } 
     VMState{done=True} -> return $ movePC result len
     state2 -> runCode db env $ movePC state2 len
 
-runCodeFromStart::DB->Integer->Environment->IO VMState
-runCodeFromStart db gasLimit' env = do
-  vmState <- liftIO startingState
+runCodeFromStart::DB->SHAPtr->Integer->Environment->IO VMState
+runCodeFromStart db storageRoot' gasLimit' env = do
+  vmState <- liftIO $ startingState storageRoot'
   runCode db env vmState{vmGasRemaining=gasLimit'}
 

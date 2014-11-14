@@ -8,7 +8,6 @@ import Data.List
 import Data.Address
 import Data.Transaction
 import Constants
-import Format
 import JCommand
 import Util
 import VM.Code
@@ -113,13 +112,13 @@ paymentContract =
                      $ createInit
                            (j 
                             [
-                             PermStorage Sender :=: Number 1000
+                             PermStorage Caller :=: Number 1000
                             ]
                            )
                            (
                             let
                                 toAddr = Input 0
-                                fromAddr = Sender
+                                fromAddr = Caller
                                 val = Input 1
                             in
                               j
@@ -132,3 +131,9 @@ paymentContract =
                              
                             ]
                            )
+
+sendCoinTX::Transaction
+sendCoinTX =
+  createMessage 0 1000 (Address 0x9f840fe058ce3d84e319b8c747accc1e52f69426)
+  (B.pack $ word256ToBytes 0x1 ++ word256ToBytes 500)
+

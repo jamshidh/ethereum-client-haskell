@@ -3,6 +3,8 @@
 module DB.EthDB (
   --showAllKeyVal,
   SHAPtr(..),
+  blankRoot,
+  isBlankDB,
   getKeyVals,
   putKeyVal,
 ) where
@@ -21,10 +23,11 @@ import qualified Database.LevelDB as DB
 import Numeric
 
 import Colors
+import Data.RLP
 import DB.DBs
 import Format
 import qualified NibbleString as N
-import Data.RLP
+import SHA
 
 --import Debug.Trace
 
@@ -52,6 +55,18 @@ showAllKeyVal db = do
         then showAllKeyVal' i
         else return ()
 -}
+
+{-
+sha2SHAPtr::SHA->SHAPtr
+sha2SHAPtr (SHA x) = SHAPtr $ B.pack $ word256ToBytes x
+-}
+
+blankRoot::SHAPtr
+blankRoot = sha2SHAPtr (hash "")
+
+isBlankDB::SHAPtr->Bool
+isBlankDB x | blankRoot == x = True
+isBlankDB _ = False
 
 getNodeData::DB->ResourceT IO (Maybe NodeData)
 getNodeData db@DB{stateRoot=SHAPtr p} = do

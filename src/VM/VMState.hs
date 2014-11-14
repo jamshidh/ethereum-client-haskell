@@ -8,11 +8,11 @@ module VM.VMState (
   ) where
 
 import qualified Data.ByteString as B
-import qualified Data.Map as M
 
-import VM.Code
+import DB.DBs
 import ExtWord
 import Format
+import VM.Code
 import VM.Memory
 
 data VMException = OutOfGasException | StackTooSmallException | VMException String deriving (Show)
@@ -29,7 +29,7 @@ data VMState =
     memory::Memory,
     stack::[Word256],
 
-    storage::M.Map Word256 Word256,
+    storageRoot::SHAPtr,
     markedForSuicide::Bool,
     done::Bool,
     returnVal::Maybe B.ByteString,
@@ -45,8 +45,8 @@ instance Format VMState where
     "gasRemaining: " ++ show (vmGasRemaining state) ++ "\n" ++
     "stack: " ++ show (stack state) ++ "\n"
 
-startingState::IO VMState
-startingState = do
+startingState::SHAPtr->IO VMState
+startingState sr = do
   m <- newMemory
   return VMState {
     pc = 0,
@@ -55,7 +55,7 @@ startingState = do
     vmException=Nothing,
     vmGasRemaining=0,
     stack=[],
-    memory=m, storage = M.empty, markedForSuicide=False }
+    memory=m, storageRoot = sr, markedForSuicide=False }
 
 
 getReturnValue::VMState->IO B.ByteString

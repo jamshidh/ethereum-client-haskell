@@ -2,7 +2,6 @@
 module VM.Code where
 
 import qualified Data.ByteString as B
-import Data.Functor
 
 import Data.RLP
 import ExtWord

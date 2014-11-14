@@ -18,7 +18,6 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import Data.Functor
-import qualified Data.Map as M
 import Data.Maybe
 import Data.Time
 import Data.Time.Clock.POSIX
@@ -27,22 +26,22 @@ import qualified Database.LevelDB as DB
 import Data.Address
 import Data.AddressState
 import Data.Block
-import VM.Code
-import DB.CodeDB
-import Colors
-import Constants
-import DB.DBs
-import VM.Environment
-import Format
-import DB.ModifyStateDB
 import Data.RLP
-import SHA
 import Data.SignedTransaction
-import VM.Storage
 import Data.Transaction
 import Data.TransactionReceipt
+import DB.CodeDB
+import DB.DBs
+import DB.EthDB
+import DB.ModifyStateDB
+import Colors
+import Constants
+import Format
+import SHA
 import Util
 import VM
+import VM.Code
+import VM.Environment
 import VM.VMState
 
 --import Debug.Trace
@@ -122,15 +121,17 @@ runCodeForTransaction db b availableGas t@SignedTransaction{unsignedTransaction=
 
   liftIO $ putStrLn $ "availableGas: " ++ show availableGas
 
+  let newAddress = getNewAddress t
+
   vmState <- 
-    liftIO $ runCodeFromStart db availableGas
+    liftIO $ runCodeFromStart db blankRoot availableGas
           Environment{
             envGasPrice=gasPrice ut,
             envBlock=b,
             envOwner = tAddr,
-            envOrigin = undefined,
+            envOrigin = tAddr,
             envInputData = undefined,
-            envSender = undefined,
+            envSender = newAddress,
             envValue = undefined,
             envCode = tInit ut
             }
@@ -148,7 +149,6 @@ runCodeForTransaction db b availableGas t@SignedTransaction{unsignedTransaction=
         Nothing -> do
           let result = fromMaybe B.empty $ returnVal vmState
           liftIO $ putStrLn $ "Result: " ++ show result
-          let newAddress = getNewAddress t
           liftIO $ putStrLn $ format newAddress ++ ": " ++ format result
           --TODO- I think there is an error in the cpp ethereum, no new account is made
           --when value doesn't equal 0....  I am mimicking this here so that I can work with that
@@ -156,16 +156,16 @@ runCodeForTransaction db b availableGas t@SignedTransaction{unsignedTransaction=
           --that there is a bug, report it.
           if True -- value ut == 0 || not (M.null $ storage vmState)
             then do
-            liftIO $ putStrLn $ "adding storage " ++ show (storage vmState)
-            storageDB <- addStorageToDB db2 $ storage vmState
+            liftIO $ putStrLn $ "adding storage " ++ show (storageRoot vmState)
             addCode db2 result
             db3 <- putAddressState db2 newAddress
                    AddressState{
                      addressStateNonce=0,
                      balance=0,
-                     contractRoot=if (M.null $ storage vmState)
-                                  then Nothing
-                                  else Just $ stateRoot storageDB,
+                     contractRoot=
+                         if isBlankDB $ storageRoot vmState
+                         then Nothing
+                         else Just $ storageRoot vmState,
                      codeHash=hash result
                      }
             liftIO $ putStrLn $ "paying: " ++ show (value ut)
@@ -191,7 +191,7 @@ runCodeForTransaction db b availableGas t@SignedTransaction{unsignedTransaction=
   liftIO $ putStrLn $ "availableGas: " ++ show availableGas
 
   vmState <- 
-          liftIO $ runCodeFromStart db availableGas
+          liftIO $ runCodeFromStart db (case contractRoot recipientAddressState of Nothing -> blankRoot; Just x -> x) availableGas
                  Environment{
                            envGasPrice=gasPrice ut,
                            envBlock=b,
@@ -215,13 +215,12 @@ runCodeForTransaction db b availableGas t@SignedTransaction{unsignedTransaction=
           pay db2 (whoSignedThisTransaction t) (to ut) (value ut)
         Nothing -> do
           addressState <- fromMaybe (error "to address in message transaction doesn't exist") <$> getAddressState db2 (to ut)
-          storageDB <- addStorageToDB db2 $ storage vmState
           db3 <- putAddressState db2 (to ut)
                  addressState{
-                             contractRoot=if (M.null $ storage vmState)
-                                  then Nothing
-                                  else Just $ stateRoot storageDB
-                           }
+                             contractRoot=if isBlankDB $ storageRoot vmState
+                                          then Nothing
+                                          else Just $ storageRoot vmState
+                 }
           pay db3 (whoSignedThisTransaction t) (to ut) (value ut)
 
 

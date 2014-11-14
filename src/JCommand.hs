@@ -17,7 +17,7 @@ import ExtWord
 
 data Storage = PermStorage Word | MemStorage Word
 
-data Word = Number Word256 | Sender | Input Word256 | PermVal Word | MemVal Word | Word :-: Word
+data Word = Number Word256 | TheAddress | Origin | Caller | Input Word256 | PermVal Word | MemVal Word | Word :-: Word
 
 data JBool = JTrue | JFalse | Word :>=: Word
 
@@ -35,7 +35,9 @@ j x = concat $ jCommand2Op <$> x
 
 pushVal::Word->[Operation]
 pushVal (Number x) = [PUSH $ integer2Bytes1 $ toInteger x]
-pushVal Sender = [ADDRESS]
+pushVal TheAddress = [ADDRESS]
+pushVal Caller = [CALLER]
+pushVal Origin = [ORIGIN]
 pushVal (Input x) = [PUSH $ integer2Bytes1 $ toInteger x, CALLDATALOAD]
 pushVal (PermVal x) = pushVal x ++ [SLOAD]
 pushVal (MemVal x) = pushVal x ++ [MLOAD]
