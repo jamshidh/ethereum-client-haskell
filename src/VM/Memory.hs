@@ -40,13 +40,19 @@ setNewMaxSize (Memory _ size) newVal = do
     else return ()
          
 mLoad::Memory->Word256->IO [Word8]
-mLoad (Memory arr _) p = sequence $ readArray arr <$> [p..p+31] 
+mLoad m@(Memory arr _) p = do
+  setNewMaxSize m (p+31)
+  sequence $ readArray arr <$> [p..p+31] 
 
 mLoad8::Memory->Word256->IO Word8
-mLoad8 (Memory arr _) p = readArray arr p
+mLoad8 m@(Memory arr _) p = do
+  setNewMaxSize m p
+  readArray arr p
 
 mLoadByteString::Memory->Word256->Word256->IO B.ByteString
-mLoadByteString (Memory arr _) p size = fmap B.pack $ sequence $ readArray arr <$> [p..p+size-1] 
+mLoadByteString m@(Memory arr _) p size = do
+  setNewMaxSize m (p+size)
+  fmap B.pack $ sequence $ readArray arr <$> [p..p+size-1] 
 
 
 mStore::Memory->Word256->Word256->IO ()

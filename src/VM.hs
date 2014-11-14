@@ -237,7 +237,9 @@ runCode db env state = do
   result <- runOperation db op env state'
   case result of
     VMState{vmException=Just _} -> return result{ vmGasRemaining = 0 } 
-    VMState{done=True} -> return $ movePC result len
+    VMState{done=True} -> do
+                         memSize <- getSize $ memory result
+                         return $ movePC result{ vmGasRemaining = vmGasRemaining result - fromIntegral memSize } len
     state2 -> runCode db env $ movePC state2 len
 
 runCodeFromStart::DB->SHAPtr->Integer->Environment->IO VMState
