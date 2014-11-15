@@ -17,7 +17,7 @@ import ExtWord
 
 data Storage = PermStorage Word | MemStorage Word deriving (Show)
 
-data Word = Number Word256 | TheAddress | Origin | Caller | Input Word256 | PermVal Word | MemVal Word | Word :-: Word deriving (Show)
+data Word = Number Word256 | TheAddress | Origin | Caller | Input Word256 | PermVal Word | MemVal Word | Word :+: Word | Word :-: Word deriving (Show)
 
 data JBool = JTrue | JFalse | Word :>=: Word deriving (Show)
 
@@ -26,6 +26,7 @@ data JBool = JTrue | JFalse | Word :>=: Word deriving (Show)
 
 data JCommand = Storage :=: Word | If JBool [JCommand] | ReturnCode [JCommand] deriving (Show)
 
+infixl 6 :+:
 infixl 5 :-:
 infixl 4 :=:
 
@@ -54,9 +55,10 @@ pushVal (Number x) = [PUSH $ integer2Bytes1 $ toInteger x]
 pushVal TheAddress = [ADDRESS]
 pushVal Caller = [CALLER]
 pushVal Origin = [ORIGIN]
-pushVal (Input x) = [PUSH $ integer2Bytes1 $ toInteger x, CALLDATALOAD]
+pushVal (Input x) = [PUSH $ integer2Bytes1 $ toInteger (32*x), CALLDATALOAD]
 pushVal (PermVal x) = pushVal x ++ [SLOAD]
 pushVal (MemVal x) = pushVal x ++ [MLOAD]
+pushVal (x :+: y) = pushVal y ++ pushVal x ++ [ADD]
 pushVal (x :-: y) = pushVal y ++ pushVal x ++ [SUB]
 
 pushBoolVal::JBool->[Operation]

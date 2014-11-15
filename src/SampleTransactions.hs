@@ -107,7 +107,7 @@ paymentContract =
                                If (PermVal fromAddr :>=: val) 
                                       [
                                        PermStorage fromAddr :=: PermVal fromAddr :-: val,
-                                       PermStorage toAddr :=: PermVal toAddr :-: val
+                                       PermStorage toAddr :=: PermVal toAddr :+: val
                                       ]
                              
                               ]

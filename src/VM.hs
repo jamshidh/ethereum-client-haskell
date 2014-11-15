@@ -151,7 +151,7 @@ runOperation db SLOAD _ state@VMState{stack=(p:rest)} = do
   vals <-  runResourceT $ getKeyVals db{stateRoot=storageRoot state} (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
   let val = case vals of
               [] -> 0
-              [x] -> fromInteger $ rlpDecode $ snd x
+              [x] -> fromInteger $ rlpDecode $ rlpDeserialize $ rlpDecode $ snd x
               _ -> error "Multiple values in storage"
 
   return $ state { stack=val:rest }
@@ -211,6 +211,7 @@ movePC state l = state{ pc=pc state + l }
 opGasPrice::DB->VMState->Operation->IO Integer
 opGasPrice _ _ STOP = return 0
 opGasPrice _ _ MSTORE = return 2
+opGasPrice db state@VMState{ stack=p:val:_ } SLOAD = return 20
 opGasPrice db state@VMState{ stack=p:val:_ } SSTORE = do
   oldVals <- runResourceT $ getKeyVals db{stateRoot=storageRoot state} (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
   let oldVal =

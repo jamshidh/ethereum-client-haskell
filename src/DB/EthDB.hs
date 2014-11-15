@@ -77,6 +77,15 @@ getNodeData db@DB{stateRoot=SHAPtr p} = do
           bytes2NodeData bytes = rlpDecode $ rlpDeserialize bytes
 
 
+pairOrPtr2NodeData::DB->PairOrPtr->ResourceT IO (Maybe NodeData)
+pairOrPtr2NodeData db (APair key val) = return $ Just $ ShortcutNodeData key $ Right val
+pairOrPtr2NodeData db (APtr p) = getNodeData db{stateRoot=p}
+
+
+pairOrPtr2KeyVals::DB->PairOrPtr->N.NibbleString->ResourceT IO [(N.NibbleString, RLPObject)]
+pairOrPtr2KeyVals db (APair key val) key' | key' `N.isPrefixOf` key = return [(key, val)]
+pairOrPtr2KeyVals db (APtr p) key = getKeyVals db{stateRoot = p} key
+
 
 getKeyVals::DB->N.NibbleString->ResourceT IO [(N.NibbleString, RLPObject)]
 getKeyVals db key = do
@@ -88,9 +97,9 @@ getKeyVals db key = do
     case nodeData of
       FullNodeData {choices=cs} -> do
         if N.null key
-          then concat <$> sequence [fmap (prependToKey (N.singleton nextN)) <$> getKeyVals db{stateRoot=nextP} ""| (nextN, Just nextP) <- zip [0..] cs]
+          then concat <$> sequence [fmap (prependToKey (N.singleton nextN)) <$> pairOrPtr2KeyVals db pairOrPtr "" | (nextN, Just pairOrPtr) <- zip [0..] cs]
           else case cs!!fromIntegral (N.head key) of
-          Just nextP -> fmap (prependToKey $ N.singleton $ N.head key) <$> getKeyVals db{stateRoot=nextP} (N.tail key)
+          Just pairOrPtr -> fmap (prependToKey $ N.singleton $ N.head key) <$> pairOrPtr2KeyVals db pairOrPtr (N.tail key)
           Nothing -> return []
       ShortcutNodeData{nextNibbleString=s,nextVal=Right v} | key `N.isPrefixOf` s ->
         return [(s, v)]
@@ -114,7 +123,7 @@ putNodeData db nd = do
   DB.put (stateDB db) def ptr bytes
   return $ SHAPtr ptr
 
-slotIsEmpty::[Maybe SHAPtr]->N.Nibble->Bool
+slotIsEmpty::[Maybe PairOrPtr]->N.Nibble->Bool
 slotIsEmpty [] _ = error ("slotIsEmpty was called for value greater than the size of the list")
 slotIsEmpty (Nothing:_) 0 = True
 slotIsEmpty _ 0 = False
@@ -125,7 +134,7 @@ replace list i newVal = left ++ [newVal] ++ right
             where
               (left, _:right) = splitAt (fromIntegral i) list
 
-list2Options::N.Nibble->[(N.Nibble, SHAPtr)]->[Maybe SHAPtr]
+list2Options::N.Nibble->[(N.Nibble, PairOrPtr)]->[Maybe PairOrPtr]
 list2Options start _ | start > 15 = error $ "value of 'start' in list2Option is greater than 15, it is: " ++ show start
 list2Options start [] = replicate (fromIntegral $ 0x10 - start) Nothing
 list2Options start ((firstNibble, firstPtr):rest) =
@@ -137,6 +146,13 @@ getCommonPrefix (c1:rest1) (c2:rest2) | c1 == c2 = prefixTheCommonPrefix c1 (get
                                         prefixTheCommonPrefix c (p, x, y) = (c:p, x, y)
 getCommonPrefix x y = ([], x, y)
 
+newShortcut::DB->N.NibbleString->Either SHAPtr RLPObject->ResourceT IO PairOrPtr
+newShortcut _ key (Right val) | 32 > B.length bytes = return $ APair key val
+                      where 
+                        key' = termNibbleString2String True key
+                        bytes = rlpSerialize $ RLPArray [rlpEncode $ BC.unpack key', val]
+newShortcut db key val = APtr <$> putNodeData db (ShortcutNodeData key val)
+
 
 getNewNodeDataFromPut::DB->N.NibbleString->RLPObject->NodeData->ResourceT IO NodeData
 --getNewNodeDataFromPut _ key val nd | trace ("getNewNodeDataFromPut: " ++ format key ++ ", " ++ format val ++ ", " ++ format nd) False = undefined
@@ -146,14 +162,14 @@ getNewNodeDataFromPut _ key val EmptyNodeData = return $
 
 getNewNodeDataFromPut db key val (FullNodeData options nodeValue)
   | options `slotIsEmpty` N.head key = do
-  tailNode <- putNodeData db (ShortcutNodeData (N.tail key) $ Right val)
+  tailNode <- newShortcut db (N.tail key) $ Right val
   return $ FullNodeData (replace options (N.head key) $ Just tailNode) nodeValue
 getNewNodeDataFromPut db key val (FullNodeData options nodeValue) = do
   let Just conflictingNode = options!!fromIntegral (N.head key)
   --TODO- add nicer error message if stateRoot doesn't exist
-  Just conflictingNodeData <- (getNodeData db{stateRoot=conflictingNode}::ResourceT IO (Maybe NodeData))
+  Just conflictingNodeData <- (pairOrPtr2NodeData db conflictingNode::ResourceT IO (Maybe NodeData))
   newNodeData <- getNewNodeDataFromPut db (N.tail key) val conflictingNodeData
-  newNode <- putNodeData db newNodeData
+  newNode <- APtr <$> putNodeData db newNodeData
   return $ FullNodeData (replace options (N.head key) $ Just newNode) nodeValue
 
 getNewNodeDataFromPut _ key1 val (ShortcutNodeData key2 (Right _)) | key1 == key2 =
@@ -174,14 +190,14 @@ getNewNodeDataFromPut _ key1 _ (ShortcutNodeData _ _) | N.null key1 = do
 -}
 
 getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | key1 `N.isPrefixOf` key2 = do
-  node1 <- putNodeData db $ ShortcutNodeData (N.drop (N.length key1) key2) val2
+  node1 <- newShortcut db (N.drop (N.length key1) key2) val2
   let options = list2Options 0 [(N.head $ N.drop (N.length key1) key2, node1)]
   midNode <- putNodeData db $ FullNodeData options $ Just val1
   return $ ShortcutNodeData key1 $ Left midNode
 
 
 getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 (Right val2)) | key2 `N.isPrefixOf` key1 = do
-  node1 <- putNodeData db $ ShortcutNodeData (N.drop (N.length key2) key1) $ Right val1
+  node1 <- newShortcut db (N.drop (N.length key2) key1) $ Right val1
   let options = list2Options 0 [(N.head $ N.drop (N.length key2) key1, node1)]
   midNode <- putNodeData db $ FullNodeData options $ Just val2
   return $ ShortcutNodeData key2 $ Left midNode
@@ -194,8 +210,8 @@ getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 (Left val2)) | key2 `N
   
 
 getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | N.head key1 == N.head key2 = do
-  node1 <- putNodeData db $ ShortcutNodeData (N.pack $ tail suffix1) $ Right val1
-  node2 <- putNodeData db $ ShortcutNodeData (N.pack $ tail suffix2) val2
+  node1 <- newShortcut db (N.pack $ tail suffix1) $ Right val1
+  node2 <- newShortcut db (N.pack $ tail suffix2) val2
   let options = list2Options 0 (sortBy (compare `on` fst) [(head suffix1, node1), (head suffix2, node2)])
   midNode <- putNodeData db $ FullNodeData options Nothing
   return $ ShortcutNodeData (N.pack commonPrefix) $ Left midNode
@@ -205,8 +221,8 @@ getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | N.head key1 ==
 
 
 getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) = do
-  tailNode1 <- putNodeData db (ShortcutNodeData (N.tail key1) $ Right val1)
-  tailNode2 <- putNodeData db (ShortcutNodeData (N.tail key2) val2)
+  tailNode1 <- newShortcut db (N.tail key1) $ Right val1
+  tailNode2 <- newShortcut db (N.tail key2) val2
   return $ FullNodeData
       (list2Options 0 (sortBy (compare `on` fst) [(N.head key1, tailNode1), (N.head key2, tailNode2)]))
       Nothing
@@ -225,10 +241,16 @@ putKeyVal db key val = do
 prependToKey::N.NibbleString->(N.NibbleString, RLPObject)->(N.NibbleString, RLPObject)
 prependToKey prefix (key, val) = (prefix `N.append` key, val)
 
+data PairOrPtr = APair N.NibbleString RLPObject | APtr SHAPtr deriving (Show)
+
+instance Format PairOrPtr where
+    format (APtr x) = "Ptr: " ++ format x
+    format (APair key val) = "Pair: " ++ format key ++ ": " ++ format val
+
 data NodeData =
   EmptyNodeData |
   FullNodeData {
-    choices::[Maybe SHAPtr],
+    choices::[Maybe PairOrPtr],
     nodeVal::Maybe RLPObject
   } |
   ShortcutNodeData {
@@ -280,7 +302,10 @@ instance RLPSerializable NodeData where
   rlpEncode (FullNodeData {choices=cs, nodeVal=val}) = RLPArray ((encodeChoice <$> cs) ++ [encodeVal val])
     where
       encodeChoice Nothing = rlpEncode (0::Integer)
-      encodeChoice (Just (SHAPtr x)) = rlpEncode x
+      encodeChoice (Just (APtr (SHAPtr x))) = rlpEncode x
+      encodeChoice (Just (APair key val)) = RLPArray [rlpEncode $ BC.unpack key', val]
+          where 
+            key' = termNibbleString2String True key
       encodeVal::Maybe RLPObject->RLPObject
       encodeVal Nothing = rlpEncode (0::Integer)
       encodeVal (Just x) = x
@@ -310,7 +335,8 @@ instance RLPSerializable NodeData where
         RLPScalar 0 -> Nothing
         RLPString "" -> Nothing
         x' -> Just x'
-      getPtr::RLPObject->SHAPtr
-      getPtr p = SHAPtr $ rlpDecode p
+      getPtr::RLPObject->PairOrPtr
+      getPtr (RLPArray [key, val]) = APair (snd $ string2TermNibbleString $ rlpDecode key) val
+      getPtr p = APtr $ SHAPtr $ rlpDecode p
   rlpDecode x = error ("Missing case in rlpDecode for NodeData: " ++ format x)
 
