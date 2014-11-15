@@ -39,7 +39,7 @@ splitAtWithError n arr | n > length arr = error "splitAtWithError called with n 
 splitAtWithError n arr = splitAt n arr
 
 rlpSplit::[Word8]->(RLPObject, [Word8])
-rlpSplit (x:rest) | x >= 192 && x < 192+55 =
+rlpSplit (x:rest) | x >= 192 && x <= 192+55 =
   (RLPArray $ getRLPObjects arrayData, nextRest)
   where
     dataLength::Word8
@@ -67,7 +67,7 @@ rlpSplit (x:len:rest) | x >= 183 && x <= 184 =
     (strList, nextRest) = splitAtWithError (fromIntegral strLength) rest
 rlpSplit (x:rest) | x < 128 =
   (RLPScalar x, rest)
-rlpSplit x = error ("Missing case in rlpSplit: " ++ show x)
+rlpSplit x = error ("Missing case in rlpSplit: " ++ format (B.pack x))
 
 getRLPObjects::[Word8]->[RLPObject]
 getRLPObjects [] = []

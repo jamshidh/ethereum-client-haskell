@@ -42,7 +42,7 @@ getBetterLabels ops oldLabels = M.fromList $ op2Labels oldLabels 0 ops
 
       opSize::Labels->Operation->Word256
       opSize labels (LABEL _) = 0
-      opSize labels (PUSHLABEL x) = 1 -- +fromIntegral (length $ integer2Bytes $ fromIntegral $ getLabel labels x)
+      opSize labels (PUSHLABEL x) = 1+fromIntegral (length $ integer2Bytes $ fromIntegral $ getLabel labels x)
       opSize labels (PUSHDIFF start end) = trace ("subtract: " ++ show (getLabel labels start - getLabel labels end)) $ 
                                            trace ("start: " ++ show (getLabel labels start)) $ 
                                            trace ("end: " ++ show (getLabel labels end)) $ 

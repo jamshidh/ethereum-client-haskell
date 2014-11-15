@@ -115,6 +115,6 @@ paymentContract =
 
 sendCoinTX::Transaction
 sendCoinTX =
-  createMessage 0 1000 (Address 0x9f840fe058ce3d84e319b8c747accc1e52f69426)
+  createMessage 0 2000 (Address 0x9f840fe058ce3d84e319b8c747accc1e52f69426)
   (B.pack $ word256ToBytes 0x1 ++ word256ToBytes 500)
 

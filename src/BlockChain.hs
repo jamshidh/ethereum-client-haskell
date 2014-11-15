@@ -130,9 +130,9 @@ runCodeForTransaction db b availableGas t@SignedTransaction{unsignedTransaction=
             envBlock=b,
             envOwner = tAddr,
             envOrigin = tAddr,
-            envInputData = undefined,
+            envInputData = error "envInputData is being used in init",
             envSender = newAddress,
-            envValue = undefined,
+            envValue = value ut,
             envCode = tInit ut
             }
   
@@ -196,10 +196,10 @@ runCodeForTransaction db b availableGas t@SignedTransaction{unsignedTransaction=
                            envGasPrice=gasPrice ut,
                            envBlock=b,
                            envOwner = tAddr,
-                           envOrigin = undefined,
+                           envOrigin = tAddr,
                            envInputData = tData ut,
-                           envSender = undefined,
-                           envValue = undefined,
+                           envSender = error "envSender is not set",
+                           envValue = value ut,
                            envCode = Code contractCode
                          }
 
