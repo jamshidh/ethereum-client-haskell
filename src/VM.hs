@@ -112,7 +112,7 @@ runOperation _ CODECOPY Environment{envCode=Code c} state@VMState{stack=memP:cod
   liftIO $ putStrLn $ "before: " ++ show beforeMemSize
   liftIO $ putStrLn $ "after: " ++ show afterMemory
   liftIO $ putStrLn $ "extra: " ++ show extraMemory
-  return state{stack=rest, vmGasRemaining = vmGasRemaining state - fromIntegral extraMemory}
+  return state{stack=rest} -- temporarily moved     , vmGasRemaining = vmGasRemaining state - fromIntegral extraMemory}
 
 runOperation _ GASPRICE Environment{envGasPrice=gp} state = return state{stack=fromIntegral gp:stack state}
 
@@ -186,9 +186,12 @@ runOperation _ (PUSH vals) _ state =
 
 
 
-runOperation _ RETURN _ state = do
-  retVal <- liftIO $ getReturnValue state
+runOperation _ RETURN _ state@VMState{stack=address:size:rest} = do
+  retVal <- liftIO $ mLoadByteString (memory state) address size
   return $ state { done=True, returnVal=Just retVal }
+
+runOperation _ RETURN _ state = do
+  return $ state { vmException=Just StackTooSmallException } 
 
 runOperation _ SUICIDE _ state =
   return $ state { done=True, markedForSuicide=True }
@@ -239,6 +242,7 @@ runCode db env state = do
     VMState{vmException=Just _} -> return result{ vmGasRemaining = 0 } 
     VMState{done=True} -> do
                          memSize <- getSize $ memory result
+                         putStrLn ("memSize : " ++ show memSize)
                          return $ movePC result{ vmGasRemaining = vmGasRemaining result - fromIntegral memSize } len
     state2 -> runCode db env $ movePC state2 len
 

@@ -29,11 +29,5 @@ instance RLPSerializable Code where
 codeLength::Code->Int
 codeLength (Code c) = B.length c
 
-addLoc::Word256->[Operation]->[Operation]
-addLoc _ [] = []
-addLoc p (RelativeLoc val:rest) = PUSH (integer2Bytes1 (fromIntegral $ p+val)):addLoc (p+1) rest
-addLoc p (x:rest) = x:addLoc (p+opLen x) rest
-
-
 compile::[Operation]->Code
-compile x = Code $ B.pack $ op2OpCode =<< addLoc 0 x
+compile x = Code $ B.pack $ op2OpCode =<< x

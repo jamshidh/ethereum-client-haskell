@@ -11,6 +11,7 @@ import Constants
 import JCommand
 import Util
 import VM.Code
+import VM.Labels
 import VM.Opcodes
 
 import Debug.Trace
@@ -69,34 +70,17 @@ simpleStorageTX =
       SSTORE
     ]
 
-createInit::[Operation]->[Operation]->Code
-createInit initFunc contract = trace (intercalate "-" $ show <$> contract) $ 
-  Code $ B.pack $ initBytes ++ copyCodeBytes ++ contractBytes
-  where
-    initBytes = op2OpCode =<< addLoc 0 initFunc
-    contractBytes = op2OpCode =<< addLoc 0 contract
-    copyCode =
-      [
-        PUSH $ integer2Bytes1 $ toInteger $ length contractBytes,
-        PUSH $ integer2Bytes1 $ toInteger $ length initBytes + length copyCode,
-        PUSH [0],
-        CODECOPY,
-        PUSH $ integer2Bytes1 $ toInteger $ length contractBytes,
-        PUSH [0],
-        RETURN
-      ]
-    copyCodeBytes = op2OpCode =<< addLoc 0 copyCode
+createInit::[JCommand]->[JCommand]->Code
+createInit initFunc contract = trace (intercalate "-" $ show <$> contract) $
+                               trace (intercalate "\n    " $ fmap show $ snd $ jcompile $ initFunc ++ [ReturnCode contract]) $ 
+  compile $ lcompile $ snd $ jcompile $ initFunc ++ [ReturnCode contract]
 
 createContractTX::Transaction
 createContractTX =
   createContract (1000*finney) 1000
   $ createInit []
     [
-      PUSH [0],
-      CALLDATALOAD,
-      PUSH [0],
-      SSTORE,
-      STOP
+     PermStorage (Number 0) :=: Input 0
     ]
 
 sendMessageTX::Transaction
@@ -110,18 +94,15 @@ paymentContract::Transaction
 paymentContract =
   createContract (1000*finney) 1000
                      $ createInit
-                           (j 
                             [
                              PermStorage Caller :=: Number 1000
                             ]
-                           )
                            (
                             let
                                 toAddr = Input 0
                                 fromAddr = Caller
                                 val = Input 1
                             in
-                              j
                               [
                                If (PermVal fromAddr :>=: val) 
                                       [
@@ -129,7 +110,7 @@ paymentContract =
                                        PermStorage toAddr :=: PermVal toAddr :-: val
                                       ]
                              
-                            ]
+                              ]
                            )
 
 sendCoinTX::Transaction

@@ -21,7 +21,7 @@ data Operation =
     PUSH [Word8] | 
     CREATE | CALL | RETURN | SUICIDE |
     --Pseudo Opcodes
-    RelativeLoc Word256 deriving (Show, Eq, Ord)
+    LABEL String | PUSHLABEL String | PUSHDIFF String String deriving (Show, Eq, Ord)
 
 data OPData = OPData Word8 Operation Int Int String
 
