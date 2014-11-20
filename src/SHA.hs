@@ -17,14 +17,10 @@ import Network.Haskoin.Internals
 import Numeric
 
 import Colors
-import Format
 import Data.RLP
 import Util
 
 newtype SHA = SHA Word256 deriving (Show, Eq)
-
-instance Format SHA where
-  format (SHA x) = yellow $ padZeros 64 $ showHex x ""
 
 instance Binary SHA where
   put (SHA x) = sequence_ $ fmap put $ word256ToBytes $ fromIntegral x

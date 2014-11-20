@@ -17,18 +17,11 @@ import Data.List
 import Data.Word
 import Numeric
 
-import Format
 import Util
 
 --import Debug.Trace
 
 data RLPObject = RLPScalar Word8 | RLPString String | RLPArray [RLPObject] deriving (Show, Eq, Ord)
-
-instance Format RLPObject where
-  format (RLPArray objects) = "[" ++ intercalate ", " (format <$> objects) ++ "]"
-  format (RLPScalar n) = "0x" ++ showHex n ""
-  format (RLPString s) = "0x" ++ (BC.unpack $ B16.encode $ BC.pack s)
-
 
 class RLPSerializable a where
   rlpDecode::RLPObject->a
@@ -67,7 +60,7 @@ rlpSplit (x:len:rest) | x >= 183 && x <= 184 =
     (strList, nextRest) = splitAtWithError (fromIntegral strLength) rest
 rlpSplit (x:rest) | x < 128 =
   (RLPScalar x, rest)
-rlpSplit x = error ("Missing case in rlpSplit: " ++ format (B.pack x))
+rlpSplit x = error ("Missing case in rlpSplit: " ++ show (B.pack x))
 
 getRLPObjects::[Word8]->[RLPObject]
 getRLPObjects [] = []
@@ -103,7 +96,7 @@ rlpDeserialize::B.ByteString->RLPObject
 rlpDeserialize s = 
   case rlpSplit $ B.unpack s of
     (o, []) -> o
-    _ -> error ("parse error converting ByteString to an RLP Object: " ++ format s)
+    _ -> error ("parse error converting ByteString to an RLP Object: " ++ show s)
 
 
 rlpSerialize::RLPObject->B.ByteString

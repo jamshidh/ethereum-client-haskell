@@ -19,7 +19,6 @@ import System.Directory
 
 import Colors
 import Constants
-import Format
 import Data.RLP
 import SHA
 import Util
@@ -31,9 +30,6 @@ type StateDB = DB.DB
 data DB = DB { blockDB::BlockDB, detailsDB::DetailsDB, stateDB::StateDB, stateRoot::SHAPtr }
 
 newtype SHAPtr = SHAPtr B.ByteString deriving (Show, Eq)
-
-instance Format SHAPtr where
-  format (SHAPtr x) = yellow $ format x
 
 instance Binary SHAPtr where
   put (SHAPtr x) = do

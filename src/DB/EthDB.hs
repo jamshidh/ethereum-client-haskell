@@ -3,11 +3,13 @@
 module DB.EthDB (
   --showAllKeyVal,
   SHAPtr(..),
+  NodeData(..),
   blankRoot,
   isBlankDB,
   getKeyVals,
   putKeyVal,
-) where
+  PairOrPtr(..)
+  ) where
 
 import Control.Monad.Trans.Resource
 import qualified Crypto.Hash.SHA3 as C
@@ -19,16 +21,12 @@ import Data.Default
 import Data.Function
 import Data.Functor
 import Data.List
+import qualified Data.NibbleString as N
 import qualified Database.LevelDB as DB
-import qualified Data.Map as M
-import Numeric
+--import qualified Data.Map as M
 
-import Colors
 import Data.RLP
 import DB.DBs
-import Format
-import qualified Data.NibbleString as N
-import SHA
 
 --import Debug.Trace
 
@@ -63,7 +61,7 @@ sha2SHAPtr (SHA x) = SHAPtr $ B.pack $ word256ToBytes x
 -}
 
 blankRoot::SHAPtr
-blankRoot = sha2SHAPtr (hash "")
+blankRoot = SHAPtr (C.hash 256 "")
 
 isBlankDB::SHAPtr->Bool
 isBlankDB x | blankRoot == x = True
@@ -79,12 +77,12 @@ getNodeData db@DB{stateRoot=SHAPtr p} = do
 
 
 pairOrPtr2NodeData::DB->PairOrPtr->ResourceT IO (Maybe NodeData)
-pairOrPtr2NodeData db (APair key val) = return $ Just $ ShortcutNodeData key $ Right val
+pairOrPtr2NodeData _ (APair key val) = return $ Just $ ShortcutNodeData key $ Right val
 pairOrPtr2NodeData db (APtr p) = getNodeData db{stateRoot=p}
 
 
 pairOrPtr2KeyVals::DB->PairOrPtr->N.NibbleString->ResourceT IO [(N.NibbleString, RLPObject)]
-pairOrPtr2KeyVals db (APair key val) key' | key' `N.isPrefixOf` key = return [(key, val)]
+pairOrPtr2KeyVals _ (APair key val) key' | key' `N.isPrefixOf` key = return [(key, val)]
 pairOrPtr2KeyVals db (APtr p) key = getKeyVals db{stateRoot = p} key
 
 
@@ -92,7 +90,7 @@ getKeyVals::DB->N.NibbleString->ResourceT IO [(N.NibbleString, RLPObject)]
 getKeyVals db key = do
   maybeNodeData <- getNodeData db
   let nodeData =case maybeNodeData of
-                  Nothing -> error $ "Error calling getKeyVals, stateRoot doesn't exist: " ++ format (stateRoot db)
+                  Nothing -> error $ "Error calling getKeyVals, stateRoot doesn't exist: " ++ show (stateRoot db)
                   Just x -> x
   nextVals <- 
     case nodeData of
@@ -231,10 +229,6 @@ prependToKey prefix (key, val) = (prefix `N.append` key, val)
 
 data PairOrPtr = APair N.NibbleString RLPObject | APtr SHAPtr deriving (Show)
 
-instance Format PairOrPtr where
-    format (APtr x) = "Ptr: " ++ format x
-    format (APair key val) = "Pair: " ++ format key ++ ": " ++ format val
-
 data NodeData =
   EmptyNodeData |
   FullNodeData {
@@ -246,19 +240,6 @@ data NodeData =
     nextNibbleString::N.NibbleString,
     nextVal::Either SHAPtr RLPObject
   } deriving Show
-
-formatVal::Maybe RLPObject->String
-formatVal Nothing = red "NULL"
-formatVal (Just x) = green (format x)
-
-instance Format NodeData where
-  format EmptyNodeData = "    <EMPTY>"
-  format (ShortcutNodeData s (Left p)) = "    " ++ format s ++ " -> " ++ format p
-  format (ShortcutNodeData s (Right val)) = "    " ++ format s ++ " -> " ++ green (format val)
-  format (FullNodeData cs val) = "    val: " ++ formatVal val ++ "\n        " ++ intercalate "\n        " (showChoice <$> zip ([0..]::[Int]) cs)
-    where
-      showChoice (v, Just p) = blue (showHex v "") ++ ": " ++ green (format p)
-      showChoice (v, Nothing) = blue (showHex v "") ++ ": " ++ red "NULL"
 
 string2TermNibbleString::String->(Bool, N.NibbleString)
 string2TermNibbleString [] = error "string2TermNibbleString called with empty String"
@@ -292,7 +273,7 @@ instance RLPSerializable NodeData where
     where
       encodeChoice Nothing = rlpEncode (0::Integer)
       encodeChoice (Just (APtr (SHAPtr x))) = rlpEncode x
-      encodeChoice (Just (APair key val)) = RLPArray [rlpEncode $ BC.unpack key', val]
+      encodeChoice (Just (APair key v)) = RLPArray [rlpEncode $ BC.unpack key', v]
           where 
             key' = termNibbleString2String True key
       encodeVal::Maybe RLPObject->RLPObject
@@ -325,7 +306,7 @@ instance RLPSerializable NodeData where
         RLPString "" -> Nothing
         x' -> Just x'
       getPtr::RLPObject->PairOrPtr
-      getPtr (RLPArray [key, val]) = APair (snd $ string2TermNibbleString $ rlpDecode key) val
+      getPtr (RLPArray [key, v]) = APair (snd $ string2TermNibbleString $ rlpDecode key) v
       getPtr p = APtr $ SHAPtr $ rlpDecode p
-  rlpDecode x = error ("Missing case in rlpDecode for NodeData: " ++ format x)
+  rlpDecode x = error ("Missing case in rlpDecode for NodeData: " ++ show x)
 
