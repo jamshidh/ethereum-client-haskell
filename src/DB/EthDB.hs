@@ -20,6 +20,7 @@ import Data.Function
 import Data.Functor
 import Data.List
 import qualified Database.LevelDB as DB
+import qualified Data.Map as M
 import Numeric
 
 import Colors
@@ -155,10 +156,8 @@ newShortcut db key val = APtr <$> putNodeData db (ShortcutNodeData key val)
 
 
 getNewNodeDataFromPut::DB->N.NibbleString->RLPObject->NodeData->ResourceT IO NodeData
---getNewNodeDataFromPut _ key val nd | trace ("getNewNodeDataFromPut: " ++ format key ++ ", " ++ format val ++ ", " ++ format nd) False = undefined
 getNewNodeDataFromPut _ key val EmptyNodeData = return $
   ShortcutNodeData key $ Right val
-
 
 getNewNodeDataFromPut db key val (FullNodeData options nodeValue)
   | options `slotIsEmpty` N.head key = do
@@ -174,11 +173,9 @@ getNewNodeDataFromPut db key val (FullNodeData options nodeValue) = do
 
 getNewNodeDataFromPut _ key1 val (ShortcutNodeData key2 (Right _)) | key1 == key2 =
   return $ ShortcutNodeData key1 $ Right val
-
 --getNewNodeDataFromPut _ key1 val (ShortcutNodeData key2 (Left _)) | key1 == key2 =
 getNewNodeDataFromPut _ key1 _ (ShortcutNodeData key2 (Left _)) | key1 == key2 =
   error "getNewNodeDataFromPut not defined for shortcutnodedata with ptr"
-
 --getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | N.null key1 = do
 getNewNodeDataFromPut _ key1 _ (ShortcutNodeData _ _) | N.null key1 = do
   undefined
@@ -188,27 +185,21 @@ getNewNodeDataFromPut _ key1 _ (ShortcutNodeData _ _) | N.null key1 = do
   midNode <- putNodeData db $ FullNodeData options $ Just val1
   return $ ShortcutNodeData key1 $ Left midNode
 -}
-
 getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | key1 `N.isPrefixOf` key2 = do
   node1 <- newShortcut db (N.drop (N.length key1) key2) val2
   let options = list2Options 0 [(N.head $ N.drop (N.length key1) key2, node1)]
   midNode <- putNodeData db $ FullNodeData options $ Just val1
   return $ ShortcutNodeData key1 $ Left midNode
-
-
 getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 (Right val2)) | key2 `N.isPrefixOf` key1 = do
   node1 <- newShortcut db (N.drop (N.length key2) key1) $ Right val1
   let options = list2Options 0 [(N.head $ N.drop (N.length key2) key1, node1)]
   midNode <- putNodeData db $ FullNodeData options $ Just val2
   return $ ShortcutNodeData key2 $ Left midNode
-
 getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 (Left val2)) | key2 `N.isPrefixOf` key1 = do
   Just nodeData <- getNodeData db{stateRoot=val2}
   newNodeData <- getNewNodeDataFromPut db (N.drop (N.length key2) key1) val1 nodeData 
   newNode <- putNodeData db newNodeData
   return $ ShortcutNodeData key2 $ Left newNode
-  
-
 getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | N.head key1 == N.head key2 = do
   node1 <- newShortcut db (N.pack $ tail suffix1) $ Right val1
   node2 <- newShortcut db (N.pack $ tail suffix2) val2
@@ -217,9 +208,6 @@ getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | N.head key1 ==
   return $ ShortcutNodeData (N.pack commonPrefix) $ Left midNode
       where
         (commonPrefix, suffix1, suffix2) = getCommonPrefix (N.unpack key1) (N.unpack key2)
-
-
-
 getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) = do
   tailNode1 <- newShortcut db (N.tail key1) $ Right val1
   tailNode2 <- newShortcut db (N.tail key2) val2
@@ -250,6 +238,7 @@ instance Format PairOrPtr where
 data NodeData =
   EmptyNodeData |
   FullNodeData {
+    --choices::M.Map N.Nibble (Maybe PairOrPtr),
     choices::[Maybe PairOrPtr],
     nodeVal::Maybe RLPObject
   } |
