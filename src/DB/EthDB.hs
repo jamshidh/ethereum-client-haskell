@@ -27,7 +27,7 @@ import Colors
 import Data.RLP
 import DB.DBs
 import Format
-import qualified NibbleString as N
+import qualified Data.NibbleString as N
 import SHA
 
 --import Debug.Trace

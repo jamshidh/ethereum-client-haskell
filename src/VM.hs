@@ -19,7 +19,7 @@ import Data.AddressState
 import Data.Block
 import DB.DBs
 import DB.EthDB
-import qualified NibbleString as N
+import qualified Data.NibbleString as N
 import Data.RLP
 import SHA
 import Util

@@ -17,7 +17,7 @@ import Colors
 import DB.DBs
 import DB.EthDB
 import Format
-import qualified NibbleString as N
+import qualified Data.NibbleString as N
 import Data.RLP
 import SHA
 import Util

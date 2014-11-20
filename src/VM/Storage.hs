@@ -12,7 +12,7 @@ import DB.DBs
 import DB.EthDB
 import ExtWord
 import DB.ModifyStateDB
-import qualified NibbleString as N
+import qualified Data.NibbleString as N
 import Data.RLP
 import Util
 

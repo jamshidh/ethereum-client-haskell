@@ -23,6 +23,7 @@ executable ethereumH
                  , mtl
                  , network
                  , network-simple
+                 , nibblestring
                  , resourcet
                  , time
                  , transformers

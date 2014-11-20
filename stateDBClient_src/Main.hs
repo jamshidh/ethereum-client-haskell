@@ -8,10 +8,11 @@ import Data.List
 import qualified Database.LevelDB as DB
 import System.Environment
 
+import qualified Data.NibbleString as N
+
 import DB.DBs
 import DB.EthDB
 import Format
-import qualified NibbleString as N
 import Data.RLP
 
 main = do
