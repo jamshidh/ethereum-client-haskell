@@ -4,9 +4,7 @@ module VM.Code where
 import qualified Data.ByteString as B
 
 import Data.RLP
-import ExtWord
 import Format
-import Util
 import VM.Opcodes
 
 newtype Code = Code B.ByteString deriving (Show)
