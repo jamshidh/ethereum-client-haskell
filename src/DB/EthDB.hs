@@ -177,8 +177,8 @@ getNewNodeDataFromPut _ key1 val (ShortcutNodeData key2 (Right _)) | key1 == key
 getNewNodeDataFromPut _ key1 _ (ShortcutNodeData key2 (Left _)) | key1 == key2 =
   error "getNewNodeDataFromPut not defined for shortcutnodedata with ptr"
 --getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | N.null key1 = do
-getNewNodeDataFromPut _ key1 _ (ShortcutNodeData _ _) | N.null key1 = do
-  undefined
+getNewNodeDataFromPut _ key1 val1 (ShortcutNodeData k (Right _)) | N.null key1 = do
+  return $ ShortcutNodeData k $ Right val1
   {-
   node1 <- putNodeData db $ ShortcutNodeData (N.drop (N.length key1) key2) val2
   let options = list2Options 0 [(N.head $ N.drop (N.length key1) key2, node1)]

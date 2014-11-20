@@ -22,7 +22,7 @@ import Util
 
 --import Debug.Trace
 
-data RLPObject = RLPScalar Word8 | RLPString String | RLPArray [RLPObject] deriving (Show)
+data RLPObject = RLPScalar Word8 | RLPString String | RLPArray [RLPObject] deriving (Show, Eq, Ord)
 
 instance Format RLPObject where
   format (RLPArray objects) = "[" ++ intercalate ", " (format <$> objects) ++ "]"

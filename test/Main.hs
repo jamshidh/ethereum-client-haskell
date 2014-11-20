@@ -11,91 +11,63 @@ import Data.Functor
 import Data.List
 import Data.Monoid
 import qualified Data.Set as S
-import Database.LevelDB
+import qualified Database.LevelDB as LD
 import System.Exit
 import Test.Framework
 import Test.Framework.Providers.HUnit
 import Test.HUnit
 
-import Address
-import EthDB
+import qualified Data.NibbleString as N
+
+import Data.Address
+import DB.EthDB
 import Format
-import ModifyStateDB
-import qualified NibbleString as N
-import RLP
+import DB.ModifyStateDB
+import DB.DBs
+import Data.RLP
 import SHA
 import Util
 
-putKeyVals::DB->SHAPtr->[(N.NibbleString, B.ByteString)]->ResourceT IO SHAPtr
-putKeyVals db stateRoot [(k,v)] = putKeyVal db stateRoot k v
-putKeyVals db stateRoot ((k, v):rest) = do
-  newStateRoot <- putKeyVal db stateRoot k v
-  putKeyVals db newStateRoot rest
+putKeyVals::DB->[(N.NibbleString, B.ByteString)]->ResourceT IO DB
+putKeyVals db [(k,v)] = putKeyVal db k (rlpEncode v)
+putKeyVals db ((k, v):rest) = do
+  db'<- putKeyVal db k $ rlpEncode v
+  putKeyVals db' rest
 
-verifyDBDataIntegrity::[(N.NibbleString, B.ByteString)]->IO ()
-verifyDBDataIntegrity valuesIn = do
-  runResourceT $ do
-    (db, stateRoot) <- initializeBlankStateDB "/tmp/tmpDb1"
-    stateRoot2 <- putKeyVals db stateRoot valuesIn
+verifyDBDataIntegrity::DB->[(N.NibbleString, B.ByteString)]->ResourceT IO ()
+verifyDBDataIntegrity db valuesIn = do
+    db2 <- initializeBlankStateDB db
+    db3 <- putKeyVals db2 valuesIn
     --return (db, stateRoot2)
-    valuesOut <- getKeyVals db stateRoot2 (N.EvenNibbleString B.empty)
-    liftIO $ assertEqual "empty db didn't match" (S.fromList valuesIn) (S.fromList valuesOut)
+    valuesOut <- getKeyVals db3 (N.EvenNibbleString B.empty)
+    liftIO $ assertEqual "empty db didn't match" (S.fromList $ fmap rlpEncode <$> valuesIn) (S.fromList valuesOut)
     return ()
 
 testShortcutNodeDataInsert::Assertion
 testShortcutNodeDataInsert = do
-  verifyDBDataIntegrity
+  runResourceT $ do
+    db <- openDBs False
+    verifyDBDataIntegrity db
         [
           (N.EvenNibbleString $ BC.pack "abcd", BC.pack "abcd"),
           (N.EvenNibbleString $ BC.pack "aefg", BC.pack "aefg")
         ]
 
+testFullNodeDataInsert::Assertion
 testFullNodeDataInsert = do
-  verifyDBDataIntegrity
+  runResourceT $ do
+    db <- openDBs False
+    verifyDBDataIntegrity db
         [
           (N.EvenNibbleString $ BC.pack "abcd", BC.pack "abcd"),
           (N.EvenNibbleString $ BC.pack "bb", BC.pack "bb"),
           (N.EvenNibbleString $ BC.pack "aefg", BC.pack "aefg")
         ]
 
-addFirstReward = do
-  stateRoot <- initializeStateDB
-
-  stateRoot2 <- addReward stateRoot $ Address 0x6ccf6b5c33ae2017a6c76b8791ca61276a69ab8e
-
-  putStrLn $ format stateRoot2
-
-  runResourceT $ do
-    db <- open "/home/jim/.ethereumH/state" defaultOptions
-    kvs <- getKeyVals db stateRoot2 N.empty
-    liftIO $ putStrLn $ intercalate "\n" ((\(k, v) -> format k ++ ": " ++ format (rlpDeserialize v)) <$> kvs)
-
-  putStrLn "-----------------------------"
-
-  runResourceT $ do
-    db <- open "/home/jim/.ethereum/state" defaultOptions
-    kvs <- getKeyVals db (SHAPtr $ B.pack $ integer2Bytes 0x8b9a53acdafe82b6247c195035995f892f467fda03d7b44b684dcb3663fb3497) N.empty
-    --kvs <- getKeyVals db (SHAPtr $ B.pack $ integer2Bytes 0x8dbd704eb38d1c2b73ee4788715ea5828a030650829703f077729b2b613dd206) N.empty
-    liftIO $ putStrLn $ intercalate "\n" ((\(k, v) -> format k ++ ": " ++ format (rlpDeserialize v)) <$> kvs)
-
-  assertEqual "reward state root doesn't match" stateRoot2 (SHAPtr $ B.pack $ integer2Bytes 0x8b9a53acdafe82b6247c195035995f892f467fda03d7b44b684dcb3663fb3497)
-
-
 main::IO ()
 main = 
   defaultMainWithOpts 
   [
    testCase "ShortcutNodeData Insert" testShortcutNodeDataInsert,
-   testCase "FullNodeData Insert" testFullNodeDataInsert,
-   testCase "FullNodeData Insert" addFirstReward
+   testCase "FullNodeData Insert" testFullNodeDataInsert
   ] mempty
-    
-{-
-  defaultMain
-  [
-    testGroup "stateDB Tests"
-    [
-      testProperty "qqqq" prop_testStateDB
-    ]
-  ]
--}

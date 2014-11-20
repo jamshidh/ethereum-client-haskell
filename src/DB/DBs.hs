@@ -58,4 +58,4 @@ openDBs useCppDBs = do
   bdb <- DB.open (homeDir ++ dbDir useCppDBs ++ blockDBPath) options
   ddb <- DB.open (homeDir ++ dbDir useCppDBs ++ detailsDBPath) options
   sdb <- DB.open (homeDir ++ dbDir useCppDBs ++ stateDBPath) options
-  return $ DB bdb ddb sdb undefined
+  return $ DB bdb ddb sdb $ error "no stateRoot defined"
