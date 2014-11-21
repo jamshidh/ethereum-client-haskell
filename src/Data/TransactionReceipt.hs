@@ -9,6 +9,7 @@ import Format
 import SHA
 import Data.SignedTransaction
 import Data.RLP
+import Text.PrettyPrint.Leijen hiding ((<$>))
 
 data PostTransactionState = PostTransactionState SHA deriving (Show)
 
@@ -37,7 +38,7 @@ instance RLPSerializable TransactionReceipt where
       postTransactionState = rlpDecode pts,
       cumulativeGasUsed = rlpDecode gasUsed
       }
-  rlpDecode x = error $ "Missing case in rlpDecode for TransactionReceipt: " ++ format x
+  rlpDecode x = error $ "Missing case in rlpDecode for TransactionReceipt: " ++ show (pretty x)
   
   rlpEncode TransactionReceipt{
     theTransaction=t,

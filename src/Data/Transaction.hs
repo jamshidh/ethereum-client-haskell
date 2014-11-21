@@ -6,6 +6,7 @@ module Data.Transaction (
   ) where
 
 import qualified Data.ByteString as B
+import Text.PrettyPrint.Leijen
 
 import Data.Address
 import VM.Code
@@ -54,7 +55,7 @@ instance Format Transaction where
       "gasPrice: " ++ show gp ++ "\n" ++
       "tGasLimit: " ++ show gl ++ "\n" ++
       "value: " ++ show v ++ "\n" ++
-      "tInit: " ++ tab ("\n" ++ format init') ++ "\n")
+      "tInit: " ++ tab ("\n" ++ show (pretty init')) ++ "\n")
 
 instance RLPSerializable Transaction where
   rlpDecode (RLPArray [n, gp, gl, toAddr, val, i]) | rlpDecode toAddr == (0::Integer) =

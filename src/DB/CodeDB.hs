@@ -11,7 +11,7 @@ import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import qualified Database.LevelDB as DB
 
-import DB.DBs
+import Database.DBs
 import SHA
 
 addCode::DB->B.ByteString->ResourceT IO ()

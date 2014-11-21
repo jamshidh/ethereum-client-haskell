@@ -10,10 +10,11 @@ import Data.Functor
 import Data.List
 import qualified Data.NibbleString as N
 import Numeric
+import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import Colors
 import Data.RLP
-import DB.EthDB
+import Database.MerklePatricia
 import SHA
 
 class Format a where
@@ -39,26 +40,18 @@ instance Format N.NibbleString where
   format (N.EvenNibbleString s) = blue $ format s
   format (N.OddNibbleString c s) = blue $ formatNibble c ++ format s
 
-instance Format RLPObject where
-  format (RLPArray objects) = "[" ++ intercalate ", " (format <$> objects) ++ "]"
-  format (RLPScalar n) = "0x" ++ showHex n ""
-  format (RLPString s) = "0x" ++ (BC.unpack $ B16.encode $ BC.pack s)
-
-
-                                                      
-
 instance Format PairOrPtr where
   format (APtr x) = "Ptr: " ++ format x
-  format (APair key val) = "Pair: " ++ format key ++ ": " ++ format val
+  format (APair key val) = "Pair: " ++ format key ++ ": " ++ show (pretty val)
 
 formatVal::Maybe RLPObject->String
 formatVal Nothing = red "NULL"
-formatVal (Just x) = green (format x)
+formatVal (Just x) = green (show $ pretty x)
                      
 instance Format NodeData where
   format EmptyNodeData = "    <EMPTY>"
   format (ShortcutNodeData s (Left p)) = "    " ++ format s ++ " -> " ++ format p
-  format (ShortcutNodeData s (Right val)) = "    " ++ format s ++ " -> " ++ green (format val)
+  format (ShortcutNodeData s (Right val)) = "    " ++ format s ++ " -> " ++ green (show $ pretty val)
   format (FullNodeData cs val) = "    val: " ++ formatVal val ++ "\n        " ++ intercalate "\n        " (showChoice <$> zip ([0..]::[Int]) cs)
     where
       showChoice (v, Just p) = blue (showHex v "") ++ ": " ++ green (format p)

@@ -31,7 +31,7 @@ import Numeric
 
 import Data.Address
 import Colors
-import DB.EthDB
+import Database.MerklePatricia
 import Format
 import Data.RLP
 import SHA

@@ -17,8 +17,8 @@ import Network.Haskoin.Crypto (Word256)
 import Data.Address
 import Data.AddressState
 import Data.Block
-import DB.DBs
-import DB.EthDB
+import Database.DBs
+import Database.MerklePatricia
 import qualified Data.NibbleString as N
 import Data.RLP
 import SHA

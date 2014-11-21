@@ -18,15 +18,19 @@ executable ethereumH
                  , directory
                  , either
                  , entropy
+                 , ethereum-merkle-patricia-db
+                 , ethereum-rlp
                  , haskoin
                  , leveldb-haskell
                  , mtl
                  , network
                  , network-simple
                  , nibblestring
+                 , pretty-class
                  , resourcet
                  , time
                  , transformers
+                 , wl-pprint
     main-is: Main.hs
     C-sources: fastNonceFinder/nonceFinder.c
     --ghc-options: -threaded

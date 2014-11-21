@@ -11,11 +11,12 @@ import Control.Monad.Trans.Resource
 import qualified Data.ByteString as B
 import Data.Functor
 import Numeric
+import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import Data.Address
 import Colors
-import DB.DBs
-import DB.EthDB
+import Database.DBs
+import Database.MerklePatricia
 import Format
 import qualified Data.NibbleString as N
 import Data.RLP
@@ -51,7 +52,7 @@ instance RLPSerializable AddressState where
       contractRoot=if rlpDecode cr == (0::Integer) then Nothing else Just (rlpDecode cr),
       codeHash=rlpDecode ch
       } 
-  rlpDecode x = error $ "Missing case in rlpDecode for AddressState: " ++ format x
+  rlpDecode x = error $ "Missing case in rlpDecode for AddressState: " ++ show (pretty x)
 
 addressAsNibbleString::Address->N.NibbleString
 addressAsNibbleString (Address s) = N.EvenNibbleString $ B.pack $ integer2Bytes $ fromIntegral s

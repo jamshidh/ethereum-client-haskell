@@ -9,7 +9,7 @@ module VM.VMState (
 
 import qualified Data.ByteString as B
 
-import DB.DBs
+import Database.DBs
 import ExtWord
 import Format
 import VM.Code

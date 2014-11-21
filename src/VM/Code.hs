@@ -2,6 +2,7 @@
 module VM.Code where
 
 import qualified Data.ByteString as B
+import Text.PrettyPrint.Leijen
 
 import Data.RLP
 import Format
@@ -14,9 +15,9 @@ newtype Code = Code B.ByteString deriving (Show)
 getOperationAt::Code->Int->(Operation, Int)
 getOperationAt (Code rom) p = opCode2Op $ B.drop p rom
 
-instance Format Code where
-    format (Code rom) | B.null rom = ""
-    format c@(Code rom) = show op ++ "\n" ++ format (Code $ B.drop nextP rom)
+instance Pretty Code where
+    pretty (Code rom) | B.null rom = empty
+    pretty c@(Code rom) = text (show op ++ "\n") <> pretty (Code $ B.drop nextP rom)
         where
           (op, nextP) = getOperationAt c 0
 

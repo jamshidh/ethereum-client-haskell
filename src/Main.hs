@@ -33,7 +33,7 @@ import Data.Block
 import BlockChain
 import Colors
 import Constants
-import DB.DBs
+import Database.DBs
 import Format
 import DB.ModifyStateDB
 import Data.RLP

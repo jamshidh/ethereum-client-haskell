@@ -17,7 +17,7 @@ import qualified Database.LevelDB as DB
 
 import Data.Address
 import Data.AddressState
-import DB.DBs
+import Database.DBs
 import SHA
 
 --import Debug.Trace

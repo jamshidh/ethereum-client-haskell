@@ -7,11 +7,12 @@ import Data.Functor
 import Data.List
 import qualified Database.LevelDB as DB
 import System.Environment
+import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import qualified Data.NibbleString as N
 
-import DB.DBs
-import DB.EthDB
+import Database.DBs
+import Database.MerklePatricia
 import Format
 import Data.RLP
 
@@ -25,7 +26,7 @@ main = do
   DB.runResourceT $ do
     db <- openDBs useCppDb --True = .ethereum, False = .ethereumH
     kvs <- getKeyVals db{stateRoot=sr} ""
-    liftIO $ putStrLn $ intercalate "\n" ((\(k, v) -> format k ++ ": " ++ format (rlpDeserialize $ rlpDecode v)) <$> filter (filterUnnecessary . fst) kvs)
+    liftIO $ putStrLn $ intercalate "\n" ((\(k, v) -> format k ++ ": " ++ show (pretty $ rlpDeserialize $ rlpDecode v)) <$> filter (filterUnnecessary . fst) kvs)
 
 filterUnnecessary::N.NibbleString->Bool
 filterUnnecessary "1a26338f0d905e295fccb71fa9ea849ffa12aaf4" = False

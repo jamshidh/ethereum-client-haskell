@@ -22,6 +22,7 @@ import Data.Maybe
 import Data.Time
 import Data.Time.Clock.POSIX
 import qualified Database.LevelDB as DB
+import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import Data.Address
 import Data.AddressState
@@ -31,8 +32,8 @@ import Data.SignedTransaction
 import Data.Transaction
 import Data.TransactionReceipt
 import DB.CodeDB
-import DB.DBs
-import DB.EthDB
+import Database.DBs
+import Database.MerklePatricia
 import DB.ModifyStateDB
 import Colors
 import Constants
@@ -184,7 +185,7 @@ runCodeForTransaction db b availableGas t@SignedTransaction{unsignedTransaction=
       fromMaybe (error "no contract code") <$>
                 (getCode db $ sha2SHAPtr $ codeHash recipientAddressState)
 
-  liftIO $ putStrLn $ "running code: " ++ tab (magenta ("\n" ++ format (Code contractCode)))
+  liftIO $ putStrLn $ "running code: " ++ tab (magenta ("\n" ++ show (pretty (Code contractCode))))
 
   let tAddr = whoSignedThisTransaction t
 

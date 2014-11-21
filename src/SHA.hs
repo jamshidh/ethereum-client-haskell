@@ -4,7 +4,8 @@ module SHA (
   hash,
   rlp2Word512,
   word5122RLP,
-  padZeros
+  padZeros,
+  sha2SHAPtr
   ) where
 
 import qualified Crypto.Hash.SHA3 as C
@@ -18,6 +19,7 @@ import Numeric
 
 import Colors
 import Data.RLP
+import Database.MerklePatricia
 import Util
 
 newtype SHA = SHA Word256 deriving (Show, Eq)
@@ -35,6 +37,9 @@ instance RLPSerializable SHA where
   rlpDecode x = error ("Missing case in rlpDecode for SHA: " ++ show x)
   --rlpEncode (SHA 0) = RLPNumber 0
   rlpEncode (SHA val) = RLPString $ BC.unpack $ fst $ B16.decode $ BC.pack $ padZeros 64 $ showHex val ""
+
+sha2SHAPtr::SHA->SHAPtr
+sha2SHAPtr (SHA x) = SHAPtr $ B.pack $ word256ToBytes x
 
 hash::BC.ByteString->SHA
 hash = SHA . fromIntegral . byteString2Integer . C.hash 256
