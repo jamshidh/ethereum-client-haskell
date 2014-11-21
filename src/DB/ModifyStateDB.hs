@@ -7,17 +7,15 @@ module DB.ModifyStateDB (
                       addNonce
 ) where
 
-import Control.Monad.Trans.Resource
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
-import Data.Default
 import Data.Functor
 import Data.Maybe
-import qualified Database.LevelDB as DB
 
+import Context
 import Data.Address
 import Data.AddressState
-import Database.DBs
+import ExtDBs
 import SHA
 
 --import Debug.Trace
@@ -35,14 +33,13 @@ startingAddressState =
       codeHash=hash B.empty
       }
 
-initializeBlankStateDB::DB->ResourceT IO DB
-initializeBlankStateDB db = do
-  DB.put (stateDB db) def startingRoot B.empty
-  return db{stateRoot=SHAPtr startingRoot}
+initializeBlankStateDB::ContextM ()
+initializeBlankStateDB = do
+  stateDBPut startingRoot B.empty
 
-initializeStateDB::DB->ResourceT IO DB
-initializeStateDB db = do
-  db' <- initializeBlankStateDB db
+initializeStateDB::ContextM ()
+initializeStateDB = do
+  initializeBlankStateDB
 
   let addresses = Address <$> [
                         0x51ba59315b3a95761d0863b05ccc7a7f54703d99,
@@ -55,26 +52,26 @@ initializeStateDB db = do
                         0xe4157b34ea9615cfbde6b4fda419828124b70c78
                        ]
 
-  putAddressStates db' addresses startingAddressState{balance=0x0100000000000000000000000000000000000000000000000000}
+  putAddressStates addresses startingAddressState{balance=0x0100000000000000000000000000000000000000000000000000}
 
   
 
-putAddressStates::DB->[Address]->AddressState->ResourceT IO DB
-putAddressStates db [] _ = return db
-putAddressStates db (address:rest) addressState = do
-    db' <- putAddressState db address addressState
-    putAddressStates db' rest addressState
+putAddressStates::[Address]->AddressState->ContextM ()
+putAddressStates [] _ = return ()
+putAddressStates (address:rest) addressState = do
+    putAddressState address addressState
+    putAddressStates rest addressState
 
 
-addToBalance::DB->Address->Integer->ResourceT IO DB
-addToBalance db address val = do
-  addressState <- fromMaybe startingAddressState <$> getAddressState db address
-  putAddressState db address addressState{ balance = balance addressState + fromIntegral val }
+addToBalance::Address->Integer->ContextM ()
+addToBalance address val = do
+  addressState <- fromMaybe startingAddressState <$> getAddressState address
+  putAddressState address addressState{ balance = balance addressState + fromIntegral val }
 
-addNonce::DB->Address->ResourceT IO DB
-addNonce db address = do
-  addressState <- fromMaybe startingAddressState <$> getAddressState db address
-  putAddressState db address addressState{ addressStateNonce = addressStateNonce addressState + 1 }
+addNonce::Address->ContextM ()
+addNonce address = do
+  addressState <- fromMaybe startingAddressState <$> getAddressState address
+  putAddressState address addressState{ addressStateNonce = addressStateNonce addressState + 1 }
 
 
 

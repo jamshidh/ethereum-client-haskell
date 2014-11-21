@@ -4,20 +4,18 @@ module DB.CodeDB (
                getCode
               ) where
 
-import Control.Monad.Trans.Resource
 import Data.Binary
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
-import Data.Default
-import qualified Database.LevelDB as DB
 
+import Context
 import Database.DBs
-import SHA
+import ExtDBs
 
-addCode::DB->B.ByteString->ResourceT IO ()
-addCode db codeBytes = 
-  DB.put (stateDB db) def (BL.toStrict $ encode $ hash codeBytes) codeBytes 
+addCode::B.ByteString->ContextM ()
+addCode codeBytes = 
+  codeDBPut codeBytes 
 
-getCode::DB->SHAPtr->ResourceT IO (Maybe B.ByteString)
-getCode db theHash = 
-  DB.get (stateDB db) def (BL.toStrict $ encode theHash)
+getCode::SHAPtr->ContextM (Maybe B.ByteString)
+getCode theHash = 
+  codeDBGet (BL.toStrict $ encode theHash)

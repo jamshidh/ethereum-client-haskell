@@ -34,6 +34,7 @@ infixl 4 :=:
 j::[JCommand]->Unique [Operation]
 j x = fmap concat $ sequence $ jCommand2Op <$> x
 
+jcompile::[JCommand]->(Int, [Operation])
 jcompile x = runUnique (j x) 0
 
 data Unique a = Unique { runUnique::Int->(Int, a) }

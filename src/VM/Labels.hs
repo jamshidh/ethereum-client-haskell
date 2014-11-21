@@ -30,18 +30,18 @@ getStupidLabels ops = M.fromList $ op2StupidLabels =<< ops
     where
       op2StupidLabels::Operation->[(String, Word256)]
       op2StupidLabels (LABEL name) = [(name, -1)]
-      op2StupidLabels x = []
+      op2StupidLabels _ = []
 
 getBetterLabels::[Operation]->Labels->Labels
 getBetterLabels ops oldLabels = M.fromList $ op2Labels oldLabels 0 ops
     where
       op2Labels::Labels->Word256->[Operation]->[(String, Word256)]
       op2Labels _ _ [] = []
-      op2Labels oldLabels p (LABEL name:rest) = [(name, p)] ++ op2Labels oldLabels p rest
-      op2Labels oldLabels p (x:rest) = op2Labels oldLabels (p+opSize oldLabels x) rest 
+      op2Labels oldLabs p (LABEL name:rest) = [(name, p)] ++ op2Labels oldLabs p rest
+      op2Labels oldLabs p (x:rest) = op2Labels oldLabs (p+opSize oldLabs x) rest 
 
       opSize::Labels->Operation->Word256
-      opSize labels (LABEL _) = 0
+      opSize _ (LABEL _) = 0
       opSize labels (PUSHLABEL x) = 1+fromIntegral (length $ integer2Bytes $ fromIntegral $ getLabel labels x)
       opSize labels (PUSHDIFF start end) = trace ("subtract: " ++ show (getLabel labels start - getLabel labels end)) $ 
                                            trace ("start: " ++ show (getLabel labels start)) $ 
@@ -74,9 +74,9 @@ substituteLabels labels ops = substituteLabel labels =<< ops
     where
       substituteLabel::Labels->Operation->[Operation]
       substituteLabel _ (LABEL _) = []
-      substituteLabel labels (PUSHDIFF start end) = [PUSH $ integer2Bytes1 $ toInteger (getLabel labels end - getLabel labels start)]
-      substituteLabel labels (PUSHLABEL name) = [PUSH $ integer2Bytes1 $ toInteger (getLabel labels name)]
-      substituteLabel labels x = [x]
+      substituteLabel _ (PUSHDIFF start end) = [PUSH $ integer2Bytes1 $ toInteger (getLabel labels end - getLabel labels start)]
+      substituteLabel labs (PUSHLABEL name) = [PUSH $ integer2Bytes1 $ toInteger (getLabel labs name)]
+      substituteLabel _ x = [x]
 
 
 

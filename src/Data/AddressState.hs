@@ -7,7 +7,6 @@ module Data.AddressState (
   putAddressState
   ) where
 
-import Control.Monad.Trans.Resource
 import qualified Data.ByteString as B
 import Data.Functor
 import Numeric
@@ -15,8 +14,9 @@ import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import Data.Address
 import Colors
+import Context
 import Database.DBs
-import Database.MerklePatricia
+import ExtDBs
 import Format
 import qualified Data.NibbleString as N
 import Data.RLP
@@ -57,23 +57,23 @@ instance RLPSerializable AddressState where
 addressAsNibbleString::Address->N.NibbleString
 addressAsNibbleString (Address s) = N.EvenNibbleString $ B.pack $ integer2Bytes $ fromIntegral s
 
-getAddressState::DB->Address->ResourceT IO (Maybe AddressState)
-getAddressState db address = do
-  states <- getKeyVals db $ addressAsNibbleString address
+getAddressState::Address->ContextM (Maybe AddressState)
+getAddressState address = do
+  states <- getKeyVals $ addressAsNibbleString address
   case states of
     [] -> return Nothing
     [state] -> return $ Just $ rlpDecode $ rlpDeserialize $ rlpDecode $ snd state
     _ -> error ("getAddressStates found multiple states for: " ++ format address)
   
 
-getAllAddressStates::DB->ResourceT IO [(N.NibbleString, AddressState)]
-getAllAddressStates db = do
-  states <- getKeyVals db ""
+getAllAddressStates::ContextM [(N.NibbleString, AddressState)]
+getAllAddressStates = do
+  states <- getKeyVals ""
   return $ fmap rlpDecode <$> states
 
   
 
-putAddressState::DB->Address->AddressState->ResourceT IO DB
-putAddressState db address newState = do
-  putKeyVal db (addressAsNibbleString address) $ rlpEncode $ rlpSerialize $ rlpEncode newState
+putAddressState::Address->AddressState->ContextM ()
+putAddressState address newState = do
+  putKeyVal (addressAsNibbleString address) $ rlpEncode $ rlpSerialize $ rlpEncode newState
 

@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 import Control.Monad.IO.Class
+import Control.Monad.State
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8 as BC
 import Data.Functor
@@ -10,11 +11,18 @@ import System.Environment
 import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import qualified Data.NibbleString as N
-
-import Database.DBs
-import Database.MerklePatricia
-import Format
 import Data.RLP
+
+import Context
+import Database.DBs
+import ExtDBs
+import Format
+
+doit::SHAPtr->ContextM ()
+doit sr = do
+    setStateRoot sr
+    kvs <- getKeyVals ""
+    liftIO $ putStrLn $ intercalate "\n" ((\(k, v) -> format k ++ ": " ++ show (pretty $ rlpDeserialize $ rlpDecode v)) <$> filter (filterUnnecessary . fst) kvs)
 
 main = do
   [theType, addr] <- getArgs
@@ -24,9 +32,9 @@ main = do
           "h" -> False
           "c" -> True
   DB.runResourceT $ do
-    db <- openDBs useCppDb --True = .ethereum, False = .ethereumH
-    kvs <- getKeyVals db{stateRoot=sr} ""
-    liftIO $ putStrLn $ intercalate "\n" ((\(k, v) -> format k ++ ": " ++ show (pretty $ rlpDeserialize $ rlpDecode v)) <$> filter (filterUnnecessary . fst) kvs)
+    cxt <- openDBs useCppDb --True = .ethereum, False = .ethereumH
+    _ <- liftIO $ runStateT (doit sr) cxt
+    return ()
 
 filterUnnecessary::N.NibbleString->Bool
 filterUnnecessary "1a26338f0d905e295fccb71fa9ea849ffa12aaf4" = False

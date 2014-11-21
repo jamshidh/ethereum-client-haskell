@@ -5,6 +5,7 @@ module Main (
   ) where
 
 import Control.Monad.IO.Class
+import Control.Monad.State
 import Control.Monad.Trans.Resource
 import qualified Crypto.Hash.SHA3 as C
 import Data.Binary.Put
@@ -27,22 +28,24 @@ import System.IO
 
 import Network.Simple.TCP
 
-import Data.Address
-import Data.AddressState
-import Data.Block
+import Data.RLP
+
 import BlockChain
 import Colors
 import Constants
+import Context
+import Data.Address
+import Data.AddressState
+import Data.Block
+import Data.SignedTransaction
+import Data.Transaction
+import Data.Wire
 import Database.DBs
 import Format
 import DB.ModifyStateDB
-import Data.RLP
 import SampleTransactions
 import SHA
-import Data.SignedTransaction
-import Data.Transaction
 import Util
-import Data.Wire
 
 --import Debug.Trace
 
@@ -69,13 +72,16 @@ sendMessage socket msg = do
   putStrLn (green "msg>>>>>: " ++ format msg)
   sendCommand socket $ rlpSerialize $ wireMessage2Obj msg
 
-getNextBlock::DB->Block->UTCTime->ResourceT IO Block
-getNextBlock db b ts = do
+getNextBlock::Block->UTCTime->ContextM Block
+getNextBlock b ts = do
   let theCoinbase = prvKey2Address prvKey
-  db' <- addToBalance db{stateRoot=bStateRoot bd} theCoinbase (1500*finney)
+  setStateRoot $ bStateRoot bd
+  addToBalance theCoinbase (1500*finney)
+
+  ctx <- get
 
   return $ Block{
-               blockData=testGetNextBlockData $ stateRoot db',
+               blockData=testGetNextBlockData $ stateRoot $ stateDB ctx,
                receiptTransactions=[],
                blockUncles=[]
              }
@@ -105,10 +111,10 @@ getNextBlock db b ts = do
     bd = blockData b
 
 
-submitNextBlock::Socket->DB->Block->ResourceT IO()
-submitNextBlock socket db b = do
+submitNextBlock::Socket->Block->ContextM ()
+submitNextBlock socket b = do
         ts <- liftIO getCurrentTime
-        newBlock <- getNextBlock db b ts
+        newBlock <- getNextBlock b ts
         liftIO $ print newBlock
         n <- liftIO $ fastFindNonce newBlock
 
@@ -118,12 +124,12 @@ submitNextBlock socket db b = do
         liftIO $ print $ format $ C.hash 256 theBytes
         let theNewBlock = addNonceToBlock newBlock n
         liftIO $ sendMessage socket $ Blocks [theNewBlock]
-        addBlocks db [theNewBlock]
+        addBlocks [theNewBlock]
 
 
 
-handlePayload::Socket->DB->B.ByteString->ResourceT IO ()
-handlePayload socket db payload = do
+handlePayload::Socket->B.ByteString->ContextM ()
+handlePayload socket payload = do
   let rlpObject = rlpDeserialize payload
   let msg = obj2WireMessage rlpObject
   liftIO $ putStrLn (red "msg<<<<: " ++ format msg)
@@ -133,11 +139,11 @@ handlePayload socket db payload = do
       liftIO $ sendMessage socket $ Peers []
       liftIO $ sendMessage socket $ GetPeers
     Blocks blocks -> do
-      addBlocks db $ sortBy (compare `on` number . blockData) blocks
+      addBlocks $ sortBy (compare `on` number . blockData) blocks
       case blocks of
         [] -> return ()
-        [b] -> submitNextBlock socket db b
-        _ -> requestNewBlocks socket db
+        [b] -> submitNextBlock socket b
+        _ -> requestNewBlocks socket
       
       --sendMessage socket $ Blocks [addNonceToBlock newBlock n]
     GetTransactions -> do
@@ -154,31 +160,31 @@ getPayloads (0x22:0x40:0x08:0x91:s1:s2:s3:s4:remainder) =
     payloadLength = shift (fromIntegral s1) 24 + shift (fromIntegral s2) 16 + shift (fromIntegral s3) 8 + fromIntegral s4
 getPayloads _ = error "Malformed data sent to getPayloads"
 
-readAndOutput::Socket->DB->ResourceT IO ()
-readAndOutput socket db = do
+readAndOutput::Socket->ContextM ()
+readAndOutput socket = do
   h <- liftIO $ socketToHandle socket ReadWriteMode
   payloads <- liftIO $ BL.hGetContents h
   handleAllPayloads $ getPayloads $ BL.unpack payloads
   where
     handleAllPayloads [] = error "Server has closed the connection"
     handleAllPayloads (pl:rest) = do
-      handlePayload socket db $ B.pack pl
+      handlePayload socket $ B.pack pl
       handleAllPayloads rest
 
-getBestBlockHash'::DB->ResourceT IO SHA
-getBestBlockHash' db = do
-  maybeBestBlockHash <- getBestBlockHash db
+getBestBlockHash'::ContextM SHA
+getBestBlockHash' = do
+  maybeBestBlockHash <- getBestBlockHash
 
   case maybeBestBlockHash of
     Nothing -> do
-      initializeBlockChain db
-      _ <- initializeStateDB db
+      initializeBlockChain
+      _ <- initializeStateDB
       return $ blockHash genesisBlock
     Just x -> return x
 
-requestNewBlocks::Socket->DB->ResourceT IO ()
-requestNewBlocks socket db = do
-  bestBlockHash <- getBestBlockHash' db
+requestNewBlocks::Socket->ContextM ()
+requestNewBlocks socket = do
+  bestBlockHash <- getBestBlockHash'
   liftIO $ putStrLn $ "Best block hash: " ++ format bestBlockHash
   liftIO $ sendMessage socket $ GetChain [bestBlockHash] 0x40
 
@@ -200,11 +206,25 @@ sendHello::Socket->IO ()
 sendHello socket = 
   sendMessage socket =<< mkHello
 
-createTransaction::DB->Transaction->ResourceT IO SignedTransaction
-createTransaction db t = do
-    b <- fromMaybe (error "Missing best block") <$> getBestBlock db
-    userNonce <- fromMaybe 0 <$> fmap addressStateNonce <$> getAddressState db{stateRoot=bStateRoot $ blockData b} (prvKey2Address prvKey)
+createTransaction::Transaction->ContextM SignedTransaction
+createTransaction t = do
+    userNonce <- fromMaybe 0 <$> fmap addressStateNonce <$> getAddressState (prvKey2Address prvKey)
     liftIO $ withSource devURandom $ signTransaction prvKey t{tNonce=userNonce}
+
+doit::Socket->ContextM ()
+doit socket = do
+  b <- fromMaybe (error "Missing best block") <$> getBestBlock
+  setStateRoot $ bStateRoot $ blockData b
+  requestNewBlocks socket
+  --signedTx <- createTransaction createContractTX
+  --signedTx <- createTransaction paymentContract
+  signedTx <- createTransaction sendCoinTX
+                
+  liftIO $ sendMessage socket $ Transactions [signedTx]
+
+  readAndOutput socket
+
+  
 
 main::IO ()    
 main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
@@ -213,16 +233,10 @@ main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
   sendHello socket
 
   runResourceT $ do
-    db <- openDBs False
-    requestNewBlocks socket db
+    cxt <- openDBs False
 
-    --signedTx <- createTransaction db createContractTX
-    --signedTx <- createTransaction db paymentContract
-    signedTx <- createTransaction db sendCoinTX
-                
-    liftIO $ sendMessage socket $ Transactions [signedTx]
+    _ <- liftIO $ runStateT (doit socket) cxt
 
-    readAndOutput socket db
-
+    return ()
   
 

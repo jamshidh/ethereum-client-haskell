@@ -6,7 +6,6 @@ module VM (
 import Prelude hiding (LT, GT, EQ)
 
 import Control.Monad.IO.Class
-import Control.Monad.Trans.Resource
 import Data.Bits
 import qualified Data.ByteString as B
 import Data.Functor
@@ -14,13 +13,14 @@ import Data.Maybe
 import Data.Time.Clock.POSIX
 import Network.Haskoin.Crypto (Word256)
 
+import Context
 import Data.Address
 import Data.AddressState
 import Data.Block
 import Database.DBs
-import Database.MerklePatricia
 import qualified Data.NibbleString as N
 import Data.RLP
+import ExtDBs
 import SHA
 import Util
 import VM.Code
@@ -39,116 +39,115 @@ word2562Bool::Word256->Bool
 word2562Bool 1 = True
 word2562Bool _ = False
 
-binaryAction::(Word256->Word256->Word256)->Environment->VMState->IO VMState
+binaryAction::(Word256->Word256->Word256)->Environment->VMState->ContextM VMState
 binaryAction action _ state@VMState{stack=(x:y:rest)} = return state{stack=(x `action` y:rest)}
-binaryAction _ env state = addErr "stack did not contain enough elements" (envCode env) state
+binaryAction _ env state = liftIO $ addErr "stack did not contain enough elements" (envCode env) state
 
-unaryAction::(Word256->Word256)->Environment->VMState->IO VMState
+unaryAction::(Word256->Word256)->Environment->VMState->ContextM VMState
 unaryAction action _ state@VMState{stack=(x:rest)} = return state{stack=(action x:rest)}
-unaryAction _ env state = addErr "stack did not contain enough elements" (envCode env) state
+unaryAction _ env state = liftIO $ addErr "stack did not contain enough elements" (envCode env) state
 
 
 
-runOperation::DB->Operation->Environment->VMState->IO VMState
-runOperation _ STOP _ state = return state{done=True}
+runOperation::Operation->Environment->VMState->ContextM VMState
+runOperation STOP _ state = return state{done=True}
 
-runOperation _ ADD env state = binaryAction (+) env state
-runOperation _ MUL env state = binaryAction (*) env state
-runOperation _ SUB env state = binaryAction (-) env state
-runOperation _ DIV env state = binaryAction quot env state
-runOperation _ SDIV env state = binaryAction undefined env state
-runOperation _ MOD env state = binaryAction mod env state
-runOperation _ SMOD env state = binaryAction undefined env state
-runOperation _ EXP env state = binaryAction (^) env state
-runOperation _ NEG env state = unaryAction negate env state
-runOperation _ LT env state = binaryAction ((bool2Word256 .) . (<)) env state
-runOperation _ GT env state = binaryAction ((bool2Word256 .) . (>)) env state
-runOperation _ SLT env state = binaryAction undefined env state
-runOperation _ SGT env state = binaryAction undefined env state
-runOperation _ EQ env state = binaryAction ((bool2Word256 .) . (==)) env state
-runOperation _ NOT env state = unaryAction (bool2Word256 . not . word2562Bool) env state
-runOperation _ AND env state = binaryAction (.&.) env state
-runOperation _ OR env state = binaryAction (.|.) env state
-runOperation _ XOR env state = binaryAction xor env state
+runOperation ADD env state = binaryAction (+) env state
+runOperation MUL env state = binaryAction (*) env state
+runOperation SUB env state = binaryAction (-) env state
+runOperation DIV env state = binaryAction quot env state
+runOperation SDIV env state = binaryAction undefined env state
+runOperation MOD env state = binaryAction mod env state
+runOperation SMOD env state = binaryAction undefined env state
+runOperation EXP env state = binaryAction (^) env state
+runOperation NEG env state = unaryAction negate env state
+runOperation LT env state = binaryAction ((bool2Word256 .) . (<)) env state
+runOperation GT env state = binaryAction ((bool2Word256 .) . (>)) env state
+runOperation SLT env state = binaryAction undefined env state
+runOperation SGT env state = binaryAction undefined env state
+runOperation EQ env state = binaryAction ((bool2Word256 .) . (==)) env state
+runOperation NOT env state = unaryAction (bool2Word256 . not . word2562Bool) env state
+runOperation AND env state = binaryAction (.&.) env state
+runOperation OR env state = binaryAction (.|.) env state
+runOperation XOR env state = binaryAction xor env state
 
-runOperation _ BYTE env state = binaryAction (\x y -> y `shiftR` fromIntegral x .&. 0xFF) env state
+runOperation BYTE env state = binaryAction (\x y -> y `shiftR` fromIntegral x .&. 0xFF) env state
 
-runOperation _ SHA3 _ state@VMState{stack=(p:size:rest)} = do
-  SHA theHash <- hash <$> mLoadByteString (memory state) p size
+runOperation SHA3 _ state@VMState{stack=(p:size:rest)} = do
+  SHA theHash <- fmap hash $ liftIO $ mLoadByteString (memory state) p size
   return state{stack=theHash:rest}
 
-runOperation _ ADDRESS Environment{envOwner=Address a} state = return state{stack=fromIntegral a:stack state}
+runOperation ADDRESS Environment{envOwner=Address a} state = return state{stack=fromIntegral a:stack state}
 
-runOperation db BALANCE _ state@VMState{stack=(x:rest)} = do
-  maybeAddressState <- runResourceT $ do
-                    getAddressState db (Address $ fromIntegral x)
+runOperation BALANCE _ state@VMState{stack=(x:rest)} = do
+  maybeAddressState <- getAddressState (Address $ fromIntegral x)
   return state{stack=(fromIntegral $ fromMaybe 0 $ balance <$> maybeAddressState):rest}
-runOperation _ BALANCE env state = addErr "stack did not contain enough elements" (envCode env) state
+runOperation BALANCE env state = liftIO $ addErr "stack did not contain enough elements" (envCode env) state
 
-runOperation _ ORIGIN Environment{envSender=Address sender} state = return state{stack=fromIntegral sender:stack state}
+runOperation ORIGIN Environment{envSender=Address sender} state = return state{stack=fromIntegral sender:stack state}
 
-runOperation _ CALLER Environment{envOrigin=Address owner} state = return state{stack=fromIntegral owner:stack state}
+runOperation CALLER Environment{envOrigin=Address owner} state = return state{stack=fromIntegral owner:stack state}
 
-runOperation _ CALLVALUE Environment{envValue=val} state = return state{stack=fromIntegral val:stack state}
+runOperation CALLVALUE Environment{envValue=val} state = return state{stack=fromIntegral val:stack state}
 
-runOperation _ CALLDATALOAD Environment{envInputData=d} state@VMState{stack=p:rest} = do
+runOperation CALLDATALOAD Environment{envInputData=d} state@VMState{stack=p:rest} = do
   let val = bytes2Integer $ B.unpack $ B.take 32 $ B.drop (fromIntegral p) d
   return state{stack=fromIntegral val:rest}
-runOperation _ CALLDATALOAD _ s = return s{ vmException=Just StackTooSmallException } 
+runOperation CALLDATALOAD _ s = return s{ vmException=Just StackTooSmallException } 
 
-runOperation _ CALLDATASIZE Environment{envInputData=d} state = return state{stack=fromIntegral (B.length d):stack state}
+runOperation CALLDATASIZE Environment{envInputData=d} state = return state{stack=fromIntegral (B.length d):stack state}
 
-runOperation _ CALLDATACOPY Environment{envInputData=d} state@VMState{stack=memP:codeP:size:rest} = do
-  mStoreByteString (memory state) memP $ B.take (fromIntegral size) $ B.drop (fromIntegral codeP) d
+runOperation CALLDATACOPY Environment{envInputData=d} state@VMState{stack=memP:codeP:size:rest} = do
+  liftIO $ mStoreByteString (memory state) memP $ B.take (fromIntegral size) $ B.drop (fromIntegral codeP) d
   return state{stack=rest}
 
-runOperation _ CODESIZE Environment{envCode=c} state = return state{stack=fromIntegral (codeLength c):stack state}
+runOperation CODESIZE Environment{envCode=c} state = return state{stack=fromIntegral (codeLength c):stack state}
 
-runOperation _ CODECOPY Environment{envCode=Code c} state@VMState{stack=memP:codeP:size:rest} = do
-  beforeMemSize <- getSize $ memory state
-  mStoreByteString (memory state) memP $ B.take (fromIntegral size) $ B.drop (fromIntegral codeP) c
-  afterMemory <- getSize (memory state)
+runOperation CODECOPY Environment{envCode=Code c} state@VMState{stack=memP:codeP:size:rest} = do
+  beforeMemSize <- liftIO $ getSize $ memory state
+  liftIO $ mStoreByteString (memory state) memP $ B.take (fromIntegral size) $ B.drop (fromIntegral codeP) c
+  afterMemory <- liftIO $ getSize (memory state)
   let extraMemory = afterMemory - beforeMemSize 
   liftIO $ putStrLn $ "before: " ++ show beforeMemSize
   liftIO $ putStrLn $ "after: " ++ show afterMemory
   liftIO $ putStrLn $ "extra: " ++ show extraMemory
   return state{stack=rest} -- temporarily moved     , vmGasRemaining = vmGasRemaining state - fromIntegral extraMemory}
 
-runOperation _ GASPRICE Environment{envGasPrice=gp} state = return state{stack=fromIntegral gp:stack state}
+runOperation GASPRICE Environment{envGasPrice=gp} state = return state{stack=fromIntegral gp:stack state}
 
-runOperation _ PREVHASH Environment{envBlock=Block{blockData=BlockData{parentHash=SHA prevHash}}} state = return state{stack=prevHash:stack state}
+runOperation PREVHASH Environment{envBlock=Block{blockData=BlockData{parentHash=SHA prevHash}}} state = return state{stack=prevHash:stack state}
 
-runOperation _ COINBASE Environment{envBlock=Block{blockData=BlockData{coinbase=Address cb}}} state = return state{stack=fromIntegral cb:stack state}
+runOperation COINBASE Environment{envBlock=Block{blockData=BlockData{coinbase=Address cb}}} state = return state{stack=fromIntegral cb:stack state}
 
-runOperation _ TIMESTAMP Environment{envBlock=Block{blockData=bd}} state = return state{stack=(round $ utcTimeToPOSIXSeconds $ timestamp bd):stack state}
-runOperation _ NUMBER Environment{envBlock=Block{blockData=bd}} state = return state{stack=fromIntegral (number bd):stack state}
-runOperation _ DIFFICULTY Environment{envBlock=Block{blockData=bd}} state = return state{stack=fromIntegral (difficulty bd):stack state}
-runOperation _ GASLIMIT Environment{envBlock=Block{blockData=bd}} state = return state{stack=fromIntegral (gasLimit bd):stack state}
+runOperation TIMESTAMP Environment{envBlock=Block{blockData=bd}} state = return state{stack=(round $ utcTimeToPOSIXSeconds $ timestamp bd):stack state}
+runOperation NUMBER Environment{envBlock=Block{blockData=bd}} state = return state{stack=fromIntegral (number bd):stack state}
+runOperation DIFFICULTY Environment{envBlock=Block{blockData=bd}} state = return state{stack=fromIntegral (difficulty bd):stack state}
+runOperation GASLIMIT Environment{envBlock=Block{blockData=bd}} state = return state{stack=fromIntegral (gasLimit bd):stack state}
 
-runOperation _ POP _ state@VMState{stack=_:rest} = return state{stack=rest}
-runOperation _ POP env state = addErr "Stack did not contain any items" (envCode env) state
+runOperation POP _ state@VMState{stack=_:rest} = return state{stack=rest}
+runOperation POP env state = liftIO $ addErr "Stack did not contain any items" (envCode env) state
 
-runOperation _ DUP _ state@VMState{stack=x:rest} = return state{stack=x:x:rest}
-runOperation _ DUP env state = addErr "Stack did not contain any items" (envCode env) state
+runOperation DUP _ state@VMState{stack=x:rest} = return state{stack=x:x:rest}
+runOperation DUP env state = liftIO $ addErr "Stack did not contain any items" (envCode env) state
 
-runOperation _ SWAP _ state@VMState{stack=x:y:rest} = return state{stack=y:x:rest}
-runOperation _ SWAP env state = addErr "Stack did not contain enough items" (envCode env) state
+runOperation SWAP _ state@VMState{stack=x:y:rest} = return state{stack=y:x:rest}
+runOperation SWAP env state = liftIO $ addErr "Stack did not contain enough items" (envCode env) state
 
-runOperation _ MLOAD _ state@VMState{stack=(p:rest)} = do
-  bytes <- mLoad (memory state) p --sequence $ readArray (memory state) <$> fromIntegral <$> [p..p+31]
+runOperation MLOAD _ state@VMState{stack=(p:rest)} = do
+  bytes <- liftIO $ mLoad (memory state) p --sequence $ readArray (memory state) <$> fromIntegral <$> [p..p+31]
   return $ state { stack=fromInteger (bytes2Integer bytes):rest }
   
-runOperation _ MSTORE _ state@VMState{stack=(p:val:rest)} = do
-  mStore (memory state) p val
+runOperation MSTORE _ state@VMState{stack=(p:val:rest)} = do
+  liftIO $ mStore (memory state) p val
   return state{stack=rest}
 
-runOperation _ MSTORE8 _ state@VMState{stack=(p:val:rest)} = do
-  mStore8 (memory state) (fromIntegral p) (fromIntegral $ val .&. 0xFF)
+runOperation MSTORE8 _ state@VMState{stack=(p:val:rest)} = do
+  liftIO $ mStore8 (memory state) (fromIntegral p) (fromIntegral $ val .&. 0xFF)
   return $
     state { stack=rest }
 
-runOperation db SLOAD _ state@VMState{stack=(p:rest)} = do
-  vals <-  runResourceT $ getKeyVals db{stateRoot=storageRoot state} (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
+runOperation SLOAD _ state@VMState{stack=(p:rest)} = do
+  vals <- getStorageKeyVals (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
   let val = case vals of
               [] -> 0
               [x] -> fromInteger $ rlpDecode $ rlpDeserialize $ rlpDecode $ snd x
@@ -156,27 +155,27 @@ runOperation db SLOAD _ state@VMState{stack=(p:rest)} = do
 
   return $ state { stack=val:rest }
   
-runOperation db SSTORE _ state@VMState{stack=(p:val:rest)} = do
-  db' <- runResourceT $ putKeyVal db{stateRoot=storageRoot state} (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p) (rlpEncode $ rlpSerialize $ rlpEncode $ toInteger val)
-  return $ state { stack=rest, storageRoot=stateRoot db' }
+runOperation SSTORE _ state@VMState{stack=(p:val:rest)} = do
+  putStorageKeyVal (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p) (rlpEncode $ rlpSerialize $ rlpEncode $ toInteger val)
+  return $ state { stack=rest }
 
-runOperation _ JUMP _ state@VMState{stack=(p:rest)} =
+runOperation JUMP _ state@VMState{stack=(p:rest)} =
   return $ state { stack=rest, pc=fromIntegral p }
 
-runOperation _ JUMPI _ state@VMState{stack=(p:cond:rest)} =
+runOperation JUMPI _ state@VMState{stack=(p:cond:rest)} =
   return $ state { stack=rest, pc=if word2562Bool cond then fromIntegral p else (pc state) }
 
-runOperation _ PC _ state =
+runOperation PC _ state =
   return state{stack=fromIntegral (pc state):stack state}
 
-runOperation _ MSIZE _ state@VMState{memory=m} = do
-  memSize <- getSize m
+runOperation MSIZE _ state@VMState{memory=m} = do
+  memSize <- liftIO $ getSize m
   return state{stack=memSize:stack state}
 
-runOperation _ GAS _ state =
+runOperation GAS _ state =
   return $ state { stack=fromInteger (vmGasRemaining state):stack state }
 
-runOperation _ (PUSH vals) _ state =
+runOperation (PUSH vals) _ state =
   return $
   state { stack=fromIntegral (bytes2Integer vals):stack state }
 
@@ -186,20 +185,20 @@ runOperation _ (PUSH vals) _ state =
 
 
 
-runOperation _ RETURN _ state@VMState{stack=[address, size]} = do
+runOperation RETURN _ state@VMState{stack=[address, size]} = do
   retVal <- liftIO $ mLoadByteString (memory state) address size
   return $ state { done=True, returnVal=Just retVal }
 
-runOperation _ RETURN _ VMState{stack=x} | length x > 2 =
+runOperation RETURN _ VMState{stack=x} | length x > 2 =
   error "Stack was too large in when RETURN was called"
 
-runOperation _ RETURN _ state = do
+runOperation RETURN _ state = do
   return $ state { vmException=Just StackTooSmallException } 
 
-runOperation _ SUICIDE _ state =
+runOperation SUICIDE _ state =
   return $ state { done=True, markedForSuicide=True }
 
-runOperation _ x _ _ = error $ "Missing case in runOperation: " ++ show x
+runOperation x _ _ = error $ "Missing case in runOperation: " ++ show x
 
 
 
@@ -211,12 +210,12 @@ runOperation _ x _ _ = error $ "Missing case in runOperation: " ++ show x
 movePC::VMState->Int->VMState
 movePC state l = state{ pc=pc state + l }
 
-opGasPrice::DB->VMState->Operation->IO Integer
-opGasPrice _ _ STOP = return 0
-opGasPrice _ _ MSTORE = return 2
-opGasPrice _ VMState{ stack=_:_:_ } SLOAD = return 20
-opGasPrice db state@VMState{ stack=p:val:_ } SSTORE = do
-  oldVals <- runResourceT $ getKeyVals db{stateRoot=storageRoot state} (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
+opGasPrice::VMState->Operation->ContextM Integer
+opGasPrice _ STOP = return 0
+--opGasPrice _ MSTORE = return 2
+opGasPrice VMState{ stack=_:_:_ } SLOAD = return 20
+opGasPrice VMState{ stack=p:val:_ } SSTORE = do
+  oldVals <- getStorageKeyVals (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
   let oldVal =
           case oldVals of
             [] -> 0::Word256
@@ -227,31 +226,32 @@ opGasPrice db state@VMState{ stack=p:val:_ } SSTORE = do
       (0, x) | x /= 0 -> 200
       (x, 0) | x /= 0 -> 0
       _ -> 100
-opGasPrice _ _ _ = return 1
+opGasPrice _ _ = return 1
 
-decreaseGas::DB->Operation->VMState->IO VMState
-decreaseGas db op state = do
-  val <- opGasPrice db state op
+decreaseGas::Operation->VMState->ContextM VMState
+decreaseGas op state = do
+  val <- opGasPrice state op
   if val <= vmGasRemaining state
     then return (state{ vmGasRemaining = vmGasRemaining state - val })
     else return (state{ vmGasRemaining = 0,
                         vmException = Just OutOfGasException })
 
-runCode::DB->Environment->VMState->IO VMState
-runCode db env state = do
+runCode::Environment->VMState->ContextM VMState
+runCode env state = do
   let (op, len) = getOperationAt (envCode env) (pc state)
-  state' <- decreaseGas db op state
-  result <- runOperation db op env state'
+  state' <- decreaseGas op state
+  result <- runOperation op env state'
   case result of
     VMState{vmException=Just _} -> return result{ vmGasRemaining = 0 } 
     VMState{done=True} -> do
-                         memSize <- getSize $ memory result
-                         putStrLn ("memSize : " ++ show memSize)
+                         memSize <- liftIO $ getSize $ memory result
+                         liftIO $ putStrLn ("memSize : " ++ show memSize)
                          return $ movePC result{ vmGasRemaining = vmGasRemaining result - fromIntegral memSize } len
-    state2 -> runCode db env $ movePC state2 len
+    state2 -> runCode env $ movePC state2 len
 
-runCodeFromStart::DB->SHAPtr->Integer->Environment->IO VMState
-runCodeFromStart db storageRoot' gasLimit' env = do
-  vmState <- liftIO $ startingState storageRoot'
-  runCode db env vmState{vmGasRemaining=gasLimit'}
+runCodeFromStart::SHAPtr->Integer->Environment->ContextM VMState
+runCodeFromStart storageRoot' gasLimit' env = do
+  setStorageStateRoot storageRoot'
+  vmState <- liftIO startingState
+  runCode env vmState{vmGasRemaining=gasLimit'}
 

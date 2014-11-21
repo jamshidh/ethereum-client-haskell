@@ -5,7 +5,6 @@ import qualified Data.ByteString as B
 import Text.PrettyPrint.Leijen
 
 import Data.RLP
-import Format
 import VM.Opcodes
 
 newtype Code = Code B.ByteString deriving (Show)

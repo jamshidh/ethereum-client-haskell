@@ -17,7 +17,6 @@ import qualified Data.ByteString.Lazy.Char8 as BLC
 import Network.Haskoin.Internals
 import Numeric
 
-import Colors
 import Data.RLP
 import Database.MerklePatricia
 import Util

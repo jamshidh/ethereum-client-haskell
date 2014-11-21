@@ -9,7 +9,6 @@ module VM.VMState (
 
 import qualified Data.ByteString as B
 
-import Database.DBs
 import ExtWord
 import Format
 import VM.Code
@@ -29,7 +28,6 @@ data VMState =
     memory::Memory,
     stack::[Word256],
 
-    storageRoot::SHAPtr,
     markedForSuicide::Bool,
     done::Bool,
     returnVal::Maybe B.ByteString,
@@ -45,8 +43,8 @@ instance Format VMState where
     "gasRemaining: " ++ show (vmGasRemaining state) ++ "\n" ++
     "stack: " ++ show (stack state) ++ "\n"
 
-startingState::SHAPtr->IO VMState
-startingState sr = do
+startingState::IO VMState
+startingState = do
   m <- newMemory
   return VMState {
     pc = 0,
@@ -55,7 +53,7 @@ startingState sr = do
     vmException=Nothing,
     vmGasRemaining=0,
     stack=[],
-    memory=m, storageRoot = sr, markedForSuicide=False }
+    memory=m, markedForSuicide=False }
 
 
 getReturnValue::VMState->IO B.ByteString
