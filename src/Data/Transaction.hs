@@ -6,11 +6,11 @@ module Data.Transaction (
   ) where
 
 import qualified Data.ByteString as B
-import Text.PrettyPrint.Leijen
+import Text.PrettyPrint.ANSI.Leijen
 
 import Data.Address
 import VM.Code
-import Colors
+import qualified Colors as CL
 import Format
 import Data.RLP
 import Util
@@ -38,7 +38,7 @@ data Transaction =
 
 instance Format Transaction where
   format MessageTX{tNonce=n, gasPrice=gp, tGasLimit=gl, to=to', value=v, tData=d} =
-    blue "Message Transaction" ++
+    CL.blue "Message Transaction" ++
     tab (
       "\n" ++
       "tNonce: " ++ show n ++ "\n" ++
@@ -48,7 +48,7 @@ instance Format Transaction where
       "value: " ++ show v ++ "\n" ++
       "tData: " ++ tab ("\n" ++ format d) ++ "\n")
   format ContractCreationTX{tNonce=n, gasPrice=gp, tGasLimit=gl, value=v, tInit=init'} =
-    blue "Contract Creation Transaction" ++
+    CL.blue "Contract Creation Transaction" ++
     tab (
       "\n" ++
       "tNonce: " ++ show n ++ "\n" ++

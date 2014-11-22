@@ -30,7 +30,7 @@ executable ethereumH
                  , resourcet
                  , time
                  , transformers
-                 , wl-pprint
+                 , ansi-wl-pprint
     main-is: Main.hs
     C-sources: fastNonceFinder/nonceFinder.c
     --ghc-options: -threaded

@@ -9,7 +9,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 
 import Context
-import Database.DBs
+import Database.MerklePatricia
 import ExtDBs
 
 addCode::B.ByteString->ContextM ()

@@ -1,5 +1,6 @@
 
 module ExtDBs (
+  MP.SHAPtr(..),
   detailsDBPut,
   detailsDBGet,
   blockDBGet,
@@ -25,7 +26,6 @@ import qualified Database.LevelDB as DB
 import qualified Data.NibbleString as N
 import SHA
 import Data.RLP
-import qualified Database.DBs as MP
 import qualified Database.MerklePatricia as MP
 
 import Context

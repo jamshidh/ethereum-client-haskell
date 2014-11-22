@@ -17,7 +17,7 @@ import Context
 import Data.Address
 import Data.AddressState
 import Data.Block
-import Database.DBs
+import Database.MerklePatricia
 import qualified Data.NibbleString as N
 import Data.RLP
 import ExtDBs

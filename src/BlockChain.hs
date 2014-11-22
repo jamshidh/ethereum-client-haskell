@@ -20,7 +20,7 @@ import Data.Functor
 import Data.Maybe
 import Data.Time
 import Data.Time.Clock.POSIX
-import Text.PrettyPrint.Leijen hiding ((<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Context
 import Data.Address
@@ -31,10 +31,9 @@ import Data.SignedTransaction
 import Data.Transaction
 import Data.TransactionReceipt
 import DB.CodeDB
-import Database.DBs
 import Database.MerklePatricia
 import DB.ModifyStateDB
-import Colors
+import qualified Colors as CL
 import Constants
 import ExtDBs
 import Format
@@ -144,7 +143,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
 
   case vmException vmState of
         Just e -> do
-          liftIO $ putStrLn $ red $ show e
+          liftIO $ putStrLn $ CL.red $ show e
           addToBalance tAddr (-value ut) --zombie account, money lost forever
         Nothing -> do
           let result = fromMaybe B.empty $ returnVal vmState
@@ -178,7 +177,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
       fromMaybe (error "no contract code") <$>
                 (getCode $ sha2SHAPtr $ codeHash recipientAddressState)
 
-  liftIO $ putStrLn $ "running code: " ++ tab (magenta ("\n" ++ show (pretty (Code contractCode))))
+  liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty (Code contractCode))))
 
   let tAddr = whoSignedThisTransaction t
 
@@ -204,7 +203,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
 
   case vmException vmState of
         Just e -> do
-          liftIO $ putStrLn $ red $ show e
+          liftIO $ putStrLn $ CL.red $ show e
           --addToBalance tAddr (-value ut) --zombie account, money lost forever
           pay (whoSignedThisTransaction t) (to ut) (value ut)
         Nothing -> do

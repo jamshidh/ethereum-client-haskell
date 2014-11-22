@@ -8,13 +8,12 @@ import Data.Functor
 import Data.List
 import qualified Database.LevelDB as DB
 import System.Environment
-import Text.PrettyPrint.Leijen hiding ((<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import qualified Data.NibbleString as N
 import Data.RLP
 
 import Context
-import Database.DBs
 import ExtDBs
 import Format
 

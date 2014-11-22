@@ -10,12 +10,12 @@ module Data.AddressState (
 import qualified Data.ByteString as B
 import Data.Functor
 import Numeric
-import Text.PrettyPrint.Leijen hiding ((<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Data.Address
-import Colors
+import qualified Colors as CL
 import Context
-import Database.DBs
+--import Database.MerklePatricia
 import ExtDBs
 import Format
 import qualified Data.NibbleString as N
@@ -26,7 +26,7 @@ import Util
 data AddressState = AddressState { addressStateNonce::Integer, balance::Integer, contractRoot::Maybe SHAPtr, codeHash::SHA } deriving (Show)
 
 instance Format AddressState where
-  format a = blue "AddressState" ++
+  format a = CL.blue "AddressState" ++
              tab("\nnonce: " ++ showHex (addressStateNonce a) "" ++
                  "\nbalance: " ++ show (toInteger $ balance a) ++
                  "\ncontractRoot: " ++ formatCR (contractRoot a) ++

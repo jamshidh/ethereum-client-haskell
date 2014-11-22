@@ -2,7 +2,7 @@
 module VM.Code where
 
 import qualified Data.ByteString as B
-import Text.PrettyPrint.Leijen
+import Text.PrettyPrint.ANSI.Leijen
 
 import Data.RLP
 import VM.Opcodes

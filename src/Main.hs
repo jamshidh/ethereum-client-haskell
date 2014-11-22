@@ -40,7 +40,7 @@ import Data.Block
 import Data.SignedTransaction
 import Data.Transaction
 import Data.Wire
-import Database.DBs
+import Database.MerklePatricia
 import Format
 import DB.ModifyStateDB
 import SampleTransactions

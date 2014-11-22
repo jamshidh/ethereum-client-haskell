@@ -10,9 +10,9 @@ import Data.Functor
 import Data.List
 import qualified Data.NibbleString as N
 import Numeric
-import Text.PrettyPrint.Leijen hiding ((<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
-import Colors
+import qualified Colors as C
 import Data.RLP
 import Database.MerklePatricia
 import SHA
@@ -25,10 +25,10 @@ instance Format B.ByteString where
   format x = BC.unpack (B16.encode x)
 
 instance Format SHA where
-    format (SHA x) = yellow $ padZeros 64 $ showHex x ""
+    format (SHA x) = C.yellow $ padZeros 64 $ showHex x ""
 
 instance Format SHAPtr where
-    format (SHAPtr x) = yellow $ format x
+    format (SHAPtr x) = C.yellow $ format x
     
     
 
@@ -37,24 +37,24 @@ formatNibble x | x > 0xF = error "format called for nibble greater than 0xF"
 formatNibble x = showHex x ""
 
 instance Format N.NibbleString where
-  format (N.EvenNibbleString s) = blue $ format s
-  format (N.OddNibbleString c s) = blue $ formatNibble c ++ format s
+  format (N.EvenNibbleString s) = C.blue $ format s
+  format (N.OddNibbleString c s) = C.blue $ formatNibble c ++ format s
 
 instance Format PairOrPtr where
   format (APtr x) = "Ptr: " ++ format x
   format (APair key val) = "Pair: " ++ format key ++ ": " ++ show (pretty val)
 
 formatVal::Maybe RLPObject->String
-formatVal Nothing = red "NULL"
-formatVal (Just x) = green (show $ pretty x)
+formatVal Nothing = C.red "NULL"
+formatVal (Just x) = C.green (show $ pretty x)
                      
 instance Format NodeData where
   format EmptyNodeData = "    <EMPTY>"
-  format (ShortcutNodeData s (Left p)) = "    " ++ format s ++ " -> " ++ format p
-  format (ShortcutNodeData s (Right val)) = "    " ++ format s ++ " -> " ++ green (show $ pretty val)
+  format (ShortcutNodeData s (Left p)) = "    " ++ format s ++ " -> " ++ show (pretty p)
+  format (ShortcutNodeData s (Right val)) = "    " ++ format s ++ " -> " ++ C.green (show $ pretty val)
   format (FullNodeData cs val) = "    val: " ++ formatVal val ++ "\n        " ++ intercalate "\n        " (showChoice <$> zip ([0..]::[Int]) cs)
     where
-      showChoice (v, Just p) = blue (showHex v "") ++ ": " ++ green (format p)
-      showChoice (v, Nothing) = blue (showHex v "") ++ ": " ++ red "NULL"
+      showChoice (v, Just p) = C.blue (showHex v "") ++ ": " ++ C.green (show $ pretty p)
+      showChoice (v, Nothing) = C.blue (showHex v "") ++ ": " ++ C.red "NULL"
 
 

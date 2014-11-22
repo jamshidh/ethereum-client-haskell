@@ -4,12 +4,12 @@ module Data.TransactionReceipt(
   PostTransactionState(..)
   ) where
 
-import Colors
+import qualified Colors as CL
 import Format
 import SHA
 import Data.SignedTransaction
 import Data.RLP
-import Text.PrettyPrint.Leijen hiding ((<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 data PostTransactionState = PostTransactionState SHA deriving (Show)
 
@@ -29,7 +29,7 @@ instance Format PostTransactionState where
 
 instance Format TransactionReceipt where
   format (TransactionReceipt t p gasUsed) =
-    blue "TransactionReceipt: " ++ show gasUsed ++ "\n" ++ format t ++ "\nPostTransactionState: " ++ format p
+    CL.blue "TransactionReceipt: " ++ show gasUsed ++ "\n" ++ format t ++ "\nPostTransactionState: " ++ format p
 
 instance RLPSerializable TransactionReceipt where
   rlpDecode (RLPArray [t, pts, gasUsed]) =

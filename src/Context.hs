@@ -18,18 +18,18 @@ import Control.Monad.Trans.Resource
 import System.Directory
 
 import Constants
-import Database.DBs
+import Database.MerklePatricia
 
 type BlockDB = DB.DB
 type CodeDB = DB.DB
 type DetailsDB = DB.DB
-type StorageDB = StateDB
+type StorageDB = MPDB
 
 data Context =
   Context {
     blockDB::BlockDB,
     detailsDB::DetailsDB,
-    stateDB::StateDB,
+    stateDB::MPDB,
     codeDB::CodeDB,
     storageDB::StorageDB
     }
@@ -59,6 +59,6 @@ openDBs useCppDBs = do
   return $ Context
       bdb
       ddb
-      StateDB{ ldb=sdb, stateRoot=error "no stateRoot defined"}
+      MPDB{ ldb=sdb, stateRoot=error "no stateRoot defined"}
       sdb
-      StateDB{ ldb=sdb, stateRoot=error "no stateRoot defined"}
+      MPDB{ ldb=sdb, stateRoot=error "no stateRoot defined"}
