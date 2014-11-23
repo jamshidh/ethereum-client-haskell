@@ -39,22 +39,3 @@ formatNibble x = showHex x ""
 instance Format N.NibbleString where
   format (N.EvenNibbleString s) = C.blue $ format s
   format (N.OddNibbleString c s) = C.blue $ formatNibble c ++ format s
-
-instance Format PairOrPtr where
-  format (APtr x) = "Ptr: " ++ format x
-  format (APair key val) = "Pair: " ++ format key ++ ": " ++ show (pretty val)
-
-formatVal::Maybe RLPObject->String
-formatVal Nothing = C.red "NULL"
-formatVal (Just x) = C.green (show $ pretty x)
-                     
-instance Format NodeData where
-  format EmptyNodeData = "    <EMPTY>"
-  format (ShortcutNodeData s (Left p)) = "    " ++ format s ++ " -> " ++ show (pretty p)
-  format (ShortcutNodeData s (Right val)) = "    " ++ format s ++ " -> " ++ C.green (show $ pretty val)
-  format (FullNodeData cs val) = "    val: " ++ formatVal val ++ "\n        " ++ intercalate "\n        " (showChoice <$> zip ([0..]::[Int]) cs)
-    where
-      showChoice (v, Just p) = C.blue (showHex v "") ++ ": " ++ C.green (show $ pretty p)
-      showChoice (v, Nothing) = C.blue (showHex v "") ++ ": " ++ C.red "NULL"
-
-
