@@ -28,9 +28,10 @@ import Data.Word
 import Foreign
 import Foreign.ForeignPtr.Unsafe
 import Numeric
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Data.Address
-import Colors
+import qualified Colors as CL
 import Database.MerklePatricia
 import Format
 import Data.RLP
@@ -64,7 +65,7 @@ data Block = Block {
 
 instance Format Block where
   format b@Block{blockData=bd, receiptTransactions=receipts, blockUncles=[]} =
-    blue ("Block #" ++ show (number bd)) ++ " " ++
+    CL.blue ("Block #" ++ show (number bd)) ++ " " ++
     tab (format (blockHash b) ++ "\n" ++
          format bd ++
          (if null receipts
@@ -132,7 +133,7 @@ instance Format BlockData where
     "unclesHash: " ++ format (unclesHash b) ++ 
     (if unclesHash b == hash (B.pack [0xc0]) then " (the empty array)\n" else "\n") ++
     "coinbase: " ++ format (coinbase b) ++ "\n" ++
-    "stateRoot: " ++ format (bStateRoot b) ++ "\n" ++
+    "stateRoot: " ++ show (pretty $ bStateRoot b) ++ "\n" ++
     "transactionsTrie: " ++ show (transactionsTrie b) ++ "\n" ++
     "difficulty: " ++ show (difficulty b) ++ "\n" ++
     "minGasPrice: " ++ show (minGasPrice b) ++ "\n" ++

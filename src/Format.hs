@@ -6,11 +6,9 @@ module Format (
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Base16 as B16
-import qualified Data.NibbleString as N
 import Numeric
 
 import qualified Colors as C
-import Database.MerklePatricia
 import SHA
 
 class Format a where
@@ -23,15 +21,3 @@ instance Format B.ByteString where
 instance Format SHA where
     format (SHA x) = C.yellow $ padZeros 64 $ showHex x ""
 
-instance Format SHAPtr where
-    format (SHAPtr x) = C.yellow $ format x
-    
-    
-
-formatNibble::N.Nibble->String
-formatNibble x | x > 0xF = error "format called for nibble greater than 0xF"
-formatNibble x = showHex x ""
-
-instance Format N.NibbleString where
-  format (N.EvenNibbleString s) = C.blue $ format s
-  format (N.OddNibbleString c s) = C.blue $ formatNibble c ++ format s

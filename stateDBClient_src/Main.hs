@@ -21,7 +21,7 @@ doit::SHAPtr->ContextM ()
 doit sr = do
     setStateRoot sr
     kvs <- getKeyVals ""
-    liftIO $ putStrLn $ intercalate "\n" ((\(k, v) -> format k ++ ": " ++ show (pretty $ rlpDeserialize $ rlpDecode v)) <$> filter (filterUnnecessary . fst) kvs)
+    liftIO $ putStrLn $ intercalate "\n" ((\(k, v) -> show (pretty k) ++ ": " ++ show (pretty $ rlpDeserialize $ rlpDecode v)) <$> filter (filterUnnecessary . fst) kvs)
 
 main = do
   [theType, addr] <- getArgs

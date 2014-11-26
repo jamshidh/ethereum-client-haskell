@@ -98,7 +98,7 @@ checkValidity b = do
           unless (nonceIsValid b) $ fail $ "Block nonce is wrong: " ++ format b
           unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"
           stateRootExists <- verifyStateRootExists b
-          unless stateRootExists $ fail ("Block stateRoot does not exist: " ++ format (bStateRoot $ blockData b))
+          unless stateRootExists $ fail ("Block stateRoot does not exist: " ++ show (pretty $ bStateRoot $ blockData b))
           return $ return ()
     Nothing -> fail ("Parent Block does not exist: " ++ format (parentHash $ blockData b))
 
@@ -171,7 +171,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
                 getAddressState (to ut)
 
   liftIO $ putStrLn $ "Looking for contract code for: " ++ format (to ut)
-  liftIO $ putStrLn $ "codeHash is: " ++ format (sha2SHAPtr $ codeHash recipientAddressState)
+  liftIO $ putStrLn $ "codeHash is: " ++ show (pretty $ sha2SHAPtr $ codeHash recipientAddressState)
 
   contractCode <- 
       fromMaybe (error "no contract code") <$>
@@ -277,7 +277,7 @@ addBlock b@Block{blockData=bd} = do
       addTransactions b transactions
 
       ctx <- get
-      liftIO $ putStrLn $ "newStateRoot: " ++ format (stateRoot $ stateDB ctx)
+      liftIO $ putStrLn $ "newStateRoot: " ++ show (pretty $ stateRoot $ stateDB ctx)
 
       valid <- checkValidity b
       case valid of

@@ -34,7 +34,7 @@ instance Format AddressState where
     where
       formatCR::Maybe SHAPtr->String
       formatCR Nothing = "0x0"
-      formatCR (Just x) = format x
+      formatCR (Just x) = show $ pretty x
   
 instance RLPSerializable AddressState where
   rlpEncode a = RLPArray [
