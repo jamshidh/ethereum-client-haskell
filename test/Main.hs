@@ -11,7 +11,6 @@ import Data.Functor
 import Data.List
 import Data.Monoid
 import qualified Data.Set as S
-import qualified Database.LevelDB as LD
 import System.Exit
 import Test.Framework
 import Test.Framework.Providers.HUnit
@@ -20,21 +19,20 @@ import Test.HUnit
 import qualified Data.NibbleString as N
 
 import Data.Address
-import DB.EthDB
 import Format
 import DB.ModifyStateDB
-import DB.DBs
+import Database.MerklePatricia
 import Data.RLP
 import SHA
 import Util
 
-putKeyVals::DB->[(N.NibbleString, B.ByteString)]->ResourceT IO DB
+putKeyVals::MPDB->[(N.NibbleString, B.ByteString)]->ResourceT IO MPDB
 putKeyVals db [(k,v)] = putKeyVal db k (rlpEncode v)
 putKeyVals db ((k, v):rest) = do
   db'<- putKeyVal db k $ rlpEncode v
   putKeyVals db' rest
 
-verifyDBDataIntegrity::DB->[(N.NibbleString, B.ByteString)]->ResourceT IO ()
+verifyDBDataIntegrity::MPDB->[(N.NibbleString, B.ByteString)]->ResourceT IO ()
 verifyDBDataIntegrity db valuesIn = do
     db2 <- initializeBlankStateDB db
     db3 <- putKeyVals db2 valuesIn
