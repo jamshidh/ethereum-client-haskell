@@ -100,7 +100,7 @@ checkValidity b = do
           stateRootExists <- verifyStateRootExists b
           unless stateRootExists $ fail ("Block stateRoot does not exist: " ++ show (pretty $ bStateRoot $ blockData b))
           return $ return ()
-    Nothing -> fail ("Parent Block does not exist: " ++ format (parentHash $ blockData b))
+    Nothing -> fail ("Parent Block does not exist: " ++ show (pretty $ parentHash $ blockData b))
 
 
 {-
@@ -267,7 +267,7 @@ addBlock b@Block{blockData=bd} = do
   maybeParent <- getBlock $ parentHash bd
   case maybeParent of
     Nothing ->
-      liftIO $ putStrLn $ "Missing parent block in addBlock: " ++ format (parentHash bd) ++ "\n" ++
+      liftIO $ putStrLn $ "Missing parent block in addBlock: " ++ show (pretty $ parentHash bd) ++ "\n" ++
       "Block will not be added now, but will be requested and added later"
     Just parentBlock -> do
       setStateRoot $ bStateRoot $ blockData parentBlock

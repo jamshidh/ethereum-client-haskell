@@ -18,6 +18,3 @@ class Format a where
 instance Format B.ByteString where
   format x = BC.unpack (B16.encode x)
 
-instance Format SHA where
-    format (SHA x) = C.yellow $ padZeros 64 $ showHex x ""
-

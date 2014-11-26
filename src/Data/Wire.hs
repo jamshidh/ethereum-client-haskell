@@ -12,9 +12,10 @@ import Data.List
 import Data.Word
 import Network.Haskoin.Crypto
 import Numeric
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Data.Block
-import Colors
+import qualified Colors as CL
 import Format
 import Data.Peer
 import Data.RLP
@@ -48,28 +49,28 @@ data Message =
 
 instance Format Message where
   format Hello{version=ver, clientId=c, capability=cap, port=p, nodeId=n} =
-    blue "Hello" ++
+    CL.blue "Hello" ++
       "    version: " ++ show ver ++ "\n" ++
       "    cliendId: " ++ show c ++ "\n" ++
       "    capability: " ++ intercalate "\n            "  (show <$> cap) ++ "\n" ++
       "    port: " ++ show p ++ "\n" ++
       "    nodeId: " ++ take 20 (padZeros 64 (showHex n "")) ++ "...."
-  format Ping = blue "Ping"
-  format Pong = blue "Pong"
-  format GetPeers = blue "GetPeers"
-  format (Peers peers) = blue "Peers: " ++ intercalate ", " (format <$> peers)
+  format Ping = CL.blue "Ping"
+  format Pong = CL.blue "Pong"
+  format GetPeers = CL.blue "GetPeers"
+  format (Peers peers) = CL.blue "Peers: " ++ intercalate ", " (format <$> peers)
   format (Transactions transactions) =
-    blue "Transactions:\n    " ++ tab (intercalate "\n    " (format <$> transactions))
-  format (Blocks blocks) = blue "Blocks:" ++ tab("\n" ++ intercalate "\n    " (format <$> blocks))
+    CL.blue "Transactions:\n    " ++ tab (intercalate "\n    " (format <$> transactions))
+  format (Blocks blocks) = CL.blue "Blocks:" ++ tab("\n" ++ intercalate "\n    " (format <$> blocks))
   format (GetChain pSHAs numChild) =
-    blue "GetChain" ++ " (max: " ++ show numChild ++ "):\n    " ++
-    intercalate ",\n    " (format <$> pSHAs)
+    CL.blue "GetChain" ++ " (max: " ++ show numChild ++ "):\n    " ++
+    intercalate ",\n    " (show . pretty <$> pSHAs)
   format (NotInChain shas) =
-    blue "NotInChain:" ++ 
-    tab ("\n" ++ red "------------------------------------------------------------------" ++
-         "\n" ++ red "|" ++ intercalate ",\n    " (format <$> shas) ++ red "|" ++
-         "\n" ++ red "------------------------------------------------------------------")
-  format GetTransactions = blue "GetTransactions"
+    CL.blue "NotInChain:" ++ 
+    tab ("\n" ++ CL.red "------------------------------------------------------------------" ++
+         "\n" ++ CL.red "|" ++ intercalate ",\n    " (show . pretty <$> shas) ++ CL.red "|" ++
+         "\n" ++ CL.red "------------------------------------------------------------------")
+  format GetTransactions = CL.blue "GetTransactions"
 
 
 obj2WireMessage::RLPObject->Message

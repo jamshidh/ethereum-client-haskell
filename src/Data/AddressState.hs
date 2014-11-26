@@ -30,7 +30,7 @@ instance Format AddressState where
              tab("\nnonce: " ++ showHex (addressStateNonce a) "" ++
                  "\nbalance: " ++ show (toInteger $ balance a) ++
                  "\ncontractRoot: " ++ formatCR (contractRoot a) ++
-                 "\ncodeHash: " ++ format (codeHash a))
+                 "\ncodeHash: " ++ show (pretty $ codeHash a))
     where
       formatCR::Maybe SHAPtr->String
       formatCR Nothing = "0x0"

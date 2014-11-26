@@ -16,12 +16,16 @@ import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy.Char8 as BLC
 import Network.Haskoin.Internals
 import Numeric
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Data.RLP
 import Database.MerklePatricia
 import Util
 
 newtype SHA = SHA Word256 deriving (Show, Eq)
+
+instance Pretty SHA where
+  pretty (SHA x) = yellow $ text $ padZeros 64 $ showHex x ""
 
 instance Binary SHA where
   put (SHA x) = sequence_ $ fmap put $ word256ToBytes $ fromIntegral x

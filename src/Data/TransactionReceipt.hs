@@ -25,7 +25,7 @@ data TransactionReceipt =
     } deriving (Show)
 
 instance Format PostTransactionState where
-  format (PostTransactionState x) = format x
+  format (PostTransactionState x) = show $ pretty x
 
 instance Format TransactionReceipt where
   format (TransactionReceipt t p gasUsed) =

@@ -66,7 +66,7 @@ data Block = Block {
 instance Format Block where
   format b@Block{blockData=bd, receiptTransactions=receipts, blockUncles=[]} =
     CL.blue ("Block #" ++ show (number bd)) ++ " " ++
-    tab (format (blockHash b) ++ "\n" ++
+    tab (show (pretty $ blockHash b) ++ "\n" ++
          format bd ++
          (if null receipts
           then "        (no transactions, no uncles)"
@@ -129,8 +129,9 @@ blockHash = hash . rlpSerialize . rlpEncode
 
 instance Format BlockData where
   format b = 
-    "parentHash: " ++ format (parentHash b) ++ "\n" ++
-    "unclesHash: " ++ format (unclesHash b) ++ 
+    "parentHash: " ++ show (pretty
+                            $ parentHash b) ++ "\n" ++
+    "unclesHash: " ++ show (pretty $ unclesHash b) ++ 
     (if unclesHash b == hash (B.pack [0xc0]) then " (the empty array)\n" else "\n") ++
     "coinbase: " ++ format (coinbase b) ++ "\n" ++
     "stateRoot: " ++ show (pretty $ bStateRoot b) ++ "\n" ++
@@ -140,8 +141,8 @@ instance Format BlockData where
     "gasLimit: " ++ show (gasLimit b) ++ "\n" ++
     "gasUsed: " ++ show (gasUsed b) ++ "\n" ++
     "timestamp: " ++ show (timestamp b) ++ "\n" ++
-    "extraData: " ++ show (extraData b) ++ "\n" ++
-    "nonce: " ++ format (nonce b) ++ "\n"
+    "extraData: " ++ show (pretty $ extraData b) ++ "\n" ++
+    "nonce: " ++ show (pretty $ nonce b) ++ "\n"
 
 genesisBlock::Block
 genesisBlock =

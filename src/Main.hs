@@ -25,13 +25,14 @@ import Network.Socket (socketToHandle)
 import Numeric
 import System.Entropy
 import System.IO
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Network.Simple.TCP
 
 import Data.RLP
 
 import BlockChain
-import Colors
+import qualified Colors as CL
 import Constants
 import Context
 import Data.Address
@@ -69,7 +70,7 @@ sendCommand socket payload = do
 
 sendMessage::Socket->Message->IO ()
 sendMessage socket msg = do
-  putStrLn (green "msg>>>>>: " ++ format msg)
+  putStrLn (CL.green "msg>>>>>: " ++ format msg)
   sendCommand socket $ rlpSerialize $ wireMessage2Obj msg
 
 getNextBlock::Block->UTCTime->ContextM Block
@@ -132,7 +133,7 @@ handlePayload::Socket->B.ByteString->ContextM ()
 handlePayload socket payload = do
   let rlpObject = rlpDeserialize payload
   let msg = obj2WireMessage rlpObject
-  liftIO $ putStrLn (red "msg<<<<: " ++ format msg)
+  liftIO $ putStrLn (CL.red "msg<<<<: " ++ format msg)
   case msg of
     Ping -> liftIO $ sendMessage socket Pong
     GetPeers -> do
@@ -185,7 +186,7 @@ getBestBlockHash' = do
 requestNewBlocks::Socket->ContextM ()
 requestNewBlocks socket = do
   bestBlockHash <- getBestBlockHash'
-  liftIO $ putStrLn $ "Best block hash: " ++ format bestBlockHash
+  liftIO $ putStrLn $ "Best block hash: " ++ show (pretty bestBlockHash)
   liftIO $ sendMessage socket $ GetChain [bestBlockHash] 0x40
 
 mkHello::IO Message
