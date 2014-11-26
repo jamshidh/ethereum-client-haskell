@@ -6,14 +6,10 @@ module Format (
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Base16 as B16
-import Data.Functor
-import Data.List
 import qualified Data.NibbleString as N
 import Numeric
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import qualified Colors as C
-import Data.RLP
 import Database.MerklePatricia
 import SHA
 
