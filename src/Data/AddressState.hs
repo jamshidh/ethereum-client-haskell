@@ -2,6 +2,7 @@
 
 module Data.AddressState (
   AddressState(..),
+  blankAddressState,
   getAddressState,
   getAllAddressStates,
   putAddressState
@@ -15,7 +16,6 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import Data.Address
 import qualified Colors as CL
 import Context
---import Database.MerklePatricia
 import ExtDBs
 import Format
 import qualified Data.NibbleString as N
@@ -23,7 +23,13 @@ import Data.RLP
 import SHA
 import Util
 
+--import Debug.Trace
+
 data AddressState = AddressState { addressStateNonce::Integer, balance::Integer, contractRoot::Maybe SHAPtr, codeHash::SHA } deriving (Show)
+
+
+blankAddressState::AddressState
+blankAddressState = AddressState { addressStateNonce=0, balance=0, contractRoot=Nothing, codeHash=hash B.empty }
 
 instance Format AddressState where
   format a = CL.blue "AddressState" ++
@@ -57,13 +63,13 @@ instance RLPSerializable AddressState where
 addressAsNibbleString::Address->N.NibbleString
 addressAsNibbleString (Address s) = N.EvenNibbleString $ B.pack $ integer2Bytes $ fromIntegral s
 
-getAddressState::Address->ContextM (Maybe AddressState)
+getAddressState::Address->ContextM AddressState
 getAddressState address = do
   states <- getKeyVals $ addressAsNibbleString address
   case states of
-    [] -> return Nothing
-    [state] -> return $ Just $ rlpDecode $ rlpDeserialize $ rlpDecode $ snd state
-    _ -> error ("getAddressStates found multiple states for: " ++ format address)
+    [] -> return blankAddressState
+    [state] -> return $ rlpDecode $ rlpDeserialize $ rlpDecode $ snd state
+    _ -> error ("getAddressStates found multiple states for: " ++ show (pretty address))
   
 
 getAllAddressStates::ContextM [(N.NibbleString, AddressState)]

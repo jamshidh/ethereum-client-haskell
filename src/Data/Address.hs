@@ -14,16 +14,15 @@ import Data.Maybe
 import Network.Haskoin.Crypto hiding (Address)
 import Network.Haskoin.Internals hiding (Address)
 import Numeric
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
-import Colors
-import Format
 import Data.RLP
 import Util
 
 newtype Address = Address Word160 deriving (Show, Eq)
 
-instance Format Address where
-  format (Address x) = yellow $ padZeros 40 $ showHex x ""
+instance Pretty Address where
+  pretty (Address x) = yellow $ text $ padZeros 40 $ showHex x ""
 
 instance Binary Address where
   put (Address x) = sequence_ $ fmap put $ word160ToBytes $ fromIntegral x

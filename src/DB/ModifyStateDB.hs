@@ -24,15 +24,6 @@ startingRoot::B.ByteString
 (startingRoot, "") = B16.decode "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
                      --"bc36789e7a1e281436464229828f817d6612f7b477d66591ff96a9e064bcc98a"                                                                                                                   
 
-startingAddressState::AddressState
-startingAddressState =
-      AddressState {
-      addressStateNonce=0,
-      balance= 0,
-      contractRoot=Nothing,
-      codeHash=hash B.empty
-      }
-
 initializeBlankStateDB::ContextM ()
 initializeBlankStateDB = do
   stateDBPut startingRoot B.empty
@@ -52,7 +43,7 @@ initializeStateDB = do
                         0xe4157b34ea9615cfbde6b4fda419828124b70c78
                        ]
 
-  putAddressStates addresses startingAddressState{balance=0x0100000000000000000000000000000000000000000000000000}
+  putAddressStates addresses blankAddressState{balance=0x0100000000000000000000000000000000000000000000000000}
 
   
 
@@ -65,12 +56,12 @@ putAddressStates (address:rest) addressState = do
 
 addToBalance::Address->Integer->ContextM ()
 addToBalance address val = do
-  addressState <- fromMaybe startingAddressState <$> getAddressState address
+  addressState <- getAddressState address
   putAddressState address addressState{ balance = balance addressState + fromIntegral val }
 
 addNonce::Address->ContextM ()
 addNonce address = do
-  addressState <- fromMaybe startingAddressState <$> getAddressState address
+  addressState <- getAddressState address
   putAddressState address addressState{ addressStateNonce = addressStateNonce addressState + 1 }
 
 

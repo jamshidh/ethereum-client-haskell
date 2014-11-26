@@ -209,7 +209,7 @@ sendHello socket =
 
 createTransaction::Transaction->ContextM SignedTransaction
 createTransaction t = do
-    userNonce <- fromMaybe 0 <$> fmap addressStateNonce <$> getAddressState (prvKey2Address prvKey)
+    userNonce <- addressStateNonce <$> getAddressState (prvKey2Address prvKey)
     liftIO $ withSource devURandom $ signTransaction prvKey t{tNonce=userNonce}
 
 doit::Socket->ContextM ()

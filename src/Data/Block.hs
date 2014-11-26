@@ -133,7 +133,7 @@ instance Format BlockData where
                             $ parentHash b) ++ "\n" ++
     "unclesHash: " ++ show (pretty $ unclesHash b) ++ 
     (if unclesHash b == hash (B.pack [0xc0]) then " (the empty array)\n" else "\n") ++
-    "coinbase: " ++ format (coinbase b) ++ "\n" ++
+    "coinbase: " ++ show (pretty $ coinbase b) ++ "\n" ++
     "stateRoot: " ++ show (pretty $ bStateRoot b) ++ "\n" ++
     "transactionsTrie: " ++ show (transactionsTrie b) ++ "\n" ++
     "difficulty: " ++ show (difficulty b) ++ "\n" ++

@@ -44,7 +44,7 @@ instance Format Transaction where
       "tNonce: " ++ show n ++ "\n" ++
       "gasPrice: " ++ show gp ++ "\n" ++
       "tGasLimit: " ++ show gl ++ "\n" ++
-      "to: " ++ format to' ++ "\n" ++
+      "to: " ++ show (pretty to') ++ "\n" ++
       "value: " ++ show v ++ "\n" ++
       "tData: " ++ tab ("\n" ++ format d) ++ "\n")
   format ContractCreationTX{tNonce=n, gasPrice=gp, tGasLimit=gl, value=v, tInit=init'} =

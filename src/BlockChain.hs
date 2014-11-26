@@ -148,7 +148,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
         Nothing -> do
           let result = fromMaybe B.empty $ returnVal vmState
           liftIO $ putStrLn $ "Result: " ++ show result
-          liftIO $ putStrLn $ format newAddress ++ ": " ++ format result
+          liftIO $ putStrLn $ show (pretty newAddress) ++ ": " ++ format result
           cxt <- get
           liftIO $ putStrLn $ "adding storage " ++ show (stateRoot $ storageDB cxt)
           addCode result
@@ -166,11 +166,9 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
           pay tAddr newAddress (value ut)
 
 runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@MessageTX{}} = do
-  recipientAddressState <- 
-      fromMaybe (error $ "message is being sent to an unknown address: " ++ show (to ut)) <$>
-                getAddressState (to ut)
+  recipientAddressState <- getAddressState (to ut)
 
-  liftIO $ putStrLn $ "Looking for contract code for: " ++ format (to ut)
+  liftIO $ putStrLn $ "Looking for contract code for: " ++ show (pretty $ to ut)
   liftIO $ putStrLn $ "codeHash is: " ++ show (pretty $ sha2SHAPtr $ codeHash recipientAddressState)
 
   contractCode <- 
@@ -207,7 +205,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
           --addToBalance tAddr (-value ut) --zombie account, money lost forever
           pay (whoSignedThisTransaction t) (to ut) (value ut)
         Nothing -> do
-          addressState <- fromMaybe (error "to address in message transaction doesn't exist") <$> getAddressState (to ut)
+          addressState <- getAddressState (to ut)
           cxt <- get
           putAddressState (to ut)
                  addressState{
@@ -231,11 +229,8 @@ getNewAddress t =
 
 isTransactionValid::SignedTransaction->ContextM Bool
 isTransactionValid t = do
-  maybeAddressState <- getAddressState $ whoSignedThisTransaction t
-  liftIO $ print maybeAddressState
-  case maybeAddressState of
-    Nothing -> return (0 == tNonce (unsignedTransaction t))
-    Just addressState -> return (addressStateNonce addressState == tNonce (unsignedTransaction t))
+  addressState <- getAddressState $ whoSignedThisTransaction t
+  return (addressStateNonce addressState == tNonce (unsignedTransaction t))
 
 addTransaction::Block->SignedTransaction->ContextM ()
 addTransaction b t@SignedTransaction{unsignedTransaction=ut} = do

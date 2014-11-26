@@ -2,6 +2,7 @@
 
 import Control.Monad.IO.Class
 import Control.Monad.State
+import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8 as BC
 import Data.Functor
@@ -17,11 +18,15 @@ import Context
 import ExtDBs
 import Format
 
+formatKV::(N.NibbleString, RLPObject)->Doc
+formatKV (key, val) =
+    pretty key <> text ": " <> pretty (rlpDeserialize $ rlpDecode val)
+
 doit::SHAPtr->ContextM ()
 doit sr = do
     setStateRoot sr
     kvs <- getKeyVals ""
-    liftIO $ putStrLn $ intercalate "\n" ((\(k, v) -> show (pretty k) ++ ": " ++ show (pretty $ rlpDeserialize $ rlpDecode v)) <$> filter (filterUnnecessary . fst) kvs)
+    liftIO $ putStrLn $ displayS (renderPretty 1.0 200 $ vsep $ formatKV <$> filter (filterUnnecessary . fst) kvs) ""
 
 main = do
   [theType, addr] <- getArgs

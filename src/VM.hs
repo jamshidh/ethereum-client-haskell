@@ -8,8 +8,6 @@ import Prelude hiding (LT, GT, EQ)
 import Control.Monad.IO.Class
 import Data.Bits
 import qualified Data.ByteString as B
-import Data.Functor
-import Data.Maybe
 import Data.Time.Clock.POSIX
 import Network.Haskoin.Crypto (Word256)
 
@@ -80,8 +78,8 @@ runOperation SHA3 _ state@VMState{stack=(p:size:rest)} = do
 runOperation ADDRESS Environment{envOwner=Address a} state = return state{stack=fromIntegral a:stack state}
 
 runOperation BALANCE _ state@VMState{stack=(x:rest)} = do
-  maybeAddressState <- getAddressState (Address $ fromIntegral x)
-  return state{stack=(fromIntegral $ fromMaybe 0 $ balance <$> maybeAddressState):rest}
+  addressState <- getAddressState (Address $ fromIntegral x)
+  return state{stack=(fromIntegral $ balance addressState):rest}
 runOperation BALANCE env state = liftIO $ addErr "stack did not contain enough elements" (envCode env) state
 
 runOperation ORIGIN Environment{envSender=Address sender} state = return state{stack=fromIntegral sender:stack state}
