@@ -10,13 +10,11 @@ module DB.ModifyStateDB (
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import Data.Functor
-import Data.Maybe
 
 import Context
 import Data.Address
 import Data.AddressState
 import ExtDBs
-import SHA
 
 --import Debug.Trace
 

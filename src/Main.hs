@@ -127,6 +127,12 @@ submitNextBlock socket b = do
         liftIO $ sendMessage socket $ Blocks [theNewBlock]
         addBlocks [theNewBlock]
 
+ifBlockInDBSubmitNextBlock::Socket->Block->ContextM ()
+ifBlockInDBSubmitNextBlock socket b = do
+  maybeBlock <- getBlock (blockHash b)
+  case maybeBlock of
+    Nothing -> return ()
+    _ -> submitNextBlock socket b
 
 
 handlePayload::Socket->B.ByteString->ContextM ()
@@ -140,10 +146,12 @@ handlePayload socket payload = do
       liftIO $ sendMessage socket $ Peers []
       liftIO $ sendMessage socket $ GetPeers
     Blocks blocks -> do
+      liftIO $ putStrLn "Submitting new blocks"
       addBlocks $ sortBy (compare `on` number . blockData) blocks
+      liftIO $ putStrLn "Blocks have been submitted"
       case blocks of
         [] -> return ()
-        [b] -> submitNextBlock socket b
+        [b] -> ifBlockInDBSubmitNextBlock socket b
         _ -> requestNewBlocks socket
       
       --sendMessage socket $ Blocks [addNonceToBlock newBlock n]

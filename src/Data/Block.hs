@@ -10,29 +10,31 @@ module Data.Block (
   findNonce,
   fastFindNonce,
   nonceIsValid,
-  genesisBlock
+  genesisBlock,
+  getBlock
   ) where
 
 import qualified Crypto.Hash.SHA3 as C
-import qualified Data.Binary as DB
+import Data.Binary
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Char8 as BC
-import Data.ByteString.Base16
+import qualified Data.ByteString.Base16 as B16
 import Data.ByteString.Internal
 import Data.Functor
 import Data.List
 import Data.Time
 import Data.Time.Clock.POSIX
-import Data.Word
 import Foreign
 import Foreign.ForeignPtr.Unsafe
 import Numeric
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
+import Context
 import Data.Address
 import qualified Colors as CL
 import Database.MerklePatricia
+import ExtDBs
 import Format
 import Data.RLP
 import SHA
@@ -167,6 +169,11 @@ genesisBlock =
     blockUncles=[]
     }
 
+getBlock::SHA->ContextM (Maybe Block)
+getBlock h = 
+  fmap (rlpDecode . rlpDeserialize) <$> blockDBGet (BL.toStrict $ encode h)
+
+
 --------------------------
 --Mining stuff
 
@@ -196,7 +203,7 @@ noncelessBlock2RLP _ = error "noncelessBock2RLP not definted for blockUncles /= 
 -}
 
 sha2ByteString::SHA->B.ByteString
-sha2ByteString (SHA val) = BL.toStrict $ DB.encode val
+sha2ByteString (SHA val) = BL.toStrict $ encode val
 
 headerHashWithoutNonce::Block->ByteString
 headerHashWithoutNonce b = C.hash 256 $ rlpSerialize $ noncelessBlockData2RLP $ blockData b
@@ -238,7 +245,7 @@ fastFindNonce b = do
   return $ byteString2Integer $ B.pack retData
   where
     threshold::B.ByteString
-    threshold = fst $ decode $ BC.pack $ padZeros 64 $ showHex ((2::Integer)^(256::Integer) `quot` (difficulty $ blockData b)) ""
+    threshold = fst $ B16.decode $ BC.pack $ padZeros 64 $ showHex ((2::Integer)^(256::Integer) `quot` (difficulty $ blockData b)) ""
 
 foreign import ccall "findNonce" c_fastFindNonce::Ptr Word8->Ptr Word8->Ptr Word8->IO Int
 --foreign import ccall "fastFindNonce" c_fastFindNonce::ForeignPtr Word8->ForeignPtr Word8->ForeignPtr Word8

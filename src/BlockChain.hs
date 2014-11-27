@@ -286,10 +286,6 @@ getBestBlockHash::ContextM (Maybe SHA)
 getBestBlockHash = do
   fmap (decode . BL.fromStrict) <$> detailsDBGet "best"
 
-getBlock::SHA->ContextM (Maybe Block)
-getBlock h = 
-  fmap (rlpDecode . rlpDeserialize) <$> blockDBGet (BL.toStrict $ encode h)
-
 getBestBlock::ContextM (Maybe Block)
 getBestBlock = do
   maybeH <- getBestBlockHash
