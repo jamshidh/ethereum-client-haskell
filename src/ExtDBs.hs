@@ -11,6 +11,7 @@ module ExtDBs (
   stateDBGet,
   putKeyVal,
   getKeyVals,
+  deleteStorageKey,
   putStorageKeyVal,
   getStorageKeyVals
   ) where
@@ -93,6 +94,13 @@ getKeyVals::N.NibbleString->ContextM [(N.NibbleString, RLPObject)]
 getKeyVals key = do
   ctx <- get
   liftIO $ runResourceT $ MP.getKeyVals (stateDB ctx) key
+
+deleteStorageKey::N.NibbleString->ContextM ()
+deleteStorageKey key = do
+  ctx <- get
+  newStorageDB <-
+    liftIO $ runResourceT $ MP.deleteKey (storageDB ctx) key
+  put ctx{storageDB=newStorageDB}
 
 putStorageKeyVal::N.NibbleString->RLPObject->ContextM ()
 putStorageKeyVal key val = do

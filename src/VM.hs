@@ -154,7 +154,9 @@ runOperation SLOAD _ state@VMState{stack=(p:rest)} = do
   return $ state { stack=val:rest }
   
 runOperation SSTORE _ state@VMState{stack=(p:val:rest)} = do
-  putStorageKeyVal (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p) (rlpEncode $ rlpSerialize $ rlpEncode $ toInteger val)
+  if val == 0
+    then deleteStorageKey (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
+    else putStorageKeyVal (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p) (rlpEncode $ rlpSerialize $ rlpEncode $ toInteger val)
   return $ state { stack=rest }
 
 runOperation JUMP _ state@VMState{stack=(p:rest)} =
