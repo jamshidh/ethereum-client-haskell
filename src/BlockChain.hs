@@ -54,7 +54,7 @@ initializeBlockChain = do
 
 nextDifficulty::Integer->UTCTime->UTCTime->Integer
 nextDifficulty oldDifficulty oldTime newTime =
-    if (round (utcTimeToPOSIXSeconds newTime)) >=
+    if round (utcTimeToPOSIXSeconds newTime) >=
            (round (utcTimeToPOSIXSeconds oldTime) + 42::Integer)
     then oldDifficulty - oldDifficulty `shiftR` 10
     else oldDifficulty + oldDifficulty `shiftR` 10
@@ -63,7 +63,7 @@ nextGasLimit::Integer->Integer->Integer
 nextGasLimit oldGasLimit oldGasUsed = max 125000 ((oldGasLimit * 1023 + oldGasUsed *6 `quot` 5) `quot` 1024)
 
 checkUnclesHash::Block->Bool
-checkUnclesHash b = (unclesHash $ blockData b) == (hash $ rlpSerialize $ RLPArray (rlpEncode <$> blockUncles b))
+checkUnclesHash b = unclesHash (blockData b) == hash (rlpSerialize $ RLPArray (rlpEncode <$> blockUncles b))
 
 --data BlockValidityError = BlockDifficultyWrong Integer Integer | BlockNumberWrong Integer Integer | BlockGasLimitWrong Integer Integer | BlockNonceWrong | BlockUnclesHashWrong
 {-
@@ -173,7 +173,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
 
   contractCode <- 
       fromMaybe (error "no contract code") <$>
-                (getCode $ sha2SHAPtr $ codeHash recipientAddressState)
+                getCode (sha2SHAPtr $ codeHash recipientAddressState)
 
   liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty (Code contractCode))))
 
@@ -182,7 +182,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
   liftIO $ putStrLn $ "availableGas: " ++ show availableGas
 
   vmState <- 
-          runCodeFromStart (case contractRoot recipientAddressState of Nothing -> blankRoot; Just x -> x) availableGas
+          runCodeFromStart (fromMaybe blankRoot (contractRoot recipientAddressState)) availableGas
                  Environment{
                            envGasPrice=gasPrice ut,
                            envBlock=b,
@@ -219,13 +219,13 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
 
 
 addBlocks::[Block]->ContextM ()
-addBlocks blocks = do
-  forM_ blocks $ addBlock
+addBlocks blocks = 
+  forM_ blocks addBlock
 
 getNewAddress::SignedTransaction->Address
 getNewAddress t =
   let theHash = hash $ rlpSerialize $ RLPArray [rlpEncode $ whoSignedThisTransaction t, rlpEncode $ tNonce $ unsignedTransaction t]
-  in decode $ BL.drop 12 $ encode $ theHash
+  in decode $ BL.drop 12 $ encode theHash
 
 isTransactionValid::SignedTransaction->ContextM Bool
 isTransactionValid t = do
@@ -239,7 +239,7 @@ addTransaction b t@SignedTransaction{unsignedTransaction=ut} = do
   addNonce signAddress
   liftIO $ putStrLn "paying value to recipient"
 
-  let intrinsicGas = 5*(fromIntegral $ codeOrDataLength ut) + 500
+  let intrinsicGas = 5*fromIntegral (codeOrDataLength ut) + 500
   liftIO $ putStrLn $ "intrinsicGas: " ++ show intrinsicGas
   --TODO- return here if not enough gas
   pay signAddress (coinbase $ blockData b) (intrinsicGas * gasPrice ut)
@@ -252,9 +252,7 @@ addTransactions _ [] = return ()
 addTransactions b (t:rest) = do
   valid <- isTransactionValid t
   liftIO $ putStrLn $ "Transaction is valid: " ++ show valid
-  if valid
-         then addTransaction b t
-         else return ()
+  when valid $ addTransaction b t
   addTransactions b rest
   
 addBlock::Block->ContextM ()
@@ -283,7 +281,7 @@ addBlock b@Block{blockData=bd} = do
       replaceBestIfBetter b
 
 getBestBlockHash::ContextM (Maybe SHA)
-getBestBlockHash = do
+getBestBlockHash = 
   fmap (decode . BL.fromStrict) <$> detailsDBGet "best"
 
 getBestBlock::ContextM (Maybe Block)

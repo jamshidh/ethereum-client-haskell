@@ -52,7 +52,7 @@ options = DB.defaultOptions {
 
 openDBs::Bool->ResourceT IO Context
 openDBs useCppDBs = do
-  homeDir <- liftIO $ getHomeDirectory                     
+  homeDir <- liftIO getHomeDirectory                     
   bdb <- DB.open (homeDir ++ dbDir useCppDBs ++ blockDBPath) options
   ddb <- DB.open (homeDir ++ dbDir useCppDBs ++ detailsDBPath) options
   sdb <- DB.open (homeDir ++ dbDir useCppDBs ++ stateDBPath) options

@@ -34,52 +34,52 @@ import Context
 detailsDBPut::B.ByteString->B.ByteString->ContextM ()
 detailsDBPut key val = do
   ctx <- get
-  runResourceT $ do
+  runResourceT $ 
     DB.put (detailsDB ctx) def key val
     
 detailsDBGet::B.ByteString->ContextM (Maybe B.ByteString)
 detailsDBGet key = do
   ctx <- get
-  runResourceT $ do
+  runResourceT $ 
     DB.get (detailsDB ctx) def key
     
 blockDBPut::B.ByteString->B.ByteString->ContextM ()
 blockDBPut key val = do
   ctx <- get
-  runResourceT $ do
+  runResourceT $ 
     DB.put (blockDB ctx) def key val
     
 blockDBGet::B.ByteString->ContextM (Maybe B.ByteString)
 blockDBGet key = do
   ctx <- get
-  runResourceT $ do
+  runResourceT $ 
     DB.get (blockDB ctx) def key
     
 
 codeDBPut::B.ByteString->ContextM ()
 codeDBPut code = do
   ctx <- get
-  runResourceT $ do
+  runResourceT $ 
     DB.put (codeDB ctx) def (BL.toStrict $ encode $ hash code) code
     
 
 codeDBGet::B.ByteString->ContextM (Maybe B.ByteString)
 codeDBGet key = do
   ctx <- get
-  runResourceT $ do
+  runResourceT $ 
     DB.get (codeDB ctx) def key
     
 stateDBPut::B.ByteString->B.ByteString->ContextM ()
 stateDBPut key val = do
   ctx <- get
-  runResourceT $ do
+  runResourceT $ 
     DB.put (MP.ldb $ stateDB ctx) def key val
   put ctx{stateDB=(stateDB ctx){MP.stateRoot=MP.SHAPtr key}}
 
 stateDBGet::B.ByteString->ContextM (Maybe B.ByteString)
 stateDBGet key = do
   ctx <- get
-  runResourceT $ do
+  runResourceT $ 
     DB.get (MP.ldb $ stateDB ctx) def key
     
 

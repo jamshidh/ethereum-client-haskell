@@ -13,8 +13,7 @@ import Database.MerklePatricia
 import ExtDBs
 
 addCode::B.ByteString->ContextM ()
-addCode codeBytes = 
-  codeDBPut codeBytes 
+addCode = codeDBPut
 
 getCode::SHAPtr->ContextM (Maybe B.ByteString)
 getCode theHash = 

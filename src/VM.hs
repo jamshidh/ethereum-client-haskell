@@ -38,11 +38,11 @@ word2562Bool 1 = True
 word2562Bool _ = False
 
 binaryAction::(Word256->Word256->Word256)->Environment->VMState->ContextM VMState
-binaryAction action _ state@VMState{stack=(x:y:rest)} = return state{stack=(x `action` y:rest)}
+binaryAction action _ state@VMState{stack=x:y:rest} = return state{stack=x `action` y:rest}
 binaryAction _ env state = liftIO $ addErr "stack did not contain enough elements" (envCode env) state
 
 unaryAction::(Word256->Word256)->Environment->VMState->ContextM VMState
-unaryAction action _ state@VMState{stack=(x:rest)} = return state{stack=(action x:rest)}
+unaryAction action _ state@VMState{stack=x:rest} = return state{stack=action x:rest}
 unaryAction _ env state = liftIO $ addErr "stack did not contain enough elements" (envCode env) state
 
 
@@ -79,7 +79,7 @@ runOperation ADDRESS Environment{envOwner=Address a} state = return state{stack=
 
 runOperation BALANCE _ state@VMState{stack=(x:rest)} = do
   addressState <- getAddressState (Address $ fromIntegral x)
-  return state{stack=(fromIntegral $ balance addressState):rest}
+  return state{stack=fromIntegral (balance addressState):rest}
 runOperation BALANCE env state = liftIO $ addErr "stack did not contain enough elements" (envCode env) state
 
 runOperation ORIGIN Environment{envSender=Address sender} state = return state{stack=fromIntegral sender:stack state}
@@ -117,7 +117,7 @@ runOperation PREVHASH Environment{envBlock=Block{blockData=BlockData{parentHash=
 
 runOperation COINBASE Environment{envBlock=Block{blockData=BlockData{coinbase=Address cb}}} state = return state{stack=fromIntegral cb:stack state}
 
-runOperation TIMESTAMP Environment{envBlock=Block{blockData=bd}} state = return state{stack=(round $ utcTimeToPOSIXSeconds $ timestamp bd):stack state}
+runOperation TIMESTAMP Environment{envBlock=Block{blockData=bd}} state = return state{stack=round (utcTimeToPOSIXSeconds $ timestamp bd):stack state}
 runOperation NUMBER Environment{envBlock=Block{blockData=bd}} state = return state{stack=fromIntegral (number bd):stack state}
 runOperation DIFFICULTY Environment{envBlock=Block{blockData=bd}} state = return state{stack=fromIntegral (difficulty bd):stack state}
 runOperation GASLIMIT Environment{envBlock=Block{blockData=bd}} state = return state{stack=fromIntegral (gasLimit bd):stack state}
@@ -163,7 +163,7 @@ runOperation JUMP _ state@VMState{stack=(p:rest)} =
   return $ state { stack=rest, pc=fromIntegral p }
 
 runOperation JUMPI _ state@VMState{stack=(p:cond:rest)} =
-  return $ state { stack=rest, pc=if word2562Bool cond then fromIntegral p else (pc state) }
+  return $ state { stack=rest, pc=if word2562Bool cond then fromIntegral p else pc state }
 
 runOperation PC _ state =
   return state{stack=fromIntegral (pc state):stack state}
@@ -192,7 +192,7 @@ runOperation RETURN _ state@VMState{stack=[address, size]} = do
 runOperation RETURN _ VMState{stack=x} | length x > 2 =
   error "Stack was too large in when RETURN was called"
 
-runOperation RETURN _ state = do
+runOperation RETURN _ state =
   return $ state { vmException=Just StackTooSmallException } 
 
 runOperation SUICIDE _ state =

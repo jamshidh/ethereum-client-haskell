@@ -8,6 +8,7 @@ module SHA (
   sha2SHAPtr
   ) where
 
+import Control.Monad
 import qualified Crypto.Hash.SHA3 as C
 import Data.Binary
 import qualified Data.ByteString.Base16 as B16
@@ -30,7 +31,7 @@ instance Pretty SHA where
 instance Binary SHA where
   put (SHA x) = sequence_ $ fmap put $ word256ToBytes $ fromIntegral x
   get = do
-    bytes <- sequence $ replicate 32 get
+    bytes <- replicateM 32 get
     let byteString = B.pack bytes
     return (SHA $ fromInteger $ byteString2Integer byteString)
 

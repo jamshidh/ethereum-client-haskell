@@ -5,6 +5,7 @@ module Data.Address (
   pubKey2Address
   ) where
 
+import Control.Monad
 import Crypto.Hash.SHA3
 import Data.Binary
 import qualified Data.ByteString as B
@@ -27,7 +28,7 @@ instance Pretty Address where
 instance Binary Address where
   put (Address x) = sequence_ $ fmap put $ word160ToBytes $ fromIntegral x
   get = do
-    bytes <- sequence $ replicate 20 get
+    bytes <- replicateM 20 get
     let byteString = B.pack bytes
     return (Address $ fromInteger $ byteString2Integer byteString)
 
@@ -48,7 +49,7 @@ pubKey2Address (PubKey point) =
   where
     x = fromMaybe (error "getX failed in prvKey2Address") $ getX point
     y = fromMaybe (error "getY failed in prvKey2Address") $ getY point
-pubKey2Address (PubKeyU _) = error $ "Missing case in pubKey2Address: PubKeyU"
+pubKey2Address (PubKeyU _) = error "Missing case in pubKey2Address: PubKeyU"
 
 
 instance RLPSerializable Address where

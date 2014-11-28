@@ -37,7 +37,7 @@ getBetterLabels ops oldLabels = M.fromList $ op2Labels oldLabels 0 ops
     where
       op2Labels::Labels->Word256->[Operation]->[(String, Word256)]
       op2Labels _ _ [] = []
-      op2Labels oldLabs p (LABEL name:rest) = [(name, p)] ++ op2Labels oldLabs p rest
+      op2Labels oldLabs p (LABEL name:rest) = (name, p):op2Labels oldLabs p rest
       op2Labels oldLabs p (x:rest) = op2Labels oldLabs (p+opSize oldLabs x) rest 
 
       opSize::Labels->Operation->Word256
@@ -46,7 +46,7 @@ getBetterLabels ops oldLabels = M.fromList $ op2Labels oldLabels 0 ops
       opSize labels (PUSHDIFF start end) = trace ("subtract: " ++ show (getLabel labels start - getLabel labels end)) $ 
                                            trace ("start: " ++ show (getLabel labels start)) $ 
                                            trace ("end: " ++ show (getLabel labels end)) $ 
-          1+fromIntegral (length $ integer2Bytes $ fromIntegral $ (getLabel labels end - getLabel labels start))
+          1+fromIntegral (length $ integer2Bytes $ fromIntegral (getLabel labels end - getLabel labels start))
       opSize _ (PUSH x) = 1+fromIntegral (length x)
       opSize _ _ = 1
 
@@ -56,11 +56,7 @@ calculateBestLabels ops =
         first = getStupidLabels ops
         second = getBetterLabels ops first
         third = getBetterLabels ops second
-    in
-      trace ("first: " ++ show first) $
-      trace ("second: " ++ show second) $
-      trace ("third: " ++ show third) $
-             third
+    in third
 
 
 getLabel::Labels->String->Word256

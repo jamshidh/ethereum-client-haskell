@@ -80,6 +80,6 @@ getAllAddressStates = do
   
 
 putAddressState::Address->AddressState->ContextM ()
-putAddressState address newState = do
+putAddressState address newState = 
   putKeyVal (addressAsNibbleString address) $ rlpEncode $ rlpSerialize $ rlpEncode newState
 

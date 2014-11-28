@@ -11,6 +11,7 @@ module VM.Memory (
   mStoreByteString
   ) where
 
+import Control.Monad
 import Data.Array.IO
 import qualified Data.ByteString as B
 import Data.Functor
@@ -36,9 +37,8 @@ setNewMaxSize::Memory->Word256->IO()
 setNewMaxSize (Memory _ size) newVal = do
   putStrLn $ "newVal: " ++ show newVal
   oldVal <- readIORef size
-  if newVal > oldVal
-    then writeIORef size newVal
-    else return ()
+  when (newVal > oldVal) $
+    writeIORef size newVal
          
 mLoad::Memory->Word256->IO [Word8]
 mLoad m@(Memory arr _) p = do

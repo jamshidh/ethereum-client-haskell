@@ -81,7 +81,7 @@ getNextBlock b ts = do
 
   ctx <- get
 
-  return $ Block{
+  return Block{
                blockData=testGetNextBlockData $ stateRoot $ stateDB ctx,
                receiptTransactions=[],
                blockUncles=[]
@@ -96,7 +96,7 @@ getNextBlock b ts = do
         bStateRoot = sr,
         transactionsTrie = 0,
         difficulty =
-          if (round (utcTimeToPOSIXSeconds ts)) >=
+          if round (utcTimeToPOSIXSeconds ts) >=
              (round (utcTimeToPOSIXSeconds (timestamp bd)) + 42::Integer)
           then difficulty bd - difficulty bd `shiftR` 10
           else difficulty bd + difficulty bd `shiftR` 10,
@@ -144,7 +144,7 @@ handlePayload socket payload = do
     Ping -> liftIO $ sendMessage socket Pong
     GetPeers -> do
       liftIO $ sendMessage socket $ Peers []
-      liftIO $ sendMessage socket $ GetPeers
+      liftIO $ sendMessage socket GetPeers
     Blocks blocks -> do
       liftIO $ putStrLn "Submitting new blocks"
       addBlocks $ sortBy (compare `on` number . blockData) blocks
@@ -157,7 +157,7 @@ handlePayload socket payload = do
       --sendMessage socket $ Blocks [addNonceToBlock newBlock n]
     GetTransactions -> do
       liftIO $ sendMessage socket $ Transactions []
-      liftIO $ sendMessage socket $ GetTransactions
+      liftIO $ sendMessage socket GetTransactions
 
     _-> return ()
 

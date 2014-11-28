@@ -30,9 +30,6 @@ type EthCode = [Operation]
 singleOp::Operation->([Word8]->Operation, Int)
 singleOp o = (const o, 1)
 
-pushOp::Int->([Word8]->Operation, Int)
-pushOp numArgs = (\bytes -> PUSH (take numArgs bytes), numArgs + 1)
-
 opDatas::[OPData]
 opDatas = 
   [
@@ -87,38 +84,6 @@ opDatas =
     OPData 0x5a PC 0 1 "Get the program counter.",
     OPData 0x5b MSIZE 0 1 "Get the size of active memory in bytes.",
     OPData 0x5c GAS 0 1 "Get the amount of available gas.",
-    {-OPData 0x60 (pushOp 1) 0 1 "Place 1 byte item on stack.",
-    OPData 0x61 (pushOp 2) 0 1 "Place 2-byte item on stack.",
-    OPData 0x62 (pushOp 3) 0 1 "Place 3-byte item on stack.",
-    OPData 0x63 (pushOp 4) 0 1 "Place 4-byte item on stack.",
-    OPData 0x64 (pushOp 5) 0 1 "Place 5-byte item on stack.",
-    OPData 0x65 (pushOp 6) 0 1 "Place 6-byte item on stack.",
-    OPData 0x66 (pushOp 7) 0 1 "Place 7-byte item on stack.",
-    OPData 0x67 (pushOp 8) 0 1 "Place 8-byte item on stack.",
-    OPData 0x68 (pushOp 9) 0 1 "Place 9-byte item on stack.",
-    OPData 0x69 (pushOp 10) 0 1 "Place 10-byte item on stack.",
-    OPData 0x6a (pushOp 11) 0 1 "Place 11-byte item on stack.",
-    OPData 0x6b (pushOp 12) 0 1 "Place 12-byte item on stack.",
-    OPData 0x6c (pushOp 13) 0 1 "Place 13-byte item on stack.",
-    OPData 0x6d (pushOp 14) 0 1 "Place 14-byte item on stack.",
-    OPData 0x6e (pushOp 15) 0 1 "Place 15-byte item on stack.",
-    OPData 0x6f (pushOp 16) 0 1 "Place 16-byte item on stack.",
-    OPData 0x70 (pushOp 17) 0 1 "Place 17-byte item on stack.",
-    OPData 0x71 (pushOp 18) 0 1 "Place 18-byte item on stack.",
-    OPData 0x72 (pushOp 19) 0 1 "Place 19-byte item on stack.",
-    OPData 0x73 (pushOp 20) 0 1 "Place 20-byte item on stack.",
-    OPData 0x74 (pushOp 21) 0 1 "Place 21-byte item on stack.",
-    OPData 0x75 (pushOp 22) 0 1 "Place 22-byte item on stack.",
-    OPData 0x76 (pushOp 23) 0 1 "Place 23-byte item on stack.",
-    OPData 0x77 (pushOp 24) 0 1 "Place 24-byte item on stack.",
-    OPData 0x78 (pushOp 25) 0 1 "Place 25-byte item on stack.",
-    OPData 0x79 (pushOp 26) 0 1 "Place 26-byte item on stack.",
-    OPData 0x7a (pushOp 27) 0 1 "Place 27-byte item on stack.",
-    OPData 0x7b (pushOp 28) 0 1 "Place 28-byte item on stack.",
-    OPData 0x7c (pushOp 29) 0 1 "Place 29-byte item on stack.",
-    OPData 0x7d (pushOp 30) 0 1 "Place 30-byte item on stack.",
-    OPData 0x7e (pushOp 31) 0 1 "Place 31-byte item on stack.",
-    OPData 0x7f (pushOp 32) 0 1 "Place 32-byte item on stack.",-}
     OPData 0xf0 CREATE 3 1 "Create a new account with associated code.",
     OPData 0xf1 CALL 7 1 "Message-call into an account.",
     OPData 0xf2 RETURN 2 0 "Halt execution returning output data.",
@@ -133,9 +98,9 @@ code2OpMap::M.Map Word8 Operation
 code2OpMap=M.fromList $ (\(OPData opcode op _ _ _) -> (opcode, op)) <$> opDatas
 
 op2OpCode::Operation->[Word8]
-op2OpCode (PUSH theList) | length theList <= 32 && length theList >= 1 =
+op2OpCode (PUSH theList) | length theList <= 32 && not (null theList) =
   0x5F + fromIntegral (length theList):theList
-op2OpCode (PUSH []) = error $ "PUSH needs at least one word"
+op2OpCode (PUSH []) = error "PUSH needs at least one word"
 op2OpCode (PUSH x) = error $ "PUSH can only take up to 32 words: " ++ show x
 op2OpCode op =
   case M.lookup op op2CodeMap of

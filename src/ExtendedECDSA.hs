@@ -53,10 +53,10 @@ unsafeExtSignMsg h d (k,p) = do
     -- 4.1.3.1 (4.1.3.2 not required)
     (x,y) <- getAffine p
     -- 4.1.3.3
-    let r = (fromIntegral x :: FieldN)
+    let r = fromIntegral x :: FieldN
     guard (r /= 0)
     -- 4.1.3.4 / 4.1.3.5
-    let e = (fromIntegral h :: FieldN)
+    let e = fromIntegral h :: FieldN
     -- 4.1.3.6
     let s' = (e + r*d)/k
         -- Canonicalize signatures: s <= order/2
@@ -86,6 +86,6 @@ getPubKeyFromSignature (ExtendedSignature sig yIsOdd) msgHash =
   where
     r = sigR sig
     s = sigS sig
-    ys = quadraticResidue $ (fromIntegral r)^(3::Integer)+7
-    correctY = if odd (ys !! 0) == yIsOdd then ys !! 0 else ys !! 1
+    ys = quadraticResidue $ fromIntegral r^(3::Integer)+7
+    correctY = if odd (head ys) == yIsOdd then head ys else ys !! 1
     Just bigR = makePoint (fromIntegral r) correctY

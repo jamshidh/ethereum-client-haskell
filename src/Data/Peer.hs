@@ -36,7 +36,7 @@ instance RLPSerializable Peer where
   rlpDecode (RLPArray [RLPString [c1,c2,c3,c4], port, RLPString uid]) =
     Peer {
       ipAddr = IPAddr (c2w c1) (c2w c2) (c2w c3) (c2w c4),
-      peerPort = fromIntegral ((rlpDecode port)::Integer),
+      peerPort = fromInteger $ rlpDecode port,
       uniqueId = uid
       }
   rlpDecode x = error ("rlp2Peer called on non block object: " ++ show x)

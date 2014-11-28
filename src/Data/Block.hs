@@ -23,6 +23,7 @@ import qualified Data.ByteString.Base16 as B16
 import Data.ByteString.Internal
 import Data.Functor
 import Data.List
+import Data.Maybe
 import Data.Time
 import Data.Time.Clock.POSIX
 import Foreign
@@ -121,7 +122,7 @@ instance RLPSerializable BlockData where
       rlpEncode $ minGasPrice bd,
       rlpEncode $ gasLimit bd,
       rlpEncode $ gasUsed bd,
-      rlpEncode $ (round $ utcTimeToPOSIXSeconds $ timestamp bd::Integer),
+      rlpEncode (round $ utcTimeToPOSIXSeconds $ timestamp bd::Integer),
       rlpEncode $ extraData bd,
       rlpEncode $ nonce bd
       ]
@@ -191,7 +192,7 @@ noncelessBlockData2RLP bd =
       rlpEncode $ minGasPrice bd,
       rlpEncode $ gasLimit bd,
       rlpEncode $ gasUsed bd,
-      rlpEncode $ (round $ utcTimeToPOSIXSeconds $ timestamp bd::Integer),
+      rlpEncode (round $ utcTimeToPOSIXSeconds $ timestamp bd::Integer),
       rlpEncode $ extraData bd
       ]
 
@@ -218,7 +219,7 @@ powFunc b =
     sha2ByteString (nonce $ blockData b))
 
 nonceIsValid::Block->Bool
-nonceIsValid b = powFunc b * (difficulty $ blockData b) < (2::Integer)^(256::Integer)
+nonceIsValid b = powFunc b * difficulty (blockData b) < (2::Integer)^(256::Integer)
 
 addNonceToBlock::Block->Integer->Block
 addNonceToBlock b n =
@@ -228,9 +229,9 @@ addNonceToBlock b n =
 
 findNonce::Block->Integer
 findNonce b =
-  case find (nonceIsValid . addNonceToBlock b) [1..] of
-    Nothing -> error "Huh?  You ran out of numbers!!!!"
-    Just n -> n
+    fromMaybe (error "Huh?  You ran out of numbers!!!!") $
+              find (nonceIsValid . addNonceToBlock b) [1..]
+
 
 ----------
 
@@ -245,7 +246,7 @@ fastFindNonce b = do
   return $ byteString2Integer $ B.pack retData
   where
     threshold::B.ByteString
-    threshold = fst $ B16.decode $ BC.pack $ padZeros 64 $ showHex ((2::Integer)^(256::Integer) `quot` (difficulty $ blockData b)) ""
+    threshold = fst $ B16.decode $ BC.pack $ padZeros 64 $ showHex ((2::Integer)^(256::Integer) `quot` difficulty (blockData b)) ""
 
 foreign import ccall "findNonce" c_fastFindNonce::Ptr Word8->Ptr Word8->Ptr Word8->IO Int
 --foreign import ccall "fastFindNonce" c_fastFindNonce::ForeignPtr Word8->ForeignPtr Word8->ForeignPtr Word8
