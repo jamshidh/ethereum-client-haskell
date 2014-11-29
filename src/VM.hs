@@ -228,25 +228,28 @@ opGasPrice VMState{ stack=p:val:_ } SSTORE = do
       _ -> 100
 opGasPrice _ _ = return 1
 
-decreaseGas::Operation->VMState->ContextM VMState
-decreaseGas op state = do
-  val <- opGasPrice state op
+decreaseGas::Integer->VMState->VMState
+decreaseGas val state = do
   if val <= vmGasRemaining state
-    then return (state{ vmGasRemaining = vmGasRemaining state - val })
-    else return (state{ vmGasRemaining = 0,
-                        vmException = Just OutOfGasException })
+    then state{ vmGasRemaining = vmGasRemaining state - val }
+    else state{ vmGasRemaining = 0, vmException = Just OutOfGasException }
+
+decreaseGasForOp::Operation->VMState->ContextM VMState
+decreaseGasForOp op state = do
+  val <- opGasPrice state op
+  return $ decreaseGas val state
 
 runCode::Environment->VMState->ContextM VMState
 runCode env state = do
   let (op, len) = getOperationAt (envCode env) (pc state)
-  state' <- decreaseGas op state
+  state' <- decreaseGasForOp op state
   result <- runOperation op env state'
   case result of
     VMState{vmException=Just _} -> return result{ vmGasRemaining = 0 } 
     VMState{done=True} -> do
                          memSize <- liftIO $ getSize $ memory result
                          liftIO $ putStrLn ("memSize : " ++ show memSize)
-                         return $ movePC result{ vmGasRemaining = vmGasRemaining result - fromIntegral memSize } len
+                         return $ decreaseGas (fromIntegral memSize) $ movePC result len
     state2 -> runCode env $ movePC state2 len
 
 runCodeFromStart::SHAPtr->Integer->Environment->ContextM VMState

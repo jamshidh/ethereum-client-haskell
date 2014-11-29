@@ -227,7 +227,8 @@ doit socket = do
   requestNewBlocks socket
   --signedTx <- createTransaction createContractTX
   --signedTx <- createTransaction paymentContract
-  signedTx <- createTransaction sendCoinTX
+  --signedTx <- createTransaction sendCoinTX
+  signedTx <- createTransaction keyValuePublisher
                 
   liftIO $ sendMessage socket $ Transactions [signedTx]
 
