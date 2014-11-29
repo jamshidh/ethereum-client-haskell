@@ -7,9 +7,10 @@ module JCommand (
                  jcompile
                 ) where
 
-import Prelude hiding (LT)
+import Prelude hiding (LT, GT, EQ)
 
-import Data.Functor
+import Control.Applicative
+import Control.Monad
 import Util
 import VM.Opcodes
 
@@ -17,14 +18,44 @@ import ExtWord
 
 data Storage = PermStorage Word | MemStorage Word deriving (Show)
 
-data Word = Number Word256 | TheAddress | Origin | Caller | Input Word256 | PermVal Word | MemVal Word | Word :+: Word | Word :-: Word deriving (Show)
+data Word = 
+    Number Word256 | 
+    TheAddress | 
+    Origin | 
+    Caller | 
+    CallDataSize | 
+    Input Word | 
+    PermVal Word | 
+    MemVal Word | 
+    Abs Word | 
+    Word :+: Word | Word :-: Word | Word :*: Word | Neg Word | Signum Word deriving (Show)
 
-data JBool = JTrue | JFalse | Word :>=: Word deriving (Show)
+data JBool = JTrue | JFalse | 
+             Word :==: Word | 
+             Word :>: Word | 
+             Word :<: Word |
+             Word :>=: Word | 
+             Word :<=: Word 
+                  deriving (Show)
 
---instance Num Word where
---    isNum x = undefined
+instance Num Word where
+    fromInteger x = Number $ fromInteger x
+    Number x + Number y = Number $ x+y
+    x + y = x :+: y
+    Number x * Number y = Number $ x*y
+    x * y = x :*: y
+    abs (Number x) = Number $ abs x
+    abs x = Abs x
+    negate (Number x) = Number (-x)
+    negate x = Neg x
+    signum (Number x) = Number (signum x)
+    signum x = Signum x
 
-data JCommand = Storage :=: Word | If JBool [JCommand] | ReturnCode [JCommand] deriving (Show)
+
+data JCommand = Storage :=: Word | 
+                If JBool [JCommand] | 
+                While JBool [JCommand] | 
+                ReturnCode [JCommand] deriving (Show)
 
 infixl 6 :+:
 infixl 5 :-:
@@ -40,7 +71,11 @@ jcompile x = runUnique (j x) 0
 data Unique a = Unique { runUnique::Int->(Int, a) }
 
 instance Functor Unique where
-    fmap f' Unique{runUnique=f} = Unique (fmap f' . f)
+    fmap = liftM
+
+instance Applicative Unique where
+    pure = return
+    (<*>) = ap
 
 instance Monad Unique where
     (Unique runner) >>= f = Unique $ \val -> let (val', x') = runner val
@@ -55,15 +90,24 @@ pushVal::Word->[Operation]
 pushVal (Number x) = [PUSH $ integer2Bytes1 $ toInteger x]
 pushVal TheAddress = [ADDRESS]
 pushVal Caller = [CALLER]
+pushVal CallDataSize = [CALLDATASIZE]
 pushVal Origin = [ORIGIN]
-pushVal (Input x) = [PUSH $ integer2Bytes1 $ toInteger (32*x), CALLDATALOAD]
+pushVal (Input x) = pushVal x ++ [CALLDATALOAD]
 pushVal (PermVal x) = pushVal x ++ [SLOAD]
 pushVal (MemVal x) = pushVal x ++ [MLOAD]
 pushVal (x :+: y) = pushVal y ++ pushVal x ++ [ADD]
 pushVal (x :-: y) = pushVal y ++ pushVal x ++ [SUB]
+pushVal (x :*: y) = pushVal y ++ pushVal x ++ [MUL]
+pushVal (Abs x) = pushVal x ++ pushVal (Signum x) ++ [MUL]
+pushVal (Signum x) = pushVal x ++ pushVal (Number 0) ++ [GT] ++ pushVal x ++ pushVal (Number 0) ++ [LT, SUB]
+pushVal (Neg x) = pushVal x ++ [NEG]
 
 pushBoolVal::JBool->[Operation]
+pushBoolVal (x :==: y) = pushVal y ++ pushVal x ++ [EQ]
+pushBoolVal (x :>: y) = pushVal y ++ pushVal x ++ [GT]
+pushBoolVal (x :<: y) = pushVal y ++ pushVal x ++ [LT]
 pushBoolVal (x :>=: y) = pushVal y ++ pushVal x ++ [NOT, LT]
+pushBoolVal (x :<=: y) = pushVal y ++ pushVal x ++ [NOT, GT]
 pushBoolVal JTrue = [PUSH [1]]
 pushBoolVal JFalse = [PUSH [0]]
 
@@ -76,6 +120,11 @@ jCommand2Op (If cond code) = do
     after <- getUnique "after"
     compiledCode <- j code
     return $ pushBoolVal cond ++ [NOT, PUSHLABEL after, JUMPI] ++ compiledCode ++ [LABEL after]
+jCommand2Op (While cond code) = do
+    after <- getUnique "after"
+    before <- getUnique "before"
+    compiledCode <- j code
+    return $ [LABEL before] ++ pushBoolVal cond ++ [NOT, PUSHLABEL after, JUMPI] ++ compiledCode ++ [PUSHLABEL before, JUMP] ++ [LABEL after]
 jCommand2Op (ReturnCode code) = do
   codeBegin <- getUnique "begin"
   codeEnd <- getUnique "end"

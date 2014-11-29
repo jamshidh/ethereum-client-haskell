@@ -106,8 +106,8 @@ paymentContract =
                               [
                                If (PermVal fromAddr :>=: val) 
                                       [
-                                       PermStorage fromAddr :=: PermVal fromAddr :-: val,
-                                       PermStorage toAddr :=: PermVal toAddr :+: val
+                                       PermStorage fromAddr :=: PermVal fromAddr - val,
+                                       PermStorage toAddr :=: PermVal toAddr + val
                                       ]
                              
                               ]
@@ -118,3 +118,39 @@ sendCoinTX =
   createMessage 0 2000 (Address 0x9f840fe058ce3d84e319b8c747accc1e52f69426)
   (B.pack $ word256ToBytes 0x1 ++ word256ToBytes 500)
 
+
+
+
+keyValuePublisher::Transaction
+keyValuePublisher = 
+  createContract (1000*finney) 1000
+                     $ createInit
+                            [
+                             PermStorage 69 :=: Caller
+                            ]
+                           (
+                            let
+                                inputP = MemStorage (Number 0)
+                                inputPr = MemVal (Number 0)
+                            in
+                              [
+                               If (Caller :==: PermVal (Number 69)) 
+                                      [
+                                       While (inputPr :<: CallDataSize)
+                                                 [
+                                                  PermStorage (Input inputPr) :=: Input (inputPr + 32),
+                                                  inputP :=: inputPr + 64
+                                                 ]
+                                      ]
+                             
+                              ]
+                           )
+
+
+{-
+
+    (when (= (caller) @@69)
+      (for {} (< @i (calldatasize)) [i](+ @i 64)
+        [[ (calldataload @i) ]] (calldataload (+ @i 32))
+      )
+-}
