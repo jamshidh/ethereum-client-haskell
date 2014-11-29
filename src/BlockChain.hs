@@ -157,7 +157,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
                      addressStateNonce=0,
                      balance=0,
                      contractRoot=
-                         if isBlankDB $ stateRoot $ storageDB cxt
+                         if stateRoot (storageDB cxt) == blankRoot
                          then Nothing
                          else Just $ stateRoot $ storageDB cxt,
                      codeHash=hash result
@@ -209,7 +209,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
           cxt <- get
           putAddressState (to ut)
                  addressState{
-                             contractRoot=if isBlankDB $ stateRoot $ storageDB cxt
+                             contractRoot=if stateRoot (storageDB cxt) == blankRoot
                                           then Nothing
                                           else Just $ stateRoot $ storageDB cxt
                  }
