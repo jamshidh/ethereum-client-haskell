@@ -123,7 +123,7 @@ sendCoinTX =
 
 keyValuePublisher::Transaction
 keyValuePublisher = 
-  createContract (1000*finney) 1000
+  createContract (1000*finney) 2000
                      $ createInit
                             [
                              PermStorage 69 :=: Caller
@@ -145,6 +145,13 @@ keyValuePublisher =
                              
                               ]
                            )
+
+
+sendKeyVal::Transaction
+sendKeyVal =
+  createMessage 0 2000 (Address 0x9f840fe058ce3d84e319b8c747accc1e52f69426)
+  (B.pack $ word256ToBytes 1000 ++ word256ToBytes 2000 ++ word256ToBytes 1234 ++ word256ToBytes 1)
+
 
 
 {-

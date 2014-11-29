@@ -203,6 +203,14 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
         Just e -> do
           liftIO $ putStrLn $ CL.red $ show e
           --addToBalance tAddr (-value ut) --zombie account, money lost forever
+          addressState <- getAddressState (to ut)
+          cxt <- get
+          putAddressState (to ut)
+                 addressState{
+                             contractRoot=if stateRoot (storageDB cxt) == blankRoot
+                                          then Nothing
+                                          else Just $ stateRoot $ storageDB cxt
+                 }
           pay (whoSignedThisTransaction t) (to ut) (value ut)
         Nothing -> do
           addressState <- getAddressState (to ut)

@@ -9,8 +9,6 @@ import Data.Functor
 import qualified Data.Map as M
 import Data.Maybe
 
-import ExtWord
-
 --import Debug.Trace
 
 data Operation = 
@@ -107,8 +105,8 @@ op2OpCode op =
     Just x -> [x]
     Nothing -> error $ "op is missing in op2CodeMap: " ++ show op
 
-opLen::Operation->Word256
-opLen (PUSH x) = 1 + fromIntegral (length x)
+opLen::Operation->Int
+opLen (PUSH x) = 1 + length x
 opLen _ = 1
 
 opCode2Op::B.ByteString->(Operation, Int)

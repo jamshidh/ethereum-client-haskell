@@ -39,11 +39,11 @@ word2562Bool _ = False
 
 binaryAction::(Word256->Word256->Word256)->Environment->VMState->ContextM VMState
 binaryAction action _ state@VMState{stack=x:y:rest} = return state{stack=x `action` y:rest}
-binaryAction _ env state = liftIO $ addErr "stack did not contain enough elements" (envCode env) state
+binaryAction _ _ state = return state{vmException=Just StackTooSmallException}
 
 unaryAction::(Word256->Word256)->Environment->VMState->ContextM VMState
 unaryAction action _ state@VMState{stack=x:rest} = return state{stack=action x:rest}
-unaryAction _ env state = liftIO $ addErr "stack did not contain enough elements" (envCode env) state
+unaryAction _ _ state = return state{vmException=Just StackTooSmallException}
 
 
 
@@ -158,12 +158,15 @@ runOperation SSTORE _ state@VMState{stack=(p:val:rest)} = do
     then deleteStorageKey (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
     else putStorageKeyVal (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p) (rlpEncode $ rlpSerialize $ rlpEncode $ toInteger val)
   return $ state { stack=rest }
+runOperation SSTORE _ state =
+  return $ state { vmException=Just StackTooSmallException } 
 
+--TODO- refactor so that I don't have to use this -1 hack
 runOperation JUMP _ state@VMState{stack=(p:rest)} =
-  return $ state { stack=rest, pc=fromIntegral p }
+  return $ state { stack=rest, pc=fromIntegral p - 1} -- Subtracting 1 to compensate for the pc-increment that occurs every step.
 
 runOperation JUMPI _ state@VMState{stack=(p:cond:rest)} =
-  return $ state { stack=rest, pc=if word2562Bool cond then fromIntegral p else pc state }
+  return $ state { stack=rest, pc=if word2562Bool cond then fromIntegral p - 1 else pc state }
 
 runOperation PC _ state =
   return state{stack=fromIntegral (pc state):stack state}
@@ -244,6 +247,7 @@ runCode env state = do
   let (op, len) = getOperationAt (envCode env) (pc state)
   state' <- decreaseGasForOp op state
   result <- runOperation op env state'
+  liftIO $ putStrLn $ "pc is " ++ show (pc result)
   case result of
     VMState{vmException=Just _} -> return result{ vmGasRemaining = 0 } 
     VMState{done=True} -> do

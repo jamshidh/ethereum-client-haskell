@@ -228,7 +228,8 @@ doit socket = do
   --signedTx <- createTransaction createContractTX
   --signedTx <- createTransaction paymentContract
   --signedTx <- createTransaction sendCoinTX
-  signedTx <- createTransaction keyValuePublisher
+  --signedTx <- createTransaction keyValuePublisher
+  signedTx <- createTransaction sendKeyVal
                 
   liftIO $ sendMessage socket $ Transactions [signedTx]
 
