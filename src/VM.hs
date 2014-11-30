@@ -106,9 +106,6 @@ runOperation CODECOPY Environment{envCode=Code c} state@VMState{stack=memP:codeP
   liftIO $ mStoreByteString (memory state) memP $ B.take (fromIntegral size) $ B.drop (fromIntegral codeP) c
   afterMemory <- liftIO $ getSize (memory state)
   let extraMemory = afterMemory - beforeMemSize 
-  liftIO $ putStrLn $ "before: " ++ show beforeMemSize
-  liftIO $ putStrLn $ "after: " ++ show afterMemory
-  liftIO $ putStrLn $ "extra: " ++ show extraMemory
   return state{stack=rest} -- temporarily moved     , vmGasRemaining = vmGasRemaining state - fromIntegral extraMemory}
 
 runOperation GASPRICE Environment{envGasPrice=gp} state = return state{stack=fromIntegral gp:stack state}
@@ -216,7 +213,7 @@ movePC state l = state{ pc=pc state + l }
 opGasPrice::VMState->Operation->ContextM Integer
 opGasPrice _ STOP = return 0
 --opGasPrice _ MSTORE = return 2
-opGasPrice VMState{ stack=_:_:_ } SLOAD = return 20
+opGasPrice VMState{ stack=_:_ } SLOAD = return 20
 opGasPrice VMState{ stack=p:val:_ } SSTORE = do
   oldVals <- getStorageKeyVals (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
   let oldVal =
@@ -247,12 +244,10 @@ runCode env state = do
   let (op, len) = getOperationAt (envCode env) (pc state)
   state' <- decreaseGasForOp op state
   result <- runOperation op env state'
-  liftIO $ putStrLn $ "pc is " ++ show (pc result)
   case result of
     VMState{vmException=Just _} -> return result{ vmGasRemaining = 0 } 
     VMState{done=True} -> do
                          memSize <- liftIO $ getSize $ memory result
-                         liftIO $ putStrLn ("memSize : " ++ show memSize)
                          return $ decreaseGas (fromIntegral memSize) $ movePC result len
     state2 -> runCode env $ movePC state2 len
 

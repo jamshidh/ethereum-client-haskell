@@ -14,7 +14,7 @@ import VM.Code
 import VM.Labels
 import VM.Opcodes
 
-import Debug.Trace
+--import Debug.Trace
 
 createContract::Integer->Integer->Code->Transaction
 createContract val gl code = ContractCreationTX  {
@@ -71,9 +71,9 @@ simpleStorageTX =
     ]
 
 createInit::[JCommand]->[JCommand]->Code
-createInit initFunc contract = trace (intercalate "-" $ show <$> contract) $
-                               trace (intercalate "\n    " $ fmap show $ snd $ jcompile $ initFunc ++ [ReturnCode contract]) $ 
-  compile $ lcompile $ snd $ jcompile $ initFunc ++ [ReturnCode contract]
+createInit initFunc contract = -- trace (intercalate "-" $ show <$> contract) $
+--                               trace (intercalate "\n    " $ fmap show $ snd $ jcompile $ initFunc ++ [ReturnCode contract]) $  do
+  compile $ lcompile $ snd $ jcompile $ initFunc ++ [ReturnCode $ compile $ lcompile $ snd $ jcompile contract]
 
 createContractTX::Transaction
 createContractTX =

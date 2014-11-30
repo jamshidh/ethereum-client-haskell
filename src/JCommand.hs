@@ -11,8 +11,10 @@ import Prelude hiding (LT, GT, EQ)
 
 import Control.Applicative
 import Control.Monad
+
 import Util
 import VM.Opcodes
+import VM.Code
 
 import ExtWord
 
@@ -55,7 +57,7 @@ instance Num Word where
 data JCommand = Storage :=: Word | 
                 If JBool [JCommand] | 
                 While JBool [JCommand] | 
-                ReturnCode [JCommand] deriving (Show)
+                ReturnCode Code deriving (Show)
 
 infixl 6 :+:
 infixl 5 :-:
@@ -125,10 +127,9 @@ jCommand2Op (While cond code) = do
     before <- getUnique "before"
     compiledCode <- j code
     return $ [LABEL before] ++ pushBoolVal cond ++ [NOT, PUSHLABEL after, JUMPI] ++ compiledCode ++ [PUSHLABEL before, JUMP] ++ [LABEL after]
-jCommand2Op (ReturnCode code) = do
+jCommand2Op (ReturnCode (Code codeBytes)) = do
   codeBegin <- getUnique "begin"
   codeEnd <- getUnique "end"
-  compiledCode <- j code
   return $ 
              [ 
               PUSHDIFF codeBegin codeEnd,
@@ -139,4 +140,4 @@ jCommand2Op (ReturnCode code) = do
               PUSH [0],
               RETURN
              ]
-             ++ [LABEL codeBegin] ++ compiledCode ++ [LABEL codeEnd]
+             ++ [LABEL codeBegin, DATA codeBytes, LABEL codeEnd]

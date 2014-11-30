@@ -6,6 +6,7 @@ module VM.Labels
      getNextLabels
     ) where
 
+import qualified Data.ByteString as B
 import qualified Data.Map as M
 import Data.Maybe
 
@@ -13,7 +14,7 @@ import ExtWord
 import Util
 import VM.Opcodes
 
-import Debug.Trace
+--import Debug.Trace
 
 type Labels = M.Map String Word256
 
@@ -42,10 +43,9 @@ getBetterLabels ops oldLabels = M.fromList $ op2Labels oldLabels 0 ops
 
       opSize::Labels->Operation->Word256
       opSize _ (LABEL _) = 0
+      opSize _ (DATA bytes) = fromIntegral $ B.length bytes
       opSize labels (PUSHLABEL x) = 1+fromIntegral (length $ integer2Bytes $ fromIntegral $ getLabel labels x)
-      opSize labels (PUSHDIFF start end) = trace ("subtract: " ++ show (getLabel labels start - getLabel labels end)) $ 
-                                           trace ("start: " ++ show (getLabel labels start)) $ 
-                                           trace ("end: " ++ show (getLabel labels end)) $ 
+      opSize labels (PUSHDIFF start end) = 
           1+fromIntegral (length $ integer2Bytes $ fromIntegral (getLabel labels end - getLabel labels start))
       opSize _ (PUSH x) = 1+fromIntegral (length x)
       opSize _ _ = 1

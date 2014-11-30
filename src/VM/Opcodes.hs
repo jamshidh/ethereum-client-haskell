@@ -19,7 +19,7 @@ data Operation =
     PUSH [Word8] | 
     CREATE | CALL | RETURN | SUICIDE |
     --Pseudo Opcodes
-    LABEL String | PUSHLABEL String | PUSHDIFF String String deriving (Show, Eq, Ord)
+    LABEL String | PUSHLABEL String | PUSHDIFF String String | DATA B.ByteString deriving (Show, Eq, Ord)
 
 data OPData = OPData Word8 Operation Int Int String
 
@@ -100,6 +100,7 @@ op2OpCode (PUSH theList) | length theList <= 32 && not (null theList) =
   0x5F + fromIntegral (length theList):theList
 op2OpCode (PUSH []) = error "PUSH needs at least one word"
 op2OpCode (PUSH x) = error $ "PUSH can only take up to 32 words: " ++ show x
+op2OpCode (DATA bytes) = B.unpack bytes
 op2OpCode op =
   case M.lookup op op2CodeMap of
     Just x -> [x]
