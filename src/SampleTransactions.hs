@@ -2,8 +2,6 @@
 module SampleTransactions where
 
 import qualified Data.ByteString as B
-import Data.Functor
-import Data.List
 
 import Data.Address
 import Data.Transaction
