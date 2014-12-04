@@ -12,11 +12,12 @@ import Data.Binary
 import Data.ByteString.Internal
 import Network.Haskoin.Internals hiding (Address)
 import Numeric
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import ExtendedECDSA
 
 import Data.Address
-import Colors
+import qualified Colors as CL
 import Format
 import Data.RLP
 import SHA
@@ -36,7 +37,7 @@ data SignedTransaction =
 
 instance Format SignedTransaction where
   format SignedTransaction{unsignedTransaction = x, v=v', r=r', s=s'} =
-      blue "Transaction" ++
+      CL.blue "Transaction" ++
            tab (
                 "\n" ++
                 format x ++
@@ -88,8 +89,9 @@ instance RLPSerializable SignedTransaction where
         (RLPArray [n, gp, gl, toAddr, val, i]) = rlpEncode (unsignedTransaction t)
 
 whoSignedThisTransaction::SignedTransaction->Address
-whoSignedThisTransaction SignedTransaction{unsignedTransaction=ut, v=v', r=r', s=s'} =
+whoSignedThisTransaction SignedTransaction{unsignedTransaction=ut, v=v', r=r', s=s'} = 
     pubKey2Address (getPubKeyFromSignature xSignature theHash)
         where
+          ExtendedSignature (Signature qqqqrSig qqqqsSig) _ = xSignature
           xSignature = ExtendedSignature (Signature (fromInteger r') (fromInteger s')) (0x1c == v')
           SHA theHash = hash (rlpSerialize $ rlpEncode ut)

@@ -19,6 +19,7 @@ import System.Directory
 
 import Constants
 import Database.MerklePatricia
+import SHA
 
 type BlockDB = DB.DB
 type CodeDB = DB.DB
@@ -27,6 +28,7 @@ type StorageDB = MPDB
 
 data Context =
   Context {
+    neededBlockHashes::[SHA],
     blockDB::BlockDB,
     detailsDB::DetailsDB,
     stateDB::MPDB,
@@ -57,6 +59,7 @@ openDBs useCppDBs = do
   ddb <- DB.open (homeDir ++ dbDir useCppDBs ++ detailsDBPath) options
   sdb <- DB.open (homeDir ++ dbDir useCppDBs ++ stateDBPath) options
   return $ Context
+      []
       bdb
       ddb
       MPDB{ ldb=sdb, stateRoot=error "no stateRoot defined"}

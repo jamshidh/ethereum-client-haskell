@@ -67,27 +67,25 @@ data Block = Block {
   } deriving (Show)
 
 instance Format Block where
-  format b@Block{blockData=bd, receiptTransactions=receipts, blockUncles=[]} =
+  format b@Block{blockData=bd, receiptTransactions=receipts, blockUncles=uncles} =
     CL.blue ("Block #" ++ show (number bd)) ++ " " ++
     tab (show (pretty $ blockHash b) ++ "\n" ++
          format bd ++
          (if null receipts
-          then "        (no transactions, no uncles)"
-          else tab (intercalate "\n    " (format <$> receipts))))
-  format _ = 
-    error "format for Block not defined yet for blockUncles /= []."
+          then "        (no transactions)\n"
+          else tab (intercalate "\n    " (format <$> receipts))) ++
+         (if null uncles
+          then "        (no uncles)"
+          else tab ("Uncles:" ++ tab ("\n" ++ intercalate "\n    " (format <$> uncles)))))
               
 instance RLPSerializable Block where
-  rlpDecode (RLPArray [bd, RLPArray transactionReceipts, RLPArray []]) =
-    Block (rlpDecode bd) (rlpDecode <$> transactionReceipts) []
-  rlpDecode (RLPArray [_, RLPArray _, RLPArray _]) =
-    error "rlpDecode for Block not defined yet for blockUncles /= []."
+  rlpDecode (RLPArray [bd, RLPArray transactionReceipts, RLPArray uncles]) =
+    Block (rlpDecode bd) (rlpDecode <$> transactionReceipts) (rlpDecode <$> uncles)
   rlpDecode (RLPArray arr) = error ("rlpDecode for Block called on object with wrong amount of data, length arr = " ++ show arr)
   rlpDecode x = error ("rlpDecode for Block called on non block object: " ++ show x)
 
-  rlpEncode Block{blockData=bd, receiptTransactions=receipts, blockUncles=[]} =
-    RLPArray [rlpEncode bd, RLPArray (rlpEncode <$> receipts), RLPArray []]
-  rlpEncode _ = error "rlpEncode for Block not defined yet for blockUncles /= []."
+  rlpEncode Block{blockData=bd, receiptTransactions=receipts, blockUncles=uncles} =
+    RLPArray [rlpEncode bd, RLPArray (rlpEncode <$> receipts), RLPArray $ rlpEncode <$> uncles]
 
 instance RLPSerializable BlockData where
   rlpDecode (RLPArray [v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13]) =
@@ -128,7 +126,7 @@ instance RLPSerializable BlockData where
       ]
 
 blockHash::Block->SHA
-blockHash = hash . rlpSerialize . rlpEncode
+blockHash (Block info _ _) = hash . rlpSerialize . rlpEncode $ info
 
 instance Format BlockData where
   format b = 
@@ -155,9 +153,9 @@ genesisBlock =
          parentHash = SHA 0,
          unclesHash = hash (B.pack [0xc0]), 
          coinbase = Address 0,
-         bStateRoot = SHAPtr $ B.pack $ integer2Bytes 0x8dbd704eb38d1c2b73ee4788715ea5828a030650829703f077729b2b613dd206,
+         bStateRoot = SHAPtr $ B.pack $ integer2Bytes 0x08bf6a98374f333b84e7d063d607696ac7cbbd409bd20fbe6a741c2dfc0eb285,
          transactionsTrie = 0,
-         difficulty = 0x400000, --2^22,
+         difficulty = 0x020000, --1 << 17
          number = 0,
          minGasPrice = 0,
          gasLimit = 1000000,

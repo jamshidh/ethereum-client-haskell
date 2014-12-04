@@ -91,7 +91,7 @@ instance RLPSerializable Transaction where
         rlpEncode n,
         rlpEncode gp,
         rlpEncode gl,
-        rlpEncode $ Address 0,
+        rlpEncode (0::Integer),
         rlpEncode v,
         rlpEncode init'
         ]

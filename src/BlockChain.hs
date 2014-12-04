@@ -2,6 +2,7 @@
 
 module BlockChain (
   initializeBlockChain,
+  nextDifficulty,
   addBlock,
   addBlocks,
   getBestBlock,
@@ -11,7 +12,6 @@ module BlockChain (
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.State
-import qualified Crypto.Hash.SHA3 as C
 import Data.Binary hiding (get)
 import Data.Bits
 import qualified Data.ByteString as B
@@ -49,13 +49,13 @@ import VM.VMState
 initializeBlockChain::ContextM ()
 initializeBlockChain = do
   let bytes = rlpSerialize $ rlpEncode genesisBlock
-  blockDBPut (C.hash 256 bytes) bytes
+  blockDBPut (BL.toStrict $ encode $ blockHash $ genesisBlock) bytes
   detailsDBPut "best" (BL.toStrict $ encode $ blockHash genesisBlock)
 
 nextDifficulty::Integer->UTCTime->UTCTime->Integer
 nextDifficulty oldDifficulty oldTime newTime =
     if round (utcTimeToPOSIXSeconds newTime) >=
-           (round (utcTimeToPOSIXSeconds oldTime) + 42::Integer)
+           (round (utcTimeToPOSIXSeconds oldTime) + 5::Integer)
     then oldDifficulty - oldDifficulty `shiftR` 10
     else oldDifficulty + oldDifficulty `shiftR` 10
 
@@ -160,7 +160,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
                          if stateRoot (storageDB cxt) == blankRoot
                          then Nothing
                          else Just $ stateRoot $ storageDB cxt,
-                     codeHash=hash result
+                     codeHash=Just $ hash result
                      }
           liftIO $ putStrLn $ "paying: " ++ show (value ut)
           pay tAddr newAddress (value ut)
@@ -169,11 +169,11 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
   recipientAddressState <- getAddressState (to ut)
 
   liftIO $ putStrLn $ "Looking for contract code for: " ++ show (pretty $ to ut)
-  liftIO $ putStrLn $ "codeHash is: " ++ show (pretty $ sha2SHAPtr $ codeHash recipientAddressState)
+  --liftIO $ putStrLn $ "codeHash is: " ++ show (pretty $ sha2SHAPtr $ codeHash recipientAddressState)
 
   contractCode <- 
       fromMaybe (error "no contract code") <$>
-                getCode (sha2SHAPtr $ codeHash recipientAddressState)
+                getCode (codeHash recipientAddressState)
 
   liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty (Code contractCode))))
 
@@ -264,7 +264,7 @@ addTransactions b (t:rest) = do
   addTransactions b rest
   
 addBlock::Block->ContextM ()
-addBlock b@Block{blockData=bd} = do
+addBlock b@Block{blockData=bd, blockUncles=uncles} = do
   maybeParent <- getBlock $ parentHash bd
   case maybeParent of
     Nothing ->
@@ -272,7 +272,12 @@ addBlock b@Block{blockData=bd} = do
       "Block will not be added now, but will be requested and added later"
     Just parentBlock -> do
       setStateRoot $ bStateRoot $ blockData parentBlock
-      addToBalance (coinbase bd) (1500*finney)
+      let rewardBase = 1500 * finney
+      addToBalance (coinbase bd) rewardBase
+
+      forM_ uncles $ \uncle -> do
+                          addToBalance (coinbase bd) (rewardBase `quot` 32)
+                          addToBalance (coinbase uncle) (rewardBase*15 `quot` 16)
 
       let transactions = theTransaction <$> receiptTransactions b
       addTransactions b transactions
@@ -285,24 +290,27 @@ addBlock b@Block{blockData=bd} = do
         Right () -> return ()
         Left err -> error err
       let bytes = rlpSerialize $ rlpEncode b
-      blockDBPut (C.hash 256 bytes) bytes
+      blockDBPut (BL.toStrict $ encode $ blockHash b) bytes
       replaceBestIfBetter b
 
 getBestBlockHash::ContextM (Maybe SHA)
 getBestBlockHash = 
   fmap (decode . BL.fromStrict) <$> detailsDBGet "best"
 
-getBestBlock::ContextM (Maybe Block)
+getBestBlock::ContextM Block
 getBestBlock = do
   maybeH <- getBestBlockHash
   case maybeH of
-    Nothing -> return Nothing
-    Just h -> getBlock h
+    Nothing -> do
+                initializeStateDB
+                initializeBlockChain 
+                return genesisBlock
+    Just h -> fromMaybe (error $ "Missing block in database: " ++ show (pretty h)) <$> getBlock h
 
 replaceBestIfBetter::Block->ContextM ()
 replaceBestIfBetter b = do
-  maybeBest <- getBestBlock
-  case maybeBest of
-    Just best | number (blockData best) >= number (blockData b) -> return ()
-    _ -> detailsDBPut "best" (BL.toStrict $ encode $ blockHash b)
+  best <- getBestBlock
+  if number (blockData best) >= number (blockData b) 
+       then return ()
+       else detailsDBPut "best" (BL.toStrict $ encode $ blockHash b)
 

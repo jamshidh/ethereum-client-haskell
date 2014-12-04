@@ -26,7 +26,8 @@ doit::SHAPtr->ContextM ()
 doit sr = do
     setStateRoot sr
     kvs <- getKeyVals ""
-    liftIO $ putStrLn $ displayS (renderPretty 1.0 200 $ vsep $ formatKV <$> filter (filterUnnecessary . fst) kvs) ""
+    liftIO $ putStrLn $ displayS (renderPretty 1.0 200 $ vsep $ formatKV <$> kvs) ""
+    --liftIO $ putStrLn $ displayS (renderPretty 1.0 200 $ vsep $ formatKV <$> filter (filterUnnecessary . fst) kvs) ""
 
 main = do
   [theType, addr] <- getArgs

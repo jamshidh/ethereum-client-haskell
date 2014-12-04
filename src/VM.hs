@@ -102,10 +102,10 @@ runOperation CALLDATACOPY Environment{envInputData=d} state@VMState{stack=memP:c
 runOperation CODESIZE Environment{envCode=c} state = return state{stack=fromIntegral (codeLength c):stack state}
 
 runOperation CODECOPY Environment{envCode=Code c} state@VMState{stack=memP:codeP:size:rest} = do
-  beforeMemSize <- liftIO $ getSize $ memory state
+  --beforeMemSize <- liftIO $ getSize $ memory state
   liftIO $ mStoreByteString (memory state) memP $ B.take (fromIntegral size) $ B.drop (fromIntegral codeP) c
-  afterMemory <- liftIO $ getSize (memory state)
-  let extraMemory = afterMemory - beforeMemSize 
+  --afterMemory <- liftIO $ getSize (memory state)
+  --let extraMemory = afterMemory - beforeMemSize 
   return state{stack=rest} -- temporarily moved     , vmGasRemaining = vmGasRemaining state - fromIntegral extraMemory}
 
 runOperation GASPRICE Environment{envGasPrice=gp} state = return state{stack=fromIntegral gp:stack state}

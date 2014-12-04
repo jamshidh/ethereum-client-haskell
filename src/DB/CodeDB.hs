@@ -9,12 +9,13 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 
 import Context
-import Database.MerklePatricia
 import ExtDBs
+import SHA
 
 addCode::B.ByteString->ContextM ()
 addCode = codeDBPut
 
-getCode::SHAPtr->ContextM (Maybe B.ByteString)
-getCode theHash = 
-  codeDBGet (BL.toStrict $ encode theHash)
+getCode::Maybe SHA->ContextM (Maybe B.ByteString)
+getCode Nothing = return $ Just B.empty 
+getCode (Just theHash) = 
+  codeDBGet (BL.toStrict $ encode $ sha2SHAPtr theHash)

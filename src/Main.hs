@@ -8,30 +8,25 @@ import Control.Monad.IO.Class
 import Control.Monad.State
 import Control.Monad.Trans.Resource
 import qualified Crypto.Hash.SHA3 as C
-import Data.Binary.Put
 import Data.Bits
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
-import Data.ByteString.Internal
-import Data.Function
 import Data.Functor
-import Data.List
-import Data.Maybe
 import Data.Time.Clock
-import Data.Time.Clock.POSIX
 import Data.Word
 import Network.Haskoin.Crypto hiding (Address)
 import Network.Socket (socketToHandle)
 import Numeric
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import System.Entropy
 import System.IO
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Network.Simple.TCP
 
 import Data.RLP
 
 import BlockChain
+import BlockSynchronizer
 import qualified Colors as CL
 import Constants
 import Context
@@ -57,21 +52,6 @@ Just prvKey = makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061
 --6ccf6b5c33ae2017a6c76b8791ca61276a69ab8e --cpp coinbase
 
 
-ethereumHeader::ByteString->Put
-ethereumHeader payload = do
-  putWord32be 0x22400891
-  putWord32be $ fromIntegral $ B.length payload
-  putByteString payload
-
-sendCommand::Socket->ByteString->IO ()
-sendCommand socket payload = do
-  let theData2 = runPut $ ethereumHeader payload
-  send socket $ B.concat $ BL.toChunks theData2
-
-sendMessage::Socket->Message->IO ()
-sendMessage socket msg = do
-  putStrLn (CL.green "msg>>>>>: " ++ format msg)
-  sendCommand socket $ rlpSerialize $ wireMessage2Obj msg
 
 getNextBlock::Block->UTCTime->ContextM Block
 getNextBlock b ts = do
@@ -95,12 +75,7 @@ getNextBlock b ts = do
         coinbase=prvKey2Address prvKey,
         bStateRoot = sr,
         transactionsTrie = 0,
-        difficulty =
-          if round (utcTimeToPOSIXSeconds ts) >=
-             (round (utcTimeToPOSIXSeconds (timestamp bd)) + 42::Integer)
-          then difficulty bd - difficulty bd `shiftR` 10
-          else difficulty bd + difficulty bd `shiftR` 10,
-        --20000000, --13269813,
+        difficulty = nextDifficulty (difficulty bd) (timestamp bd) ts,
         number = number bd + 1,
         minGasPrice = 10000000000000, --minGasPrice bd,
         gasLimit = max 125000 ((gasLimit bd * 1023 + gasUsed bd *6 `quot` 5) `quot` 1024),
@@ -134,7 +109,6 @@ ifBlockInDBSubmitNextBlock socket b = do
     Nothing -> return ()
     _ -> submitNextBlock socket b
 
-
 handlePayload::Socket->B.ByteString->ContextM ()
 handlePayload socket payload = do
   let rlpObject = rlpDeserialize payload
@@ -145,15 +119,17 @@ handlePayload socket payload = do
     GetPeers -> do
       liftIO $ sendMessage socket $ Peers []
       liftIO $ sendMessage socket GetPeers
+    BlockHashes blockHashes -> handleNewBlockHashes socket blockHashes
     Blocks blocks -> do
-      liftIO $ putStrLn "Submitting new blocks"
-      addBlocks $ sortBy (compare `on` number . blockData) blocks
-      liftIO $ putStrLn "Blocks have been submitted"
+      handleNewBlocks socket blocks
       case blocks of
         [] -> return ()
         [b] -> ifBlockInDBSubmitNextBlock socket b
-        _ -> requestNewBlocks socket
-      
+        _ -> return () -- requestNewBlocks socket
+
+    Status{latestHash=lh} ->
+        requestNewBlocks socket lh
+
       --sendMessage socket $ Blocks [addNonceToBlock newBlock n]
     GetTransactions -> do
       liftIO $ sendMessage socket $ Transactions []
@@ -180,40 +156,22 @@ readAndOutput socket = do
       handlePayload socket $ B.pack pl
       handleAllPayloads rest
 
-getBestBlockHash'::ContextM SHA
-getBestBlockHash' = do
-  maybeBestBlockHash <- getBestBlockHash
-
-  case maybeBestBlockHash of
-    Nothing -> do
-      initializeBlockChain
-      _ <- initializeStateDB
-      return $ blockHash genesisBlock
-    Just x -> return x
-
-requestNewBlocks::Socket->ContextM ()
-requestNewBlocks socket = do
-  bestBlockHash <- getBestBlockHash'
-  liftIO $ putStrLn $ "Best block hash: " ++ show (pretty bestBlockHash)
-  liftIO $ sendMessage socket $ GetChain [bestBlockHash] 0x40
+requestNewBlocks::Socket->SHA->ContextM ()
+requestNewBlocks socket latestBlockSHA = do
+  --liftIO $ sendMessage socket $ GetBlockHashes [latestBlockSHA] 0x1000
+  handleNewBlockHashes socket [latestBlockSHA]
 
 mkHello::IO Message
 mkHello = do
   peerId <- getEntropy 64
   return Hello {
-               version = 23,
+               version = 0,
                clientId = "Ethereum(G)/v0.6.4//linux/Haskell",
-               capability = [ProvidesPeerDiscoveryService,
-                             ProvidesTransactionRelayingService,
-                             ProvidesBlockChainQueryingService],
+               capability = [ETH, SHH],
                port = 30303,
                nodeId = fromIntegral $ byteString2Integer peerId
              }
 
-
-sendHello::Socket->IO ()
-sendHello socket = 
-  sendMessage socket =<< mkHello
 
 createTransaction::Transaction->ContextM SignedTransaction
 createTransaction t = do
@@ -222,14 +180,16 @@ createTransaction t = do
 
 doit::Socket->ContextM ()
 doit socket = do
-  b <- fromMaybe (error "Missing best block") <$> getBestBlock
-  setStateRoot $ bStateRoot $ blockData b
-  requestNewBlocks socket
+  (setStateRoot . bStateRoot . blockData) =<< getBestBlock
+  --requestNewBlocks socket
   --signedTx <- createTransaction createContractTX
   --signedTx <- createTransaction paymentContract
   --signedTx <- createTransaction sendCoinTX
   --signedTx <- createTransaction keyValuePublisher
   signedTx <- createTransaction sendKeyVal
+
+  liftIO $ print $ whoSignedThisTransaction signedTx
+
                 
   liftIO $ sendMessage socket $ Transactions [signedTx]
 
@@ -238,10 +198,12 @@ doit socket = do
   
 
 main::IO ()    
+
+--main = connect "185.43.109.23" "30303" $ \(socket, _) -> do
 main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
 --main = connect "192.168.0.2" "30303" $ \(socket, _) -> do
   putStrLn "Connected"
-  sendHello socket
+  sendMessage socket =<< mkHello
 
   runResourceT $ do
     cxt <- openDBs False
@@ -249,5 +211,4 @@ main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
     _ <- liftIO $ runStateT (doit socket) cxt
 
     return ()
-  
 

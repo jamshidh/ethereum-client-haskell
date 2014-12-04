@@ -25,11 +25,11 @@ import Util
 
 --import Debug.Trace
 
-data AddressState = AddressState { addressStateNonce::Integer, balance::Integer, contractRoot::Maybe SHAPtr, codeHash::SHA } deriving (Show)
+data AddressState = AddressState { addressStateNonce::Integer, balance::Integer, contractRoot::Maybe SHAPtr, codeHash::Maybe SHA } deriving (Show)
 
 
 blankAddressState::AddressState
-blankAddressState = AddressState { addressStateNonce=0, balance=0, contractRoot=Nothing, codeHash=hash B.empty }
+blankAddressState = AddressState { addressStateNonce=0, balance=0, contractRoot=Nothing, codeHash=Nothing }
 
 instance Format AddressState where
   format a = CL.blue "AddressState" ++
@@ -49,14 +49,17 @@ instance RLPSerializable AddressState where
     case contractRoot a of
          Nothing -> rlpEncode (0::Integer)
          Just x -> rlpEncode x,
-    rlpEncode $ codeHash a]
+    case codeHash a of
+         Nothing -> rlpEncode (0::Integer)
+         Just x -> rlpEncode x
+                ]
 
   rlpDecode (RLPArray [n, b, cr, ch]) =
     AddressState {
       addressStateNonce=fromInteger $ rlpDecode n,
       balance=fromInteger $ rlpDecode b,
       contractRoot=if rlpDecode cr == (0::Integer) then Nothing else Just (rlpDecode cr),
-      codeHash=rlpDecode ch
+      codeHash=if rlpDecode ch == (0::Integer) then Nothing else Just (rlpDecode ch)
       } 
   rlpDecode x = error $ "Missing case in rlpDecode for AddressState: " ++ show (pretty x)
 
