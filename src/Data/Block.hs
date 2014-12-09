@@ -10,8 +10,8 @@ module Data.Block (
   findNonce,
   fastFindNonce,
   nonceIsValid,
-  genesisBlock,
-  getBlock
+  getBlock,
+  putBlock
   ) where
 
 import qualified Crypto.Hash.SHA3 as C
@@ -39,7 +39,7 @@ import ExtDBs
 import Format
 import Data.RLP
 import SHA
-import Data.TransactionReceipt
+import Data.SignedTransaction
 import Util
 
 --import Debug.Trace
@@ -49,10 +49,11 @@ data BlockData = BlockData {
   unclesHash::SHA,
   coinbase::Address,
   bStateRoot::SHAPtr,
-  transactionsTrie::Integer,
+  transactionsRoot::SHAPtr,
+  receiptsRoot::SHAPtr,
+  logBloom::B.ByteString,
   difficulty::Integer,
   number::Integer,
-  minGasPrice::Integer,
   gasLimit::Integer,
   gasUsed::Integer,
   timestamp::UTCTime,
@@ -62,7 +63,7 @@ data BlockData = BlockData {
 
 data Block = Block {
   blockData::BlockData,
-  receiptTransactions::[TransactionReceipt],
+  receiptTransactions::[SignedTransaction],
   blockUncles::[BlockData]
   } deriving (Show)
 
@@ -88,21 +89,22 @@ instance RLPSerializable Block where
     RLPArray [rlpEncode bd, RLPArray (rlpEncode <$> receipts), RLPArray $ rlpEncode <$> uncles]
 
 instance RLPSerializable BlockData where
-  rlpDecode (RLPArray [v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13]) =
+  rlpDecode (RLPArray [v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14]) =
     BlockData {
       parentHash = rlpDecode v1,
       unclesHash = rlpDecode v2,
       coinbase = rlpDecode v3,
       bStateRoot = rlpDecode v4,
-      transactionsTrie = rlpDecode v5,
-      difficulty = rlpDecode v6,
-      number = rlpDecode v7,
-      minGasPrice = rlpDecode v8,
-      gasLimit = rlpDecode v9,
-      gasUsed = rlpDecode v10,
-      timestamp = posixSecondsToUTCTime $ fromInteger $ rlpDecode v11,
-      extraData = rlpDecode v12,
-      nonce = rlpDecode v13
+      transactionsRoot = rlpDecode v5,
+      receiptsRoot = rlpDecode v6,
+      logBloom = rlpDecode v7,
+      difficulty = rlpDecode v8,
+      number = rlpDecode v9,
+      gasLimit = rlpDecode v10,
+      gasUsed = rlpDecode v11,
+      timestamp = posixSecondsToUTCTime $ fromInteger $ rlpDecode v12,
+      extraData = rlpDecode v13,
+      nonce = rlpDecode v14
       }  
   rlpDecode (RLPArray arr) = error ("rlp2BlockData called on object with wrong amount of data, length arr = " ++ show arr)
   rlpDecode x = error ("rlp2BlockData called on non block object: " ++ show x)
@@ -114,10 +116,11 @@ instance RLPSerializable BlockData where
       rlpEncode $ unclesHash bd,
       rlpEncode $ coinbase bd,
       rlpEncode $ bStateRoot bd,
-      rlpEncode $ transactionsTrie bd,
+      rlpEncode $ transactionsRoot bd,
+      rlpEncode $ receiptsRoot bd,
+      rlpEncode $ logBloom bd,
       rlpEncode $ difficulty bd,
       rlpEncode $ number bd,
-      rlpEncode $ minGasPrice bd,
       rlpEncode $ gasLimit bd,
       rlpEncode $ gasUsed bd,
       rlpEncode (round $ utcTimeToPOSIXSeconds $ timestamp bd::Integer),
@@ -136,41 +139,23 @@ instance Format BlockData where
     (if unclesHash b == hash (B.pack [0xc0]) then " (the empty array)\n" else "\n") ++
     "coinbase: " ++ show (pretty $ coinbase b) ++ "\n" ++
     "stateRoot: " ++ show (pretty $ bStateRoot b) ++ "\n" ++
-    "transactionsTrie: " ++ show (transactionsTrie b) ++ "\n" ++
+    "transactionsRoot: " ++ show (transactionsRoot b) ++ "\n" ++
+    "receiptsRoot: " ++ show (receiptsRoot b) ++ "\n" ++
     "difficulty: " ++ show (difficulty b) ++ "\n" ++
-    "minGasPrice: " ++ show (minGasPrice b) ++ "\n" ++
     "gasLimit: " ++ show (gasLimit b) ++ "\n" ++
     "gasUsed: " ++ show (gasUsed b) ++ "\n" ++
     "timestamp: " ++ show (timestamp b) ++ "\n" ++
     "extraData: " ++ show (pretty $ extraData b) ++ "\n" ++
     "nonce: " ++ show (pretty $ nonce b) ++ "\n"
 
-genesisBlock::Block
-genesisBlock =
-  Block {
-    blockData = 
-       BlockData {
-         parentHash = SHA 0,
-         unclesHash = hash (B.pack [0xc0]), 
-         coinbase = Address 0,
-         bStateRoot = SHAPtr $ B.pack $ integer2Bytes 0x08bf6a98374f333b84e7d063d607696ac7cbbd409bd20fbe6a741c2dfc0eb285,
-         transactionsTrie = 0,
-         difficulty = 0x020000, --1 << 17
-         number = 0,
-         minGasPrice = 0,
-         gasLimit = 1000000,
-         gasUsed = 0,
-         timestamp = posixSecondsToUTCTime 0,
-         extraData = 0,
-         nonce = hash $ B.pack [42]
-         },
-    receiptTransactions=[],
-    blockUncles=[]
-    }
-
 getBlock::SHA->ContextM (Maybe Block)
 getBlock h = 
   fmap (rlpDecode . rlpDeserialize) <$> blockDBGet (BL.toStrict $ encode h)
+
+putBlock::Block->ContextM ()
+putBlock b = do
+  let bytes = rlpSerialize $ rlpEncode b
+  blockDBPut (BL.toStrict $ encode $ blockHash b) bytes
 
 
 --------------------------
@@ -184,10 +169,11 @@ noncelessBlockData2RLP bd =
       rlpEncode $ unclesHash bd,
       rlpEncode $ coinbase bd,
       rlpEncode $ bStateRoot bd,
-      rlpEncode $ transactionsTrie bd,
+      rlpEncode $ transactionsRoot bd,
+      rlpEncode $ receiptsRoot bd,
+      rlpEncode $ logBloom bd,
       rlpEncode $ difficulty bd,
       rlpEncode $ number bd,
-      rlpEncode $ minGasPrice bd,
       rlpEncode $ gasLimit bd,
       rlpEncode $ gasUsed bd,
       rlpEncode (round $ utcTimeToPOSIXSeconds $ timestamp bd::Integer),

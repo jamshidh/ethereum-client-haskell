@@ -1,6 +1,7 @@
 
 module ExtDBs (
   MP.SHAPtr(..),
+  MP.emptyTriePtr,
   detailsDBPut,
   detailsDBGet,
   blockDBGet,

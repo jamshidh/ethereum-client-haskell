@@ -8,14 +8,15 @@ import qualified Data.ByteString as B
 import Data.Functor
 import qualified Data.Map as M
 import Data.Maybe
+import Numeric
 
 --import Debug.Trace
 
 data Operation = 
-    STOP | ADD | MUL | SUB | DIV | SDIV | MOD | SMOD | EXP | NEG | LT | GT | SLT | SGT | EQ | NOT | AND | OR | XOR | BYTE | SHA3 | 
-    ADDRESS | BALANCE | ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | 
+    STOP | ADD | MUL | SUB | DIV | SDIV | MOD | SMOD | ADDMOD | MULMOD | EXP | SIGNEXTEND | NEG | LT | GT | SLT | SGT | EQ | ISZERO | NOT | AND | OR | XOR | BYTE | SHA3 | 
+    ADDRESS | BALANCE | ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | EXTCODESIZE | EXTCODECOPY |
     PREVHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | POP | DUP | SWAP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | 
-    JUMP | JUMPI | PC | MSIZE | GAS | 
+    JUMP | JUMPI | PC | MSIZE | GAS | JUMPDEST | CALLCODE | 
     PUSH [Word8] | 
     CREATE | CALL | RETURN | SUICIDE |
     --Pseudo Opcodes
@@ -39,19 +40,25 @@ opDatas =
     OPData 0x05 SDIV 2 1 "Signed integer division operation.",
     OPData 0x06 MOD 2 1 "Modulo remainder operation.",
     OPData 0x07 SMOD 2 1 "Signed modulo remainder operation.",
-    OPData 0x08 EXP 2 1 "Exponential operation.",
-    OPData 0x09 NEG 1 1 "Negation operation.",
-    OPData 0x0a LT 2 1 "Less-than comparision.",
-    OPData 0x0b GT 2 1 "Greater-than comparision.",
-    OPData 0x0c SLT 2 1 "Signed less-than comparision.",
-    OPData 0x0d SGT 2 1 "Signed greater-than comparision.",
-    OPData 0x0e EQ 2 1 "Equality comparision.",
-    OPData 0x0f NOT 1 1 "Simple not operator.",
-    OPData 0x10 AND 2 1 "Bitwise AND operation.",
-    OPData 0x11 OR 2 1 "Bitwise OR operation.",
-    OPData 0x12 XOR 2 1 "Bitwise XOR operation.",
-    OPData 0x13 BYTE 2 1 "Retrieve single byte from word.",
+    OPData 0x08 ADDMOD 2 1 "unsigned modular addition",
+    OPData 0x09 MULMOD 2 1 "unsigned modular multiplication",
+    OPData 0x0a EXP 2 1 "Exponential operation.",
+    OPData 0x0b SIGNEXTEND undefined undefined undefined,
+
+    OPData 0x10 LT 2 1 "Less-than comparision.",
+    OPData 0x11 GT 2 1 "Greater-than comparision.",
+    OPData 0x12 SLT 2 1 "Signed less-than comparision.",
+    OPData 0x13 SGT 2 1 "Signed greater-than comparision.",
+    OPData 0x14 EQ 2 1 "Equality comparision.",
+    OPData 0x15 ISZERO 1 1 "Simple not operator.",
+    OPData 0x16 AND 2 1 "Bitwise AND operation.",
+    OPData 0x17 OR 2 1 "Bitwise OR operation.",
+    OPData 0x18 XOR 2 1 "Bitwise XOR operation.",
+    OPData 0x19 NOT 1 1 "Bitwise not operator.",
+    OPData 0x1a BYTE 2 1 "Retrieve single byte from word.",
+
     OPData 0x20 SHA3 2 1 "Compute SHA3-256 hash.",
+
     OPData 0x30 ADDRESS 0 1 "Get address of currently executing account.",
     OPData 0x31 BALANCE 1 1 "Get balance of the given account.",
     OPData 0x32 ORIGIN 0 1 "Get execution origination address.",
@@ -63,28 +70,33 @@ opDatas =
     OPData 0x38 CODESIZE 0 1 "Get size of code running in current environment.",
     OPData 0x39 CODECOPY 3 0 "Copy code running in current environment to memory.",
     OPData 0x3a GASPRICE 0 1 "Get price of gas in current environment.",
+    OPData 0x3b EXTCODESIZE undefined undefined "get external code size (from another contract)",
+    OPData 0x3c EXTCODECOPY undefined undefined "copy external code (from another contract)",
+
     OPData 0x40 PREVHASH 0 1 "Get hash of most recent complete block.",
     OPData 0x41 COINBASE 0 1 "Get the block’s coinbase address.",
     OPData 0x42 TIMESTAMP 0 1 "Get the block’s timestamp.",
     OPData 0x43 NUMBER 0 1 "Get the block’s number.",
     OPData 0x44 DIFFICULTY 0 1 "Get the block’s difficulty.",
     OPData 0x45 GASLIMIT 0 1 "Get the block’s gas limit.",
+
     OPData 0x50 POP 1 0 "Remove item from stack.",
-    OPData 0x51 DUP 1 2 "Duplicate stack item.",
-    OPData 0x52 SWAP 2 2 "Exchange stack items.",
-    OPData 0x53 MLOAD 1 1 "Load word from memory.",
-    OPData 0x54 MSTORE 2 0 "Save word to memory.",
-    OPData 0x55 MSTORE8 2 0 "Save byte to memory.",
-    OPData 0x56 SLOAD 1 1 "Load word from storage.",
-    OPData 0x57 SSTORE 2 0 "Save word to storage.",
-    OPData 0x58 JUMP 1 0 "Alter the program counter.",
-    OPData 0x59 JUMPI 2 0 "Conditionally alter the program counter.",
-    OPData 0x5a PC 0 1 "Get the program counter.",
-    OPData 0x5b MSIZE 0 1 "Get the size of active memory in bytes.",
-    OPData 0x5c GAS 0 1 "Get the amount of available gas.",
+    OPData 0x51 MLOAD 1 1 "Load word from memory.",
+    OPData 0x52 MSTORE 2 0 "Save word to memory.",
+    OPData 0x53 MSTORE8 2 0 "Save byte to memory.",
+    OPData 0x54 SLOAD 1 1 "Load word from storage.",
+    OPData 0x55 SSTORE 2 0 "Save word to storage.",
+    OPData 0x56 JUMP 1 0 "Alter the program counter.",
+    OPData 0x57 JUMPI 2 0 "Conditionally alter the program counter.",
+    OPData 0x58 PC 0 1 "Get the program counter.",
+    OPData 0x59 MSIZE 0 1 "Get the size of active memory in bytes.",
+    OPData 0x5a GAS 0 1 "Get the amount of available gas.",
+    OPData 0x5b JUMPDEST undefined undefined "set a potential jump destination",
+
     OPData 0xf0 CREATE 3 1 "Create a new account with associated code.",
     OPData 0xf1 CALL 7 1 "Message-call into an account.",
-    OPData 0xf2 RETURN 2 0 "Halt execution returning output data.",
+    OPData 0xf2 CALLCODE undefined undefined "message-call with another account's code only",
+    OPData 0xf3 RETURN 2 0 "Halt execution returning output data.",
     OPData 0xff SUICIDE 1 0 "Halt execution and register account for later deletion."
   ]
 
@@ -117,7 +129,7 @@ opCode2Op rom =
   if opcode >= 0x60 && opcode <= 0x7f
   then (PUSH $ B.unpack $ B.take (fromIntegral $ opcode-0x5F) $ B.tail rom, fromIntegral $ opcode - 0x5E)
   else
-    let op = fromMaybe (error $ "code is missing in code2OpMap: " ++ show (B.head rom)) 
+    let op = fromMaybe (error $ "code is missing in code2OpMap: " ++ showHex (B.head rom) "")
              $ M.lookup opcode code2OpMap in
     (op, 1)
 

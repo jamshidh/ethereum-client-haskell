@@ -22,6 +22,7 @@ import ExtDBs
 import SHA
 import Data.Wire
 
+--import Debug.Trace
 
 data GetBlockHashesResult = NeedMore SHA | NeededHashes [SHA] deriving (Show)
 
@@ -35,6 +36,8 @@ findFirstHashAlreadyInDB hashes = do
     safeHead (x:_) = Just x
 
 handleNewBlockHashes::Socket->[SHA]->ContextM ()
+--handleNewBlockHashes _ list | trace ("########### handleNewBlockHashes: " ++ show list) $ False = undefined
+handleNewBlockHashes _ [] = error "handleNewBlockHashes called with empty list"
 handleNewBlockHashes socket blockHashes = do
   result <- findFirstHashAlreadyInDB blockHashes
   case result of
@@ -46,7 +49,7 @@ handleNewBlockHashes socket blockHashes = do
     Just hashInDB -> do
                 liftIO $ putStrLn $ "Found a serverblock already in our database: " ++ show (pretty hashInDB)
                 cxt <- get 
-                put cxt{neededBlockHashes=blockHashes ++ neededBlockHashes cxt}
+                put cxt{neededBlockHashes=takeWhile (/= hashInDB) blockHashes ++ neededBlockHashes cxt}
                 askForSomeBlocks socket
   
 askForSomeBlocks::Socket->ContextM ()

@@ -64,7 +64,7 @@ runOperation GT env state = binaryAction ((bool2Word256 .) . (>)) env state
 runOperation SLT env state = binaryAction undefined env state
 runOperation SGT env state = binaryAction undefined env state
 runOperation EQ env state = binaryAction ((bool2Word256 .) . (==)) env state
-runOperation NOT env state = unaryAction (bool2Word256 . not . word2562Bool) env state
+runOperation ISZERO env state = unaryAction (bool2Word256 . not . word2562Bool) env state
 runOperation AND env state = binaryAction (.&.) env state
 runOperation OR env state = binaryAction (.|.) env state
 runOperation XOR env state = binaryAction xor env state
@@ -213,6 +213,7 @@ movePC state l = state{ pc=pc state + l }
 opGasPrice::VMState->Operation->ContextM Integer
 opGasPrice _ STOP = return 0
 --opGasPrice _ MSTORE = return 2
+opGasPrice VMState{stack=_:_:size:_} CODECOPY = return $ 1 + ceiling (fromIntegral size / (32::Double))
 opGasPrice VMState{ stack=_:_ } SLOAD = return 20
 opGasPrice VMState{ stack=p:val:_ } SSTORE = do
   oldVals <- getStorageKeyVals (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
@@ -223,7 +224,7 @@ opGasPrice VMState{ stack=p:val:_ } SSTORE = do
             _ -> error "multiple values in storage"
   return $
     case (oldVal, val) of
-      (0, x) | x /= 0 -> 200
+      (0, x) | x /= 0 -> 300
       (x, 0) | x /= 0 -> 0
       _ -> 100
 opGasPrice _ _ = return 1

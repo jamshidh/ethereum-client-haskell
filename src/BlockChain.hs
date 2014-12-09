@@ -1,12 +1,12 @@
 {-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
 
 module BlockChain (
-  initializeBlockChain,
   nextDifficulty,
   addBlock,
   addBlocks,
   getBestBlock,
-  getBestBlockHash
+  getBestBlockHash,
+  getGenesisBlockHash
   ) where
 
 import Control.Monad
@@ -29,7 +29,6 @@ import Data.Block
 import Data.RLP
 import Data.SignedTransaction
 import Data.Transaction
-import Data.TransactionReceipt
 import DB.CodeDB
 import Database.MerklePatricia
 import DB.ModifyStateDB
@@ -37,6 +36,7 @@ import qualified Colors as CL
 import Constants
 import ExtDBs
 import Format
+import Data.GenesisBlock
 import SHA
 import Util
 import VM
@@ -46,11 +46,13 @@ import VM.VMState
 
 --import Debug.Trace
 
+{-
 initializeBlockChain::ContextM ()
 initializeBlockChain = do
   let bytes = rlpSerialize $ rlpEncode genesisBlock
   blockDBPut (BL.toStrict $ encode $ blockHash $ genesisBlock) bytes
   detailsDBPut "best" (BL.toStrict $ encode $ blockHash genesisBlock)
+-}
 
 nextDifficulty::Integer->UTCTime->UTCTime->Integer
 nextDifficulty oldDifficulty oldTime newTime =
@@ -124,7 +126,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
   let newAddress = getNewAddress t
 
   vmState <- 
-    runCodeFromStart blankRoot availableGas
+    runCodeFromStart emptyTriePtr availableGas
           Environment{
             envGasPrice=gasPrice ut,
             envBlock=b,
@@ -156,11 +158,8 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
                    AddressState{
                      addressStateNonce=0,
                      balance=0,
-                     contractRoot=
-                         if stateRoot (storageDB cxt) == blankRoot
-                         then Nothing
-                         else Just $ stateRoot $ storageDB cxt,
-                     codeHash=Just $ hash result
+                     contractRoot=stateRoot $ storageDB cxt,
+                     codeHash=hash result
                      }
           liftIO $ putStrLn $ "paying: " ++ show (value ut)
           pay tAddr newAddress (value ut)
@@ -172,7 +171,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
   --liftIO $ putStrLn $ "codeHash is: " ++ show (pretty $ sha2SHAPtr $ codeHash recipientAddressState)
 
   contractCode <- 
-      fromMaybe (error "no contract code") <$>
+      fromMaybe B.empty <$>
                 getCode (codeHash recipientAddressState)
 
   liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty (Code contractCode))))
@@ -182,7 +181,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
   liftIO $ putStrLn $ "availableGas: " ++ show availableGas
 
   vmState <- 
-          runCodeFromStart (fromMaybe blankRoot (contractRoot recipientAddressState)) availableGas
+          runCodeFromStart (contractRoot recipientAddressState) availableGas
                  Environment{
                            envGasPrice=gasPrice ut,
                            envBlock=b,
@@ -206,21 +205,13 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
           addressState <- getAddressState (to ut)
           cxt <- get
           putAddressState (to ut)
-                 addressState{
-                             contractRoot=if stateRoot (storageDB cxt) == blankRoot
-                                          then Nothing
-                                          else Just $ stateRoot $ storageDB cxt
-                 }
+                 addressState{contractRoot=stateRoot $ storageDB cxt}
           pay (whoSignedThisTransaction t) (to ut) (value ut)
         Nothing -> do
           addressState <- getAddressState (to ut)
           cxt <- get
           putAddressState (to ut)
-                 addressState{
-                             contractRoot=if stateRoot (storageDB cxt) == blankRoot
-                                          then Nothing
-                                          else Just $ stateRoot $ storageDB cxt
-                 }
+                 addressState{contractRoot=stateRoot $ storageDB cxt}
           pay (whoSignedThisTransaction t) (to ut) (value ut)
 
 
@@ -240,6 +231,12 @@ isTransactionValid t = do
   addressState <- getAddressState $ whoSignedThisTransaction t
   return (addressStateNonce addressState == tNonce (unsignedTransaction t))
 
+intrinsicGas::Transaction->Integer
+intrinsicGas t = zeroLen + 5 * (fromIntegral (codeOrDataLength t) - zeroLen) + 500
+    where
+      zeroLen = fromIntegral $ zeroBytesLength t
+--intrinsicGas t@ContractCreationTX{} = 5 * (fromIntegral (codeOrDataLength t)) + 500
+
 addTransaction::Block->SignedTransaction->ContextM ()
 addTransaction b t@SignedTransaction{unsignedTransaction=ut} = do
   liftIO $ putStrLn "adding to nonces"
@@ -247,13 +244,13 @@ addTransaction b t@SignedTransaction{unsignedTransaction=ut} = do
   addNonce signAddress
   liftIO $ putStrLn "paying value to recipient"
 
-  let intrinsicGas = 5*fromIntegral (codeOrDataLength ut) + 500
-  liftIO $ putStrLn $ "intrinsicGas: " ++ show intrinsicGas
+  let intrinsicGas' = intrinsicGas ut
+  liftIO $ putStrLn $ "intrinsicGas: " ++ show (intrinsicGas')
   --TODO- return here if not enough gas
-  pay signAddress (coinbase $ blockData b) (intrinsicGas * gasPrice ut)
+  pay signAddress (coinbase $ blockData b) (intrinsicGas' * gasPrice ut)
 
   liftIO $ putStrLn "running code"
-  runCodeForTransaction b (tGasLimit ut - intrinsicGas) t
+  runCodeForTransaction b (tGasLimit ut - intrinsicGas') t
 
 addTransactions::Block->[SignedTransaction]->ContextM ()
 addTransactions _ [] = return ()
@@ -279,7 +276,7 @@ addBlock b@Block{blockData=bd, blockUncles=uncles} = do
                           addToBalance (coinbase bd) (rewardBase `quot` 32)
                           addToBalance (coinbase uncle) (rewardBase*15 `quot` 16)
 
-      let transactions = theTransaction <$> receiptTransactions b
+      let transactions = receiptTransactions b
       addTransactions b transactions
 
       ctx <- get
@@ -293,19 +290,26 @@ addBlock b@Block{blockData=bd, blockUncles=uncles} = do
       blockDBPut (BL.toStrict $ encode $ blockHash b) bytes
       replaceBestIfBetter b
 
-getBestBlockHash::ContextM (Maybe SHA)
-getBestBlockHash = 
-  fmap (decode . BL.fromStrict) <$> detailsDBGet "best"
+getBestBlockHash::ContextM SHA
+getBestBlockHash = do
+  maybeBestHash <- detailsDBGet "best"
+  case maybeBestHash of
+    Nothing -> blockHash <$> initializeGenesisBlock
+    Just bestHash -> return $ decode $ BL.fromStrict $ bestHash
+
+getGenesisBlockHash::ContextM SHA
+getGenesisBlockHash = do
+  maybeGenesisHash <- detailsDBGet "genesis"
+  case maybeGenesisHash of
+    Nothing -> blockHash <$> initializeGenesisBlock
+    Just bestHash -> return $ decode $ BL.fromStrict $ bestHash
 
 getBestBlock::ContextM Block
 getBestBlock = do
-  maybeH <- getBestBlockHash
-  case maybeH of
-    Nothing -> do
-                initializeStateDB
-                initializeBlockChain 
-                return genesisBlock
-    Just h -> fromMaybe (error $ "Missing block in database: " ++ show (pretty h)) <$> getBlock h
+  bestBlockHash <- getBestBlockHash
+  bestBlock <- getBlock bestBlockHash
+  return $ fromMaybe (error $ "Missing block in database: " ++ show (pretty bestBlockHash)) bestBlock
+      
 
 replaceBestIfBetter::Block->ContextM ()
 replaceBestIfBetter b = do

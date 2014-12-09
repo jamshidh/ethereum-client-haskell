@@ -50,7 +50,7 @@ simpleTX =
 
 outOfGasTX::Transaction
 outOfGasTX =
-  createContract 3 550
+  createContract 3 522
   $ compile
     [
       PUSH [1],
@@ -90,16 +90,16 @@ sendMessageTX =
 
 paymentContract::Transaction
 paymentContract =
-  createContract (1000*finney) 1000
+  createContract (1000*finney) 2000
                      $ createInit
                             [
                              PermStorage Caller :=: Number 1000
                             ]
                            (
                             let
-                                toAddr = Input 0
+                                toAddr = Input (0*32)
                                 fromAddr = Caller
-                                val = Input 1
+                                val = Input (1*32)
                             in
                               [
                                If (PermVal fromAddr :>=: val) 
@@ -159,3 +159,7 @@ sendKeyVal =
         [[ (calldataload @i) ]] (calldataload (+ @i 32))
       )
 -}
+
+
+
+

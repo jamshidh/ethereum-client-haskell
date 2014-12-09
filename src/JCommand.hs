@@ -44,12 +44,14 @@ instance Num Word where
     fromInteger x = Number $ fromInteger x
     Number x + Number y = Number $ x+y
     x + y = x :+: y
+    x - y = x :-: y
     Number x * Number y = Number $ x*y
     x * y = x :*: y
     abs (Number x) = Number $ abs x
     abs x = Abs x
     negate (Number x) = Number (-x)
     negate x = Neg x
+
     signum (Number x) = Number (signum x)
     signum x = Signum x
 
@@ -108,8 +110,8 @@ pushBoolVal::JBool->[Operation]
 pushBoolVal (x :==: y) = pushVal y ++ pushVal x ++ [EQ]
 pushBoolVal (x :>: y) = pushVal y ++ pushVal x ++ [GT]
 pushBoolVal (x :<: y) = pushVal y ++ pushVal x ++ [LT]
-pushBoolVal (x :>=: y) = pushVal y ++ pushVal x ++ [NOT, LT]
-pushBoolVal (x :<=: y) = pushVal y ++ pushVal x ++ [NOT, GT]
+pushBoolVal (x :>=: y) = pushVal y ++ pushVal x ++ [ISZERO, LT]
+pushBoolVal (x :<=: y) = pushVal y ++ pushVal x ++ [ISZERO, GT]
 pushBoolVal JTrue = [PUSH [1]]
 pushBoolVal JFalse = [PUSH [0]]
 
@@ -121,12 +123,12 @@ jCommand2Op (MemStorage sPosition :=: val) =
 jCommand2Op (If cond code) = do
     after <- getUnique "after"
     compiledCode <- j code
-    return $ pushBoolVal cond ++ [NOT, PUSHLABEL after, JUMPI] ++ compiledCode ++ [LABEL after]
+    return $ pushBoolVal cond ++ [ISZERO, PUSHLABEL after, JUMPI] ++ compiledCode ++ [LABEL after]
 jCommand2Op (While cond code) = do
     after <- getUnique "after"
     before <- getUnique "before"
     compiledCode <- j code
-    return $ [LABEL before] ++ pushBoolVal cond ++ [NOT, PUSHLABEL after, JUMPI] ++ compiledCode ++ [PUSHLABEL before, JUMP] ++ [LABEL after]
+    return $ [LABEL before] ++ pushBoolVal cond ++ [ISZERO, PUSHLABEL after, JUMPI] ++ compiledCode ++ [PUSHLABEL before, JUMP] ++ [LABEL after]
 jCommand2Op (ReturnCode (Code codeBytes)) = do
   codeBegin <- getUnique "begin"
   codeEnd <- getUnique "end"

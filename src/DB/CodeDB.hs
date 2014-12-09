@@ -15,7 +15,6 @@ import SHA
 addCode::B.ByteString->ContextM ()
 addCode = codeDBPut
 
-getCode::Maybe SHA->ContextM (Maybe B.ByteString)
-getCode Nothing = return $ Just B.empty 
-getCode (Just theHash) = 
+getCode::SHA->ContextM (Maybe B.ByteString)
+getCode theHash = 
   codeDBGet (BL.toStrict $ encode $ sha2SHAPtr theHash)

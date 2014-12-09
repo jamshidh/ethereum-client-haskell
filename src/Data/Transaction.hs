@@ -2,7 +2,8 @@
 
 module Data.Transaction (
   Transaction(..),
-  codeOrDataLength
+  codeOrDataLength,
+  zeroBytesLength
   ) where
 
 import qualified Data.ByteString as B
@@ -99,3 +100,8 @@ instance RLPSerializable Transaction where
 codeOrDataLength::Transaction->Int
 codeOrDataLength MessageTX{tData=d} = B.length d
 codeOrDataLength ContractCreationTX{tInit=d} = codeLength d
+
+zeroBytesLength::Transaction->Int
+zeroBytesLength MessageTX{tData=d} = length $ filter (==0) $ B.unpack d
+zeroBytesLength ContractCreationTX{tInit=Code d} = length $ filter (==0) $ B.unpack d
+

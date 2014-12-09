@@ -12,7 +12,7 @@ import Data.Binary
 import Data.ByteString.Internal
 import Network.Haskoin.Internals hiding (Address)
 import Numeric
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+--import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import ExtendedECDSA
 
@@ -92,6 +92,5 @@ whoSignedThisTransaction::SignedTransaction->Address
 whoSignedThisTransaction SignedTransaction{unsignedTransaction=ut, v=v', r=r', s=s'} = 
     pubKey2Address (getPubKeyFromSignature xSignature theHash)
         where
-          ExtendedSignature (Signature qqqqrSig qqqqsSig) _ = xSignature
           xSignature = ExtendedSignature (Signature (fromInteger r') (fromInteger s')) (0x1c == v')
           SHA theHash = hash (rlpSerialize $ rlpEncode ut)

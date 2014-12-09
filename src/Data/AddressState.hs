@@ -8,8 +8,10 @@ module Data.AddressState (
   putAddressState
   ) where
 
-import qualified Data.ByteString as B
+import Data.Binary
+import qualified Data.ByteString.Lazy as BL
 import Data.Functor
+import Data.List
 import Numeric
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
@@ -25,46 +27,38 @@ import Util
 
 --import Debug.Trace
 
-data AddressState = AddressState { addressStateNonce::Integer, balance::Integer, contractRoot::Maybe SHAPtr, codeHash::Maybe SHA } deriving (Show)
+data AddressState = AddressState { addressStateNonce::Integer, balance::Integer, contractRoot::SHAPtr, codeHash::SHA } deriving (Show)
 
 
 blankAddressState::AddressState
-blankAddressState = AddressState { addressStateNonce=0, balance=0, contractRoot=Nothing, codeHash=Nothing }
+blankAddressState = AddressState { addressStateNonce=0, balance=0, contractRoot=emptyTriePtr, codeHash=hash "" }
 
 instance Format AddressState where
   format a = CL.blue "AddressState" ++
              tab("\nnonce: " ++ showHex (addressStateNonce a) "" ++
                  "\nbalance: " ++ show (toInteger $ balance a) ++
-                 "\ncontractRoot: " ++ formatCR (contractRoot a) ++
+                 "\ncontractRoot: " ++ show (pretty $ contractRoot a) ++
                  "\ncodeHash: " ++ show (pretty $ codeHash a))
-    where
-      formatCR::Maybe SHAPtr->String
-      formatCR Nothing = "0x0"
-      formatCR (Just x) = show $ pretty x
   
 instance RLPSerializable AddressState where
   rlpEncode a = RLPArray [
     rlpEncode $ toInteger $ addressStateNonce a,
     rlpEncode $ toInteger $ balance a,
-    case contractRoot a of
-         Nothing -> rlpEncode (0::Integer)
-         Just x -> rlpEncode x,
-    case codeHash a of
-         Nothing -> rlpEncode (0::Integer)
-         Just x -> rlpEncode x
+    rlpEncode $ contractRoot a,
+    rlpEncode $ codeHash a
                 ]
 
   rlpDecode (RLPArray [n, b, cr, ch]) =
     AddressState {
       addressStateNonce=fromInteger $ rlpDecode n,
       balance=fromInteger $ rlpDecode b,
-      contractRoot=if rlpDecode cr == (0::Integer) then Nothing else Just (rlpDecode cr),
-      codeHash=if rlpDecode ch == (0::Integer) then Nothing else Just (rlpDecode ch)
+      contractRoot=rlpDecode cr,
+      codeHash=rlpDecode ch
       } 
   rlpDecode x = error $ "Missing case in rlpDecode for AddressState: " ++ show (pretty x)
 
 addressAsNibbleString::Address->N.NibbleString
-addressAsNibbleString (Address s) = N.EvenNibbleString $ B.pack $ integer2Bytes $ fromIntegral s
+addressAsNibbleString (Address s) = N.EvenNibbleString $ BL.toStrict $ encode s
 
 getAddressState::Address->ContextM AddressState
 getAddressState address = do
@@ -72,7 +66,7 @@ getAddressState address = do
   case states of
     [] -> return blankAddressState
     [state] -> return $ rlpDecode $ rlpDeserialize $ rlpDecode $ snd state
-    _ -> error ("getAddressStates found multiple states for: " ++ show (pretty address))
+    _ -> error ("getAddressStates found multiple states for: " ++ show (pretty address) ++ "\n" ++ intercalate "\n" (show . pretty <$> states))
   
 
 getAllAddressStates::ContextM [(N.NibbleString, AddressState)]

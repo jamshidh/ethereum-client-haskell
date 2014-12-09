@@ -17,7 +17,7 @@ import Data.Word
 import Network.Haskoin.Crypto hiding (Address)
 import Network.Socket (socketToHandle)
 import Numeric
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+--import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import System.Entropy
 import System.IO
 
@@ -37,6 +37,7 @@ import Data.SignedTransaction
 import Data.Transaction
 import Data.Wire
 import Database.MerklePatricia
+import ExtDBs
 import Format
 import DB.ModifyStateDB
 import SampleTransactions
@@ -74,10 +75,11 @@ getNextBlock b ts = do
         unclesHash=hash $ B.pack [0xc0],
         coinbase=prvKey2Address prvKey,
         bStateRoot = sr,
-        transactionsTrie = 0,
+        transactionsRoot = emptyTriePtr,
+        receiptsRoot = emptyTriePtr,
+        logBloom = B.pack [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],         
         difficulty = nextDifficulty (difficulty bd) (timestamp bd) ts,
         number = number bd + 1,
-        minGasPrice = 10000000000000, --minGasPrice bd,
         gasLimit = max 125000 ((gasLimit bd * 1023 + gasUsed bd *6 `quot` 5) `quot` 1024),
         gasUsed = 0,
         timestamp = ts,  
@@ -87,8 +89,8 @@ getNextBlock b ts = do
     bd = blockData b
 
 
-submitNextBlock::Socket->Block->ContextM ()
-submitNextBlock socket b = do
+submitNextBlock::Socket->Integer->Block->ContextM ()
+submitNextBlock socket baseDifficulty b = do
         ts <- liftIO getCurrentTime
         newBlock <- getNextBlock b ts
         liftIO $ print newBlock
@@ -99,22 +101,27 @@ submitNextBlock socket b = do
         liftIO $ print $ format theBytes
         liftIO $ print $ format $ C.hash 256 theBytes
         let theNewBlock = addNonceToBlock newBlock n
-        liftIO $ sendMessage socket $ Blocks [theNewBlock]
+        liftIO $ sendMessage socket $ NewBlockPacket theNewBlock (baseDifficulty + difficulty (blockData theNewBlock))
         addBlocks [theNewBlock]
 
-ifBlockInDBSubmitNextBlock::Socket->Block->ContextM ()
-ifBlockInDBSubmitNextBlock socket b = do
+ifBlockInDBSubmitNextBlock::Socket->Integer->Block->ContextM ()
+ifBlockInDBSubmitNextBlock socket baseDifficulty b = do
   maybeBlock <- getBlock (blockHash b)
   case maybeBlock of
     Nothing -> return ()
-    _ -> submitNextBlock socket b
+    _ -> submitNextBlock socket baseDifficulty b
 
 handlePayload::Socket->B.ByteString->ContextM ()
 handlePayload socket payload = do
+  --liftIO $ putStrLn $ show $ pretty $ rlpDeserialize payload
   let rlpObject = rlpDeserialize payload
   let msg = obj2WireMessage rlpObject
   liftIO $ putStrLn (CL.red "msg<<<<: " ++ format msg)
   case msg of
+    Hello{} -> do
+             bestBlock <- getBestBlock
+             genesisBlockHash <- getGenesisBlockHash
+             liftIO $ sendMessage socket Status{protocolVersion=46, networkID="", totalDifficulty=0, latestHash=blockHash bestBlock, genesisHash=genesisBlockHash}
     Ping -> liftIO $ sendMessage socket Pong
     GetPeers -> do
       liftIO $ sendMessage socket $ Peers []
@@ -122,15 +129,15 @@ handlePayload socket payload = do
     BlockHashes blockHashes -> handleNewBlockHashes socket blockHashes
     Blocks blocks -> do
       handleNewBlocks socket blocks
-      case blocks of
-        [] -> return ()
+{-      case blocks of
         [b] -> ifBlockInDBSubmitNextBlock socket b
-        _ -> return () -- requestNewBlocks socket
+        _ -> return ()-}
+    NewBlockPacket block baseDifficulty -> do
+      handleNewBlocks socket [block]
+      ifBlockInDBSubmitNextBlock socket baseDifficulty block
 
     Status{latestHash=lh} ->
-        requestNewBlocks socket lh
-
-      --sendMessage socket $ Blocks [addNonceToBlock newBlock n]
+        handleNewBlockHashes socket [lh]
     GetTransactions -> do
       liftIO $ sendMessage socket $ Transactions []
       liftIO $ sendMessage socket GetTransactions
@@ -156,18 +163,13 @@ readAndOutput socket = do
       handlePayload socket $ B.pack pl
       handleAllPayloads rest
 
-requestNewBlocks::Socket->SHA->ContextM ()
-requestNewBlocks socket latestBlockSHA = do
-  --liftIO $ sendMessage socket $ GetBlockHashes [latestBlockSHA] 0x1000
-  handleNewBlockHashes socket [latestBlockSHA]
-
 mkHello::IO Message
 mkHello = do
   peerId <- getEntropy 64
   return Hello {
-               version = 0,
+               version = 2,
                clientId = "Ethereum(G)/v0.6.4//linux/Haskell",
-               capability = [ETH, SHH],
+               capability = [ETH 46], -- , SHH 1],
                port = 30303,
                nodeId = fromIntegral $ byteString2Integer peerId
              }
@@ -181,12 +183,17 @@ createTransaction t = do
 doit::Socket->ContextM ()
 doit socket = do
   (setStateRoot . bStateRoot . blockData) =<< getBestBlock
-  --requestNewBlocks socket
+  --signedTx <- createTransaction simpleTX
+  --signedTx <- createTransaction outOfGasTX
+  --signedTx <- createTransaction simpleStorageTX
+  --signedTx <- createTransaction createContractTX
+  signedTx <- createTransaction sendMessageTX
+
   --signedTx <- createTransaction createContractTX
   --signedTx <- createTransaction paymentContract
   --signedTx <- createTransaction sendCoinTX
   --signedTx <- createTransaction keyValuePublisher
-  signedTx <- createTransaction sendKeyVal
+  --signedTx <- createTransaction sendKeyVal
 
   liftIO $ print $ whoSignedThisTransaction signedTx
 
@@ -207,8 +214,6 @@ main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
 
   runResourceT $ do
     cxt <- openDBs False
-
     _ <- liftIO $ runStateT (doit socket) cxt
-
     return ()
 
