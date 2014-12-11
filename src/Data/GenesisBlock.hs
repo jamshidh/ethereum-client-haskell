@@ -19,14 +19,13 @@ import Data.Block
 import Context
 import Data.Address
 import Data.AddressState
-import ExtDBs
 import DB.ModifyStateDB
 import SHA
 
 --import Debug.Trace
 
-startingRoot::B.ByteString
-(startingRoot, "") = B16.decode "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+--startingRoot::B.ByteString
+--(startingRoot, "") = B16.decode "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
                      --"bc36789e7a1e281436464229828f817d6612f7b477d66591ff96a9e064bcc98a"                                                                                                                   
 
 initializeBlankStateDB::ContextM ()

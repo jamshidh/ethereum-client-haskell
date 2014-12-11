@@ -3,8 +3,7 @@ module Data.Wire (
   Message(..),
   Capability(..),
   obj2WireMessage,
-  wireMessage2Obj,
-  sendMessage
+  wireMessage2Obj
   ) where
 
 import Data.Binary.Put
@@ -16,13 +15,13 @@ import Network.Haskoin.Crypto
 import Numeric
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
-import Data.Block
 import qualified Colors as CL
-import Format
+import Data.Block
 import Data.Peer
 import Data.RLP
-import SHA
 import Data.SignedTransaction
+import Format
+import SHA
 import Util
 
 import Network.Simple.TCP
@@ -48,14 +47,63 @@ instance RLPSerializable Capability where
     rlpDecode (RLPArray [name, qqqq]) = name2Cap (rlpDecode qqqq) $ rlpDecode name
     rlpDecode x = error $ "wrong format given to rlpDecode for Capability: " ++ show (pretty x)
 
+data TerminationReason =
+  DisconnectRequested
+  | TCPSubSystemError
+  | BreachOfProtocol
+  | UselessPeer
+  | TooManyPeers
+  | AlreadyConnected
+  | IncompatibleP2PProtocolVersion
+  | NullNodeIdentityReceived
+  | ClientQuitting
+  | UnexpectedIdentity
+  | ConnectedToSelf
+  | PingTimeout
+  | OtherSubprotocolReason deriving (Show)
+
+
+numberToTerminationReason::Integer->TerminationReason
+numberToTerminationReason 0x00 = DisconnectRequested
+numberToTerminationReason 0x01 = TCPSubSystemError
+numberToTerminationReason 0x02 = BreachOfProtocol
+numberToTerminationReason 0x03 = UselessPeer
+numberToTerminationReason 0x04 = TooManyPeers
+numberToTerminationReason 0x05 = AlreadyConnected
+numberToTerminationReason 0x06 = IncompatibleP2PProtocolVersion
+numberToTerminationReason 0x07 = NullNodeIdentityReceived
+numberToTerminationReason 0x08 = ClientQuitting
+numberToTerminationReason 0x09 = UnexpectedIdentity
+numberToTerminationReason 0x0a = ConnectedToSelf
+numberToTerminationReason 0x0b = PingTimeout
+numberToTerminationReason 0x0c = OtherSubprotocolReason
+  
+terminationReasonToNumber::TerminationReason->Integer
+terminationReasonToNumber DisconnectRequested = 0x00
+terminationReasonToNumber TCPSubSystemError = 0x01
+terminationReasonToNumber BreachOfProtocol = 0x02
+terminationReasonToNumber UselessPeer = 0x03
+terminationReasonToNumber TooManyPeers = 0x04
+terminationReasonToNumber AlreadyConnected = 0x05
+terminationReasonToNumber IncompatibleP2PProtocolVersion = 0x06
+terminationReasonToNumber NullNodeIdentityReceived = 0x07
+terminationReasonToNumber ClientQuitting = 0x08
+terminationReasonToNumber UnexpectedIdentity = 0x09
+terminationReasonToNumber ConnectedToSelf = 0x0a
+terminationReasonToNumber PingTimeout = 0x0b
+terminationReasonToNumber OtherSubprotocolReason = 0x0c
+  
+
+
 data Message =
   Hello { version::Int, clientId::String, capability::[Capability], port::Int, nodeId::Word512 } |
-  Disconnect |
+  Disconnect TerminationReason |
   Ping |
   Pong |
   GetPeers |
   Peers [Peer] |
   Status { protocolVersion::Int, networkID::String, totalDifficulty::Int, latestHash::SHA, genesisHash:: SHA } |
+  QqqqStatus Int |
   Transactions [SignedTransaction] | 
   GetBlocks [SHA] |
   Blocks [Block] |
@@ -63,6 +111,8 @@ data Message =
   GetBlockHashes { parentSHAs::[SHA], numChildItems::Integer } |
   GetTransactions |
   NewBlockPacket Block Integer |
+  PacketCount Integer |
+  QqqqPacket |
   WhisperProtocolVersion Int deriving (Show)
 
 instance Format Message where
@@ -73,7 +123,7 @@ instance Format Message where
       "    capability: " ++ intercalate ", " (show <$> cap) ++ "\n" ++
       "    port: " ++ show p ++ "\n" ++
       "    nodeId: " ++ take 20 (padZeros 64 (showHex n "")) ++ "...."
-  format Disconnect = CL.blue "Disconnect"
+  format (Disconnect reason) = CL.blue "Disconnect" ++ "(" ++ show reason ++ ")"
   format Ping = CL.blue "Ping"
   format Pong = CL.blue "Pong"
   format GetPeers = CL.blue "GetPeers"
@@ -85,11 +135,20 @@ instance Format Message where
       "    totalDifficulty: " ++ show d ++ "\n" ++
       "    latestHash: " ++ show (pretty lh) ++ "\n" ++
       "    genesisHash: " ++ show (pretty gh)
+  format (QqqqStatus ver) =
+    CL.blue "QqqqStatus " ++
+      "    protocolVersion: " ++ show ver
   format (Transactions transactions) =
     CL.blue "Transactions:\n    " ++ tab (intercalate "\n    " (format <$> transactions))
+    
+--Short version
   format (BlockHashes shas) =
-    CL.blue "BlockHashes:" ++ 
-    tab ("\n" ++ intercalate "\n    " (show . pretty <$> shas))
+    CL.blue "BlockHashes " ++ "(" ++ show (length shas) ++ " new hashes)" 
+--Long version
+{-  format (BlockHashes shas) =
+    CL.blue "BlockHashes:" ++  
+   tab ("\n" ++ intercalate "\n    " (show . pretty <$> shas))-}
+
   format (GetBlocks shas) =
     CL.blue "GetBlocks:" ++ 
     tab ("\n" ++ intercalate "\n    " (show . pretty <$> shas))
@@ -98,6 +157,9 @@ instance Format Message where
     CL.blue "GetBlockHashes" ++ " (max: " ++ show numChild ++ "):\n    " ++
     intercalate ",\n    " (show . pretty <$> pSHAs)
   format (NewBlockPacket block d) = CL.blue "NewBlockPacket" ++ " (" ++ show d ++ ")" ++ tab ("\n" ++ format block)
+  format (PacketCount c) =
+    CL.blue "PacketCount:" ++ show c
+  format QqqqPacket = CL.blue "QqqqPacket"
   format GetTransactions = CL.blue "GetTransactions"
   format (WhisperProtocolVersion ver) = CL.blue "WhisperProtocolVersion " ++ show ver
 
@@ -105,7 +167,8 @@ instance Format Message where
 obj2WireMessage::RLPObject->Message
 obj2WireMessage (RLPArray [RLPString "", ver, cId, RLPArray cap, p, nId]) =
   Hello (fromInteger $ rlpDecode ver) (rlpDecode cId) (rlpDecode <$> cap) (fromInteger $ rlpDecode p) $ rlp2Word512 nId
-obj2WireMessage (RLPArray [RLPScalar 0x01]) = Disconnect
+obj2WireMessage (RLPArray [RLPScalar 0x01, reason]) =
+  Disconnect (numberToTerminationReason $ rlpDecode reason)
 obj2WireMessage (RLPArray [RLPScalar 0x02]) = Ping
 obj2WireMessage (RLPArray [RLPScalar 0x03]) = Pong
 obj2WireMessage (RLPArray [RLPScalar 0x04]) = GetPeers
@@ -118,6 +181,8 @@ obj2WireMessage (RLPArray [RLPScalar 0x10, ver, nID, d, lh, gh]) =
   latestHash=rlpDecode lh,
   genesisHash=rlpDecode gh
 }
+obj2WireMessage (RLPArray [RLPScalar 0x10, ver]) = 
+    QqqqStatus $ fromInteger $ rlpDecode ver
 
 obj2WireMessage (RLPArray [RLPScalar 0x11]) = GetTransactions
 obj2WireMessage (RLPArray (RLPScalar 0x12:transactions)) =
@@ -136,11 +201,15 @@ obj2WireMessage (RLPArray (RLPScalar 0x16:blocks)) =
   Blocks $ rlpDecode <$> blocks
 obj2WireMessage (RLPArray [RLPScalar 0x17, block, td]) =
   NewBlockPacket (rlpDecode block) (rlpDecode td)
+obj2WireMessage (RLPArray [RLPScalar 0x18, c]) =
+  PacketCount $ rlpDecode c
+obj2WireMessage (RLPArray [RLPScalar 0x19]) =
+  QqqqPacket
 
 obj2WireMessage (RLPArray [RLPScalar 0x20, ver]) =
   WhisperProtocolVersion $ fromInteger $ rlpDecode ver
 
-obj2WireMessage x = error ("Missing case in obj2WireMessage: " ++ show x)
+obj2WireMessage x = error ("Missing case in obj2WireMessage: " ++ show (pretty x))
 
 
 
@@ -161,7 +230,8 @@ wireMessage2Obj Hello { version = ver,
     rlpEncode $ toInteger p,
     word5122RLP nId
     ]
-wireMessage2Obj Disconnect = RLPArray [RLPScalar 0x1]
+wireMessage2Obj (Disconnect reason) =
+  RLPArray [RLPScalar 0x1, rlpEncode $ terminationReasonToNumber reason]
 wireMessage2Obj Ping = RLPArray [RLPScalar 0x2]
 wireMessage2Obj Pong = RLPArray [RLPScalar 0x3]
 wireMessage2Obj GetPeers = RLPArray [RLPScalar 0x4]
@@ -169,6 +239,8 @@ wireMessage2Obj (Peers peers) = RLPArray $ RLPScalar 0x5:(rlpEncode <$> peers)
 
 wireMessage2Obj (Status ver nID d lh gh) =
     RLPArray [RLPScalar 0x10, rlpEncode $ toInteger ver, rlpEncode nID, rlpEncode $ toInteger d, rlpEncode lh, rlpEncode gh]
+wireMessage2Obj (QqqqStatus ver) =
+    RLPArray [RLPScalar 0x10, rlpEncode $ toInteger ver]
 wireMessage2Obj GetTransactions = RLPArray [RLPScalar 0x11]
 wireMessage2Obj (Transactions transactions) =
   RLPArray (RLPScalar 0x12:(rlpEncode <$> transactions))
@@ -184,28 +256,11 @@ wireMessage2Obj (Blocks blocks) =
   RLPArray (RLPScalar 0x16:(rlpEncode <$> blocks))
 wireMessage2Obj (NewBlockPacket block d) =
   RLPArray [RLPScalar 0x17, rlpEncode block, rlpEncode d]
+wireMessage2Obj QqqqPacket =
+  RLPArray [RLPScalar 0x19]
 
 wireMessage2Obj (WhisperProtocolVersion ver) = 
   RLPArray [RLPScalar 0x20, rlpEncode $ toInteger ver]
 
 
-
-
-
-ethereumHeader::B.ByteString->Put
-ethereumHeader payload = do
-  putWord32be 0x22400891
-  putWord32be $ fromIntegral $ B.length payload
-  putByteString payload
-
-    
-sendCommand::Socket->B.ByteString->IO ()
-sendCommand socket payload = do
-  let theData2 = runPut $ ethereumHeader payload
-  send socket $ B.concat $ BL.toChunks theData2
-
-sendMessage::Socket->Message->IO ()
-sendMessage socket msg = do
-  putStrLn (CL.green "msg>>>>>: " ++ format msg)
-  sendCommand socket $ rlpSerialize $ wireMessage2Obj msg
 

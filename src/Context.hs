@@ -19,6 +19,7 @@ import System.Directory
 
 import Constants
 import Database.MerklePatricia
+import Data.Peer
 import SHA
 
 type BlockDB = DB.DB
@@ -33,7 +34,9 @@ data Context =
     detailsDB::DetailsDB,
     stateDB::MPDB,
     codeDB::CodeDB,
-    storageDB::StorageDB
+    storageDB::StorageDB,
+    pingCount::Int,
+    peers::[Peer]
     }
 
 type ContextM = StateT Context IO
@@ -65,3 +68,5 @@ openDBs useCppDBs = do
       MPDB{ ldb=sdb, stateRoot=error "no stateRoot defined"}
       sdb
       MPDB{ ldb=sdb, stateRoot=error "no stateRoot defined"}
+      0
+      []

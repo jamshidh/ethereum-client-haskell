@@ -18,6 +18,10 @@ data Operation =
     PREVHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | POP | DUP | SWAP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | 
     JUMP | JUMPI | PC | MSIZE | GAS | JUMPDEST | CALLCODE | 
     PUSH [Word8] | 
+    DUP1 | DUP2 | DUP3 | DUP4 |
+    DUP5 | DUP6 | DUP7 | DUP8 |
+    DUP9 | DUP10 | DUP11 | DUP12 |
+    DUP13 | DUP14 | DUP15 | DUP16 |
     CREATE | CALL | RETURN | SUICIDE |
     --Pseudo Opcodes
     LABEL String | PUSHLABEL String | PUSHDIFF String String | DATA B.ByteString deriving (Show, Eq, Ord)
@@ -93,6 +97,23 @@ opDatas =
     OPData 0x5a GAS 0 1 "Get the amount of available gas.",
     OPData 0x5b JUMPDEST undefined undefined "set a potential jump destination",
 
+    OPData 0x80 DUP1 undefined undefined undefined,
+    OPData 0x81 DUP2 undefined undefined undefined,
+    OPData 0x82 DUP3 undefined undefined undefined,
+    OPData 0x83 DUP4 undefined undefined undefined,
+    OPData 0x84 DUP5 undefined undefined undefined,
+    OPData 0x85 DUP6 undefined undefined undefined,
+    OPData 0x86 DUP7 undefined undefined undefined,
+    OPData 0x87 DUP8 undefined undefined undefined,
+    OPData 0x88 DUP9 undefined undefined undefined,
+    OPData 0x89 DUP10 undefined undefined undefined,
+    OPData 0x8a DUP11 undefined undefined undefined,
+    OPData 0x8b DUP12 undefined undefined undefined,
+    OPData 0x8c DUP13 undefined undefined undefined,
+    OPData 0x8d DUP14 undefined undefined undefined,
+    OPData 0x8e DUP15 undefined undefined undefined,
+    OPData 0x8f DUP16 undefined undefined undefined,
+
     OPData 0xf0 CREATE 3 1 "Create a new account with associated code.",
     OPData 0xf1 CALL 7 1 "Message-call into an account.",
     OPData 0xf2 CALLCODE undefined undefined "message-call with another account's code only",
@@ -129,7 +150,7 @@ opCode2Op rom =
   if opcode >= 0x60 && opcode <= 0x7f
   then (PUSH $ B.unpack $ B.take (fromIntegral $ opcode-0x5F) $ B.tail rom, fromIntegral $ opcode - 0x5E)
   else
-    let op = fromMaybe (error $ "code is missing in code2OpMap: " ++ showHex (B.head rom) "")
+    let op = fromMaybe (error $ "code is missing in code2OpMap: 0x" ++ showHex (B.head rom) "")
              $ M.lookup opcode code2OpMap in
     (op, 1)
 

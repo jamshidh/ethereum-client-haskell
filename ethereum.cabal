@@ -30,6 +30,7 @@ executable ethereumH
                  , resourcet
                  , time
                  , transformers
+                 , vector
                  , ansi-wl-pprint
     main-is: Main.hs
     C-sources: fastNonceFinder/nonceFinder.c

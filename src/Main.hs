@@ -17,8 +17,9 @@ import Data.Word
 import Network.Haskoin.Crypto hiding (Address)
 import Network.Socket (socketToHandle)
 import Numeric
---import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import System.Entropy
+import System.Environment
 import System.IO
 
 import Network.Simple.TCP
@@ -28,6 +29,7 @@ import Data.RLP
 import BlockChain
 import BlockSynchronizer
 import qualified Colors as CL
+import Communication
 import Constants
 import Context
 import Data.Address
@@ -37,6 +39,7 @@ import Data.SignedTransaction
 import Data.Transaction
 import Data.Wire
 import Database.MerklePatricia
+import Display
 import ExtDBs
 import Format
 import DB.ModifyStateDB
@@ -96,10 +99,10 @@ submitNextBlock socket baseDifficulty b = do
         liftIO $ print newBlock
         n <- liftIO $ fastFindNonce newBlock
 
-        liftIO $ print $ showHex (powFunc $ addNonceToBlock newBlock n) ""
+        --liftIO $ print $ showHex (powFunc $ addNonceToBlock newBlock n) ""
         let theBytes = headerHashWithoutNonce newBlock `B.append` B.pack (integer2Bytes n)
-        liftIO $ print $ format theBytes
-        liftIO $ print $ format $ C.hash 256 theBytes
+        --liftIO $ print $ format theBytes
+        --liftIO $ print $ format $ C.hash 256 theBytes
         let theNewBlock = addNonceToBlock newBlock n
         liftIO $ sendMessage socket $ NewBlockPacket theNewBlock (baseDifficulty + difficulty (blockData theNewBlock))
         addBlocks [theNewBlock]
@@ -111,21 +114,28 @@ ifBlockInDBSubmitNextBlock socket baseDifficulty b = do
     Nothing -> return ()
     _ -> submitNextBlock socket baseDifficulty b
 
+
+
 handlePayload::Socket->B.ByteString->ContextM ()
 handlePayload socket payload = do
+  --liftIO $ print $ payload
   --liftIO $ putStrLn $ show $ pretty $ rlpDeserialize payload
   let rlpObject = rlpDeserialize payload
   let msg = obj2WireMessage rlpObject
-  liftIO $ putStrLn (CL.red "msg<<<<: " ++ format msg)
+  liftIO $ displayMessage False msg
   case msg of
     Hello{} -> do
              bestBlock <- getBestBlock
              genesisBlockHash <- getGenesisBlockHash
-             liftIO $ sendMessage socket Status{protocolVersion=46, networkID="", totalDifficulty=0, latestHash=blockHash bestBlock, genesisHash=genesisBlockHash}
-    Ping -> liftIO $ sendMessage socket Pong
+             liftIO $ sendMessage socket Status{protocolVersion=fromIntegral ethVersion, networkID="", totalDifficulty=0, latestHash=blockHash bestBlock, genesisHash=genesisBlockHash}
+    Ping -> do
+      addPingCount
+      liftIO $ sendMessage socket Pong
     GetPeers -> do
       liftIO $ sendMessage socket $ Peers []
       liftIO $ sendMessage socket GetPeers
+    (Peers peers) -> do
+      setPeers peers
     BlockHashes blockHashes -> handleNewBlockHashes socket blockHashes
     Blocks blocks -> do
       handleNewBlocks socket blocks
@@ -133,7 +143,7 @@ handlePayload socket payload = do
         [b] -> ifBlockInDBSubmitNextBlock socket b
         _ -> return ()-}
     NewBlockPacket block baseDifficulty -> do
-      handleNewBlocks socket [block]
+      addBlocks [block]
       ifBlockInDBSubmitNextBlock socket baseDifficulty block
 
     Status{latestHash=lh} ->
@@ -167,9 +177,9 @@ mkHello::IO Message
 mkHello = do
   peerId <- getEntropy 64
   return Hello {
-               version = 2,
+               version = fromIntegral shhVersion,
                clientId = "Ethereum(G)/v0.6.4//linux/Haskell",
-               capability = [ETH 46], -- , SHH 1],
+               capability = [ETH ethVersion, SHH shhVersion],
                port = 30303,
                nodeId = fromIntegral $ byteString2Integer peerId
              }
@@ -180,6 +190,12 @@ createTransaction t = do
     userNonce <- addressStateNonce <$> getAddressState (prvKey2Address prvKey)
     liftIO $ withSource devURandom $ signTransaction prvKey t{tNonce=userNonce}
 
+createTransactions::[Transaction]->ContextM [SignedTransaction]
+createTransactions transactions = do
+    userNonce <- addressStateNonce <$> getAddressState (prvKey2Address prvKey)
+    forM (zip transactions [userNonce..]) $ \(t, n) -> do
+      liftIO $ withSource devURandom $ signTransaction prvKey t{tNonce=n}
+
 doit::Socket->ContextM ()
 doit socket = do
   (setStateRoot . bStateRoot . blockData) =<< getBestBlock
@@ -187,7 +203,7 @@ doit socket = do
   --signedTx <- createTransaction outOfGasTX
   --signedTx <- createTransaction simpleStorageTX
   --signedTx <- createTransaction createContractTX
-  signedTx <- createTransaction sendMessageTX
+  --signedTx <- createTransaction sendMessageTX
 
   --signedTx <- createTransaction createContractTX
   --signedTx <- createTransaction paymentContract
@@ -195,25 +211,51 @@ doit socket = do
   --signedTx <- createTransaction keyValuePublisher
   --signedTx <- createTransaction sendKeyVal
 
-  liftIO $ print $ whoSignedThisTransaction signedTx
+  --liftIO $ print $ whoSignedThisTransaction signedTx
 
                 
-  liftIO $ sendMessage socket $ Transactions [signedTx]
+  --liftIO $ sendMessage socket $ Transactions [signedTx]
+
+
+  signedTxs <- createTransactions [createMysteryContract]
+  liftIO $ sendMessage socket $ Transactions signedTxs
+
 
   readAndOutput socket
 
-  
+ipAddresses =
+  [
+    ("127.0.0.1", "30303"), ("207.12.89.180", "30303"), ("24.90.136.85", "40404"), 
+    ("185.43.109.23", "30303"),
+    ("76.220.27.23", "30303"), ("194.151.205.61", "30303"), ("104.236.44.20", "30303"),
+    ("90.215.69.132", "30303"), ("46.115.170.122", "30303"), ("82.113.99.187", "30303"),
+    ("54.73.114.158", "30303"), ("94.197.120.233", "30303"), ("99.36.164.218", "30301"),
+    ("79.205.230.196", "30303"), ("213.61.84.226", "30303"),
+    ("82.217.72.169", "20818"),
+    ("66.91.18.59", "30303"),
+    ("92.225.49.139", "30303"),
+    ("46.126.19.53", "30303"),
+    ("209.6.197.196", "30303"),
+    ("95.91.196.230", "30303"),
+    ("77.87.49.7", "30303"),
+    ("77.50.138.143", "22228"),
+    ("84.232.211.95", "30300"),
+    ("213.127.159.150", "30303"), ("89.71.42.180", "30303"), ("216.240.30.23", "30303"), ("62.163.114.115", "30304"), ("178.198.11.18", "30303"), ("94.117.148.121", "30303"), ("80.185.182.157", "30303"), ("129.194.71.126", "30303"), ("129.194.71.126", "12667"), ("199.254.238.167", "30303")
+  ]
 
 main::IO ()    
+main = do
 
---main = connect "185.43.109.23" "30303" $ \(socket, _) -> do
-main = connect "127.0.0.1" "30303" $ \(socket, _) -> do
---main = connect "192.168.0.2" "30303" $ \(socket, _) -> do
-  putStrLn "Connected"
-  sendMessage socket =<< mkHello
+  [ipNum] <- getArgs
 
-  runResourceT $ do
-    cxt <- openDBs False
-    _ <- liftIO $ runStateT (doit socket) cxt
-    return ()
+  let (ipAddress, port) = ipAddresses !! read ipNum
+
+  connect ipAddress port $ \(socket, _) -> do
+    putStrLn "Connected"
+    sendMessage socket =<< mkHello
+
+    runResourceT $ do
+      cxt <- openDBs False
+      _ <- liftIO $ runStateT (doit socket) cxt
+      return ()
 

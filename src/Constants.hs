@@ -3,6 +3,11 @@
 module Constants where
 
 
+ethVersion::Integer
+ethVersion=48
+shhVersion::Integer
+shhVersion=2
+
 _Uether = 1000000000 * 1000000000 * 1000000000 * 1000000000 * 1000000000 * 1000000000;
 _Vether = 1000000000 * 1000000000 * 1000000000 * 1000000000 * 1000000000 * 1000000;
 _Dether = 1000000000 * 1000000000 * 1000000000 * 1000000000 * 1000000000 * 1000;
@@ -34,8 +39,8 @@ stateDBPath::String
 stateDBPath="/state/"
 
 dbDir::Bool->String
---dbDir True = "/.ethereum"
-dbDir True = "/Library/Application Support/Ethereum"
+dbDir True = "/.ethereum"
+--dbDir True = "/Library/Application Support/Ethereum"
 dbDir False = "/.ethereumH"
 
 

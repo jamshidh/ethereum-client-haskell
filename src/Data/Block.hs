@@ -106,7 +106,7 @@ instance RLPSerializable BlockData where
       extraData = rlpDecode v13,
       nonce = rlpDecode v14
       }  
-  rlpDecode (RLPArray arr) = error ("rlp2BlockData called on object with wrong amount of data, length arr = " ++ show arr)
+  rlpDecode (RLPArray arr) = error ("Error in rlpDecode for Block: wrong number of items, expected 14, got " ++ show (length arr) ++ ", arr = " ++ show (pretty arr))
   rlpDecode x = error ("rlp2BlockData called on non block object: " ++ show x)
 
 
@@ -139,8 +139,8 @@ instance Format BlockData where
     (if unclesHash b == hash (B.pack [0xc0]) then " (the empty array)\n" else "\n") ++
     "coinbase: " ++ show (pretty $ coinbase b) ++ "\n" ++
     "stateRoot: " ++ show (pretty $ bStateRoot b) ++ "\n" ++
-    "transactionsRoot: " ++ show (transactionsRoot b) ++ "\n" ++
-    "receiptsRoot: " ++ show (receiptsRoot b) ++ "\n" ++
+    "transactionsRoot: " ++ show (pretty $ transactionsRoot b) ++ "\n" ++
+    "receiptsRoot: " ++ show (pretty $ receiptsRoot b) ++ "\n" ++
     "difficulty: " ++ show (difficulty b) ++ "\n" ++
     "gasLimit: " ++ show (gasLimit b) ++ "\n" ++
     "gasUsed: " ++ show (gasUsed b) ++ "\n" ++

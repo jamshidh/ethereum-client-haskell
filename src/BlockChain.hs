@@ -137,7 +137,9 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
             envValue = value ut,
             envCode = tInit ut
             }
-  
+
+  liftIO $ putStrLn "VM has finished running"
+
   liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
   let usedGas = availableGas - vmGasRemaining vmState
   liftIO $ putStrLn $ "gasUsed: " ++ show usedGas

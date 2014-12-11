@@ -96,17 +96,14 @@ runOperation CALLDATALOAD _ s = return s{ vmException=Just StackTooSmallExceptio
 runOperation CALLDATASIZE Environment{envInputData=d} state = return state{stack=fromIntegral (B.length d):stack state}
 
 runOperation CALLDATACOPY Environment{envInputData=d} state@VMState{stack=memP:codeP:size:rest} = do
-  liftIO $ mStoreByteString (memory state) memP $ B.take (fromIntegral size) $ B.drop (fromIntegral codeP) d
-  return state{stack=rest}
+  m'<-liftIO $ mStoreByteString (memory state) memP $ B.take (fromIntegral size) $ B.drop (fromIntegral codeP) d
+  return state{stack=rest, memory=m'}
 
 runOperation CODESIZE Environment{envCode=c} state = return state{stack=fromIntegral (codeLength c):stack state}
 
 runOperation CODECOPY Environment{envCode=Code c} state@VMState{stack=memP:codeP:size:rest} = do
-  --beforeMemSize <- liftIO $ getSize $ memory state
-  liftIO $ mStoreByteString (memory state) memP $ B.take (fromIntegral size) $ B.drop (fromIntegral codeP) c
-  --afterMemory <- liftIO $ getSize (memory state)
-  --let extraMemory = afterMemory - beforeMemSize 
-  return state{stack=rest} -- temporarily moved     , vmGasRemaining = vmGasRemaining state - fromIntegral extraMemory}
+  m' <- liftIO $ mStoreByteString (memory state) memP $ B.take (fromIntegral size) $ B.drop (fromIntegral codeP) c
+  return state{stack=rest, memory=m'}
 
 runOperation GASPRICE Environment{envGasPrice=gp} state = return state{stack=fromIntegral gp:stack state}
 
@@ -133,13 +130,13 @@ runOperation MLOAD _ state@VMState{stack=(p:rest)} = do
   return $ state { stack=fromInteger (bytes2Integer bytes):rest }
   
 runOperation MSTORE _ state@VMState{stack=(p:val:rest)} = do
-  liftIO $ mStore (memory state) p val
-  return state{stack=rest}
+  m' <- liftIO $ mStore (memory state) p val
+  return state{stack=rest, memory=m'}
 
 runOperation MSTORE8 _ state@VMState{stack=(p:val:rest)} = do
-  liftIO $ mStore8 (memory state) (fromIntegral p) (fromIntegral $ val .&. 0xFF)
+  m' <- liftIO $ mStore8 (memory state) (fromIntegral p) (fromIntegral $ val .&. 0xFF)
   return $
-    state { stack=rest }
+    state { stack=rest, memory=m' }
 
 runOperation SLOAD _ state@VMState{stack=(p:rest)} = do
   vals <- getStorageKeyVals (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
@@ -175,6 +172,13 @@ runOperation MSIZE _ state@VMState{memory=m} = do
 runOperation GAS _ state =
   return $ state { stack=fromInteger (vmGasRemaining state):stack state }
 
+runOperation JUMPDEST _ state = return state
+
+runOperation CALLCODE _ state@VMState{stack=val1:val2:val3:rest} = return state
+runOperation CALLCODE _ state =
+  return $ state { vmException=Just StackTooSmallException } 
+
+                                                               
 runOperation (PUSH vals) _ state =
   return $
   state { stack=fromIntegral (bytes2Integer vals):stack state }
@@ -183,6 +187,22 @@ runOperation (PUSH vals) _ state =
 
 --               | CREATE | CALL | RETURN | SUICIDE deriving (Show, Eq, Ord)
 
+runOperation DUP1 _ state@VMState{stack=val:rest} = return state{stack=replicate 2 val ++ rest}
+runOperation DUP2 _ state@VMState{stack=val:rest} = return state{stack=replicate 3 val ++ rest}
+runOperation DUP3 _ state@VMState{stack=val:rest} = return state{stack=replicate 4 val ++ rest}
+runOperation DUP4 _ state@VMState{stack=val:rest} = return state{stack=replicate 5 val ++ rest}
+runOperation DUP5 _ state@VMState{stack=val:rest} = return state{stack=replicate 6 val ++ rest}
+runOperation DUP6 _ state@VMState{stack=val:rest} = return state{stack=replicate 7 val ++ rest}
+runOperation DUP7 _ state@VMState{stack=val:rest} = return state{stack=replicate 8 val ++ rest}
+runOperation DUP8 _ state@VMState{stack=val:rest} = return state{stack=replicate 9 val ++ rest}
+runOperation DUP9 _ state@VMState{stack=val:rest} = return state{stack=replicate 10 val ++ rest}
+runOperation DUP10 _ state@VMState{stack=val:rest} = return state{stack=replicate 11 val ++ rest}
+runOperation DUP11 _ state@VMState{stack=val:rest} = return state{stack=replicate 12 val ++ rest}
+runOperation DUP12 _ state@VMState{stack=val:rest} = return state{stack=replicate 13 val ++ rest}
+runOperation DUP13 _ state@VMState{stack=val:rest} = return state{stack=replicate 14 val ++ rest}
+runOperation DUP14 _ state@VMState{stack=val:rest} = return state{stack=replicate 15 val ++ rest}
+runOperation DUP15 _ state@VMState{stack=val:rest} = return state{stack=replicate 16 val ++ rest}
+runOperation DUP16 _ state@VMState{stack=val:rest} = return state{stack=replicate 17 val ++ rest}
 
 
 runOperation RETURN _ state@VMState{stack=[address, size]} = do
@@ -243,6 +263,7 @@ decreaseGasForOp op state = do
 runCode::Environment->VMState->ContextM VMState
 runCode env state = do
   let (op, len) = getOperationAt (envCode env) (pc state)
+  liftIO $ putStrLn $ " > OP: " ++ show op
   state' <- decreaseGasForOp op state
   result <- runOperation op env state'
   case result of

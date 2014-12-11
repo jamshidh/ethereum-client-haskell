@@ -17,6 +17,7 @@ import Network.Simple.TCP
 
 import Data.Block
 import BlockChain
+import Communication
 import Context
 import ExtDBs
 import SHA
