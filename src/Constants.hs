@@ -4,7 +4,8 @@ module Constants where
 
 
 ethVersion::Integer
-ethVersion=48
+ethVersion=45
+--ethVersion=48
 shhVersion::Integer
 shhVersion=2
 
@@ -38,10 +39,12 @@ detailsDBPath="/details/"
 stateDBPath::String
 stateDBPath="/state/"
 
-dbDir::Bool->String
-dbDir True = "/.ethereum"
---dbDir True = "/Library/Application Support/Ethereum"
-dbDir False = "/.ethereumH"
+dbDir::String->String
+dbDir "c" = ".ethereum"
+--dbDir "c" = "Library/Application Support/Ethereum"
+dbDir "h" = ".ethereumH"
+dbDir "t" = "/tmp/tmpDB"
+dbDir x = error $ "Unknown DB specifier: " ++ show x
 
 
 --"/Users/hutong/Library/Application Support/Ethereum/state/"

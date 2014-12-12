@@ -14,11 +14,14 @@ newtype Code = Code B.ByteString deriving (Show)
 getOperationAt::Code->Int->(Operation, Int)
 getOperationAt (Code rom) p = opCode2Op $ B.drop p rom
 
-instance Pretty Code where
-    pretty (Code rom) | B.null rom = empty
-    pretty c@(Code rom) = text (show op ++ "\n") <> pretty (Code $ B.drop nextP rom)
+showCode::Int->Code->String
+showCode _ (Code rom) | B.null rom = ""
+showCode lineNumber c@(Code rom) = show lineNumber ++ " " ++ show (pretty op) ++ "\n" ++  showCode (lineNumber + nextP) (Code $ B.drop nextP rom)
         where
           (op, nextP) = getOperationAt c 0
+
+instance Pretty Code where
+    pretty = text . showCode 0
 
 instance RLPSerializable Code where
     rlpEncode (Code rom) = rlpEncode rom

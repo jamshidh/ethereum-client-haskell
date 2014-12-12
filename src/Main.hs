@@ -7,17 +7,15 @@ module Main (
 import Control.Monad.IO.Class
 import Control.Monad.State
 import Control.Monad.Trans.Resource
-import qualified Crypto.Hash.SHA3 as C
 import Data.Bits
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
-import Data.Functor
+--import Data.Functor
 import Data.Time.Clock
 import Data.Word
 import Network.Haskoin.Crypto hiding (Address)
 import Network.Socket (socketToHandle)
-import Numeric
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+--import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import System.Entropy
 import System.Environment
 import System.IO
@@ -28,22 +26,19 @@ import Data.RLP
 
 import BlockChain
 import BlockSynchronizer
-import qualified Colors as CL
 import Communication
 import Constants
 import Context
 import Data.Address
-import Data.AddressState
+--import Data.AddressState
 import Data.Block
-import Data.SignedTransaction
-import Data.Transaction
+--import Data.SignedTransaction
+--import Data.Transaction
 import Data.Wire
 import Database.MerklePatricia
 import Display
-import ExtDBs
-import Format
 import DB.ModifyStateDB
-import SampleTransactions
+--import SampleTransactions
 import SHA
 import Util
 
@@ -96,15 +91,11 @@ submitNextBlock::Socket->Integer->Block->ContextM ()
 submitNextBlock socket baseDifficulty b = do
         ts <- liftIO getCurrentTime
         newBlock <- getNextBlock b ts
-        liftIO $ print newBlock
         n <- liftIO $ fastFindNonce newBlock
 
-        --liftIO $ print $ showHex (powFunc $ addNonceToBlock newBlock n) ""
-        let theBytes = headerHashWithoutNonce newBlock `B.append` B.pack (integer2Bytes n)
-        --liftIO $ print $ format theBytes
-        --liftIO $ print $ format $ C.hash 256 theBytes
+        --let theBytes = headerHashWithoutNonce newBlock `B.append` B.pack (integer2Bytes n)
         let theNewBlock = addNonceToBlock newBlock n
-        liftIO $ sendMessage socket $ NewBlockPacket theNewBlock (baseDifficulty + difficulty (blockData theNewBlock))
+        sendMessage socket $ NewBlockPacket theNewBlock (baseDifficulty + difficulty (blockData theNewBlock))
         addBlocks [theNewBlock]
 
 ifBlockInDBSubmitNextBlock::Socket->Integer->Block->ContextM ()
@@ -122,26 +113,23 @@ handlePayload socket payload = do
   --liftIO $ putStrLn $ show $ pretty $ rlpDeserialize payload
   let rlpObject = rlpDeserialize payload
   let msg = obj2WireMessage rlpObject
-  liftIO $ displayMessage False msg
+  displayMessage False msg
   case msg of
     Hello{} -> do
              bestBlock <- getBestBlock
              genesisBlockHash <- getGenesisBlockHash
-             liftIO $ sendMessage socket Status{protocolVersion=fromIntegral ethVersion, networkID="", totalDifficulty=0, latestHash=blockHash bestBlock, genesisHash=genesisBlockHash}
+             sendMessage socket Status{protocolVersion=fromIntegral ethVersion, networkID="", totalDifficulty=0, latestHash=blockHash bestBlock, genesisHash=genesisBlockHash}
     Ping -> do
       addPingCount
-      liftIO $ sendMessage socket Pong
+      sendMessage socket Pong
     GetPeers -> do
-      liftIO $ sendMessage socket $ Peers []
-      liftIO $ sendMessage socket GetPeers
-    (Peers peers) -> do
-      setPeers peers
+      sendMessage socket $ Peers []
+      sendMessage socket GetPeers
+    (Peers thePeers) -> do
+      setPeers thePeers
     BlockHashes blockHashes -> handleNewBlockHashes socket blockHashes
     Blocks blocks -> do
       handleNewBlocks socket blocks
-{-      case blocks of
-        [b] -> ifBlockInDBSubmitNextBlock socket b
-        _ -> return ()-}
     NewBlockPacket block baseDifficulty -> do
       addBlocks [block]
       ifBlockInDBSubmitNextBlock socket baseDifficulty block
@@ -149,9 +137,10 @@ handlePayload socket payload = do
     Status{latestHash=lh} ->
         handleNewBlockHashes socket [lh]
     GetTransactions -> do
-      liftIO $ sendMessage socket $ Transactions []
-      liftIO $ sendMessage socket GetTransactions
-
+      sendMessage socket $ Transactions []
+      --liftIO $ sendMessage socket GetTransactions
+      return ()
+      
     _-> return ()
 
 getPayloads::[Word8]->[[Word8]]
@@ -184,7 +173,7 @@ mkHello = do
                nodeId = fromIntegral $ byteString2Integer peerId
              }
 
-
+{-
 createTransaction::Transaction->ContextM SignedTransaction
 createTransaction t = do
     userNonce <- addressStateNonce <$> getAddressState (prvKey2Address prvKey)
@@ -195,9 +184,11 @@ createTransactions transactions = do
     userNonce <- addressStateNonce <$> getAddressState (prvKey2Address prvKey)
     forM (zip transactions [userNonce..]) $ \(t, n) -> do
       liftIO $ withSource devURandom $ signTransaction prvKey t{tNonce=n}
+-}
 
 doit::Socket->ContextM ()
 doit socket = do
+  sendMessage socket =<< (liftIO mkHello)
   (setStateRoot . bStateRoot . blockData) =<< getBestBlock
   --signedTx <- createTransaction simpleTX
   --signedTx <- createTransaction outOfGasTX
@@ -217,12 +208,13 @@ doit socket = do
   --liftIO $ sendMessage socket $ Transactions [signedTx]
 
 
-  signedTxs <- createTransactions [createMysteryContract]
-  liftIO $ sendMessage socket $ Transactions signedTxs
+  --signedTxs <- createTransactions [createMysteryContract]
+  --liftIO $ sendMessage socket $ Transactions signedTxs
 
 
   readAndOutput socket
 
+ipAddresses::[(String, String)]
 ipAddresses =
   [
     ("127.0.0.1", "30303"), ("207.12.89.180", "30303"), ("24.90.136.85", "40404"), 
@@ -248,14 +240,12 @@ main = do
 
   [ipNum] <- getArgs
 
-  let (ipAddress, port) = ipAddresses !! read ipNum
+  let (ipAddress, port') = ipAddresses !! read ipNum
 
-  connect ipAddress port $ \(socket, _) -> do
+  connect ipAddress port' $ \(socket, _) -> do
     putStrLn "Connected"
-    sendMessage socket =<< mkHello
 
     runResourceT $ do
-      cxt <- openDBs False
+      cxt <- openDBs "h"
       _ <- liftIO $ runStateT (doit socket) cxt
       return ()
-

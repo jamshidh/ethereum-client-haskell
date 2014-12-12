@@ -20,6 +20,7 @@ executable ethereumH
                  , entropy
                  , ethereum-merkle-patricia-db
                  , ethereum-rlp
+                 , filepath
                  , haskoin
                  , leveldb-haskell
                  , mtl

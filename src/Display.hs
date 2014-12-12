@@ -24,6 +24,7 @@ updateStatus = do
   liftIO $ setTitle $
     "pingCount = " ++ show (pingCount cxt)
     ++ ", peer count=" ++ show (length $ peers cxt)
+    ++ ", hashes requested=" ++ show (length $ neededBlockHashes cxt)
 
 addPingCount::ContextM ()
 addPingCount = do
@@ -36,12 +37,23 @@ setPeers p = do
   cxt <- get
   put cxt{peers = p}
   updateStatus
+
+prefix::Bool->String
+prefix True = CL.green "msg>>>>>: "
+prefix False = CL.red "msg<<<<: "
+       
   
-displayMessage::Bool->Message->IO ()
+displayMessage::Bool->Message->ContextM ()
+displayMessage _ Ping = return ()
+displayMessage _ Pong = return ()
 displayMessage _ GetPeers = return ()
 displayMessage _ (Peers _) = return ()
+displayMessage _ QqqqPacket = return ()
+displayMessage outbound (BlockHashes shas) = do
+  liftIO $ putStrLn $ prefix outbound ++ CL.blue "BlockHashes: " ++ "(" ++ show (length shas) ++ " new hashes)"
+  updateStatus
+displayMessage outbound (Blocks blocks) = do
+  liftIO $ putStrLn $ prefix outbound ++ CL.blue "Blocks: " ++ "(" ++ show (length blocks) ++ " new blocks)"
+  updateStatus
 displayMessage outbound msg =
-  if outbound
-  then putStrLn (CL.red "msg<<<<: " ++ format msg)
-  else putStrLn (CL.green "msg>>>>>: " ++ format msg)
-       
+  liftIO $ putStrLn $ (prefix outbound) ++ format msg

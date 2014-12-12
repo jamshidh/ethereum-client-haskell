@@ -9,7 +9,6 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import Control.Monad.Trans.State
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Base16 as B16
 import Data.Functor
 import Data.Time.Clock.POSIX
 

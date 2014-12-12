@@ -45,18 +45,18 @@ setNewMaxSize m@(Memory arr size) newVal = do
     else return m
          
 mLoad::Memory->Word256->IO [Word8]
-mLoad m@(Memory arr _) p = do
-  setNewMaxSize m (p+31)
+mLoad (Memory arr _) p = do
+  --setNewMaxSize m (p+31)
   sequence $ V.read arr <$> fromIntegral <$> [p..p+31] 
 
 mLoad8::Memory->Word256->IO Word8
-mLoad8 m@(Memory arr _) p = do
-  setNewMaxSize m p
+mLoad8 (Memory arr _) p = do
+  --setNewMaxSize m p
   V.read arr (fromIntegral p)
 
 mLoadByteString::Memory->Word256->Word256->IO B.ByteString
-mLoadByteString m@(Memory arr _) p size = do
-  setNewMaxSize m (p+size)
+mLoadByteString (Memory arr _) p size = do
+  --setNewMaxSize m (p+size)
   fmap B.pack $ sequence $ V.read arr <$> fromIntegral <$> [p..p+size-1] 
 
 

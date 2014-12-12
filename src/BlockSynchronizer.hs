@@ -43,10 +43,10 @@ handleNewBlockHashes socket blockHashes = do
   result <- findFirstHashAlreadyInDB blockHashes
   case result of
     Nothing -> do
-                liftIO $ putStrLn "Requesting more block hashes"
+                --liftIO $ putStrLn "Requesting more block hashes"
                 cxt <- get 
                 put cxt{neededBlockHashes=blockHashes ++ neededBlockHashes cxt}
-                liftIO $ sendMessage socket $ GetBlockHashes [last blockHashes] 0x40
+                sendMessage socket $ GetBlockHashes [last blockHashes] 0x500
     Just hashInDB -> do
                 liftIO $ putStrLn $ "Found a serverblock already in our database: " ++ show (pretty hashInDB)
                 cxt <- get 
@@ -61,7 +61,7 @@ askForSomeBlocks socket = do
     else do
       let (firstBlocks, lastBlocks) = splitAt 0x40 (neededBlockHashes cxt)
       put cxt{neededBlockHashes=lastBlocks}
-      liftIO $ sendMessage socket $ GetBlocks firstBlocks
+      sendMessage socket $ GetBlocks firstBlocks
 
 
 handleNewBlocks::Socket->[Block]->ContextM ()

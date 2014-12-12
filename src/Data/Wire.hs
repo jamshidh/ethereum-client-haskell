@@ -6,9 +6,6 @@ module Data.Wire (
   wireMessage2Obj
   ) where
 
-import Data.Binary.Put
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as BL
 import Data.Functor
 import Data.List
 import Network.Haskoin.Crypto
@@ -23,9 +20,6 @@ import Data.SignedTransaction
 import Format
 import SHA
 import Util
-
-import Network.Simple.TCP
-
 
 --import Debug.Trace
 
@@ -77,7 +71,9 @@ numberToTerminationReason 0x09 = UnexpectedIdentity
 numberToTerminationReason 0x0a = ConnectedToSelf
 numberToTerminationReason 0x0b = PingTimeout
 numberToTerminationReason 0x0c = OtherSubprotocolReason
-  
+numberToTerminationReason _ = error "numberToTerminationReasion called with unsupported number"
+
+
 terminationReasonToNumber::TerminationReason->Integer
 terminationReasonToNumber DisconnectRequested = 0x00
 terminationReasonToNumber TCPSubSystemError = 0x01
@@ -256,6 +252,8 @@ wireMessage2Obj (Blocks blocks) =
   RLPArray (RLPScalar 0x16:(rlpEncode <$> blocks))
 wireMessage2Obj (NewBlockPacket block d) =
   RLPArray [RLPScalar 0x17, rlpEncode block, rlpEncode d]
+wireMessage2Obj (PacketCount c) =
+  RLPArray [RLPScalar 0x18, rlpEncode c]
 wireMessage2Obj QqqqPacket =
   RLPArray [RLPScalar 0x19]
 

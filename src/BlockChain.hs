@@ -264,6 +264,7 @@ addTransactions b (t:rest) = do
   
 addBlock::Block->ContextM ()
 addBlock b@Block{blockData=bd, blockUncles=uncles} = do
+  liftIO $ putStrLn $ "Attempting to insert block #" ++ show (number bd) ++ "."
   maybeParent <- getBlock $ parentHash bd
   case maybeParent of
     Nothing ->

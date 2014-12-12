@@ -8,6 +8,7 @@ import Prelude hiding (LT, GT, EQ)
 import Control.Monad.IO.Class
 import Data.Bits
 import qualified Data.ByteString as B
+import Data.Function
 import Data.Time.Clock.POSIX
 import Network.Haskoin.Crypto (Word256)
 
@@ -46,6 +47,9 @@ unaryAction action _ state@VMState{stack=x:rest} = return state{stack=action x:r
 unaryAction _ _ state = return state{vmException=Just StackTooSmallException}
 
 
+s256ToInteger::Word256->Integer
+s256ToInteger i | i < 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF = toInteger i
+s256ToInteger i = 0x10000000000000000000000000000000000000000000000000000000000000000 - toInteger i
 
 runOperation::Operation->Environment->VMState->ContextM VMState
 runOperation STOP _ state = return state{done=True}
@@ -54,15 +58,15 @@ runOperation ADD env state = binaryAction (+) env state
 runOperation MUL env state = binaryAction (*) env state
 runOperation SUB env state = binaryAction (-) env state
 runOperation DIV env state = binaryAction quot env state
-runOperation SDIV env state = binaryAction undefined env state
+runOperation SDIV env state = binaryAction ((fromIntegral .) . quot `on` s256ToInteger) env state
 runOperation MOD env state = binaryAction mod env state
-runOperation SMOD env state = binaryAction undefined env state
+runOperation SMOD env state = binaryAction ((fromIntegral .) . mod `on` s256ToInteger) env state
 runOperation EXP env state = binaryAction (^) env state
 runOperation NEG env state = unaryAction negate env state
 runOperation LT env state = binaryAction ((bool2Word256 .) . (<)) env state
 runOperation GT env state = binaryAction ((bool2Word256 .) . (>)) env state
-runOperation SLT env state = binaryAction undefined env state
-runOperation SGT env state = binaryAction undefined env state
+runOperation SLT env state = binaryAction ((bool2Word256 .) . ((<) `on` s256ToInteger)) env state
+runOperation SGT env state = binaryAction ((bool2Word256 .) . ((>) `on` s256ToInteger)) env state
 runOperation EQ env state = binaryAction ((bool2Word256 .) . (==)) env state
 runOperation ISZERO env state = unaryAction (bool2Word256 . not . word2562Bool) env state
 runOperation AND env state = binaryAction (.&.) env state
@@ -174,9 +178,9 @@ runOperation GAS _ state =
 
 runOperation JUMPDEST _ state = return state
 
-runOperation CALLCODE _ state@VMState{stack=val1:val2:val3:rest} = return state
-runOperation CALLCODE _ state =
-  return $ state { vmException=Just StackTooSmallException } 
+--runOperation CALLCODE _ state@VMState{stack=gas:to:val:inOffset:inSize:outOffset:outSize:rest} = return state
+--runOperation CALLCODE _ state =
+--  return $ state { vmException=Just StackTooSmallException } 
 
                                                                
 runOperation (PUSH vals) _ state =

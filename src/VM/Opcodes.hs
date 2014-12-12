@@ -9,6 +9,9 @@ import Data.Functor
 import qualified Data.Map as M
 import Data.Maybe
 import Numeric
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+
+import Util
 
 --import Debug.Trace
 
@@ -16,15 +19,20 @@ data Operation =
     STOP | ADD | MUL | SUB | DIV | SDIV | MOD | SMOD | ADDMOD | MULMOD | EXP | SIGNEXTEND | NEG | LT | GT | SLT | SGT | EQ | ISZERO | NOT | AND | OR | XOR | BYTE | SHA3 | 
     ADDRESS | BALANCE | ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | EXTCODESIZE | EXTCODECOPY |
     PREVHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | POP | DUP | SWAP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | 
-    JUMP | JUMPI | PC | MSIZE | GAS | JUMPDEST | CALLCODE | 
+    JUMP | JUMPI | PC | MSIZE | GAS | JUMPDEST | 
     PUSH [Word8] | 
     DUP1 | DUP2 | DUP3 | DUP4 |
     DUP5 | DUP6 | DUP7 | DUP8 |
     DUP9 | DUP10 | DUP11 | DUP12 |
     DUP13 | DUP14 | DUP15 | DUP16 |
-    CREATE | CALL | RETURN | SUICIDE |
+    CREATE | CALL | RETURN | CALLCODE | SUICIDE |
     --Pseudo Opcodes
     LABEL String | PUSHLABEL String | PUSHDIFF String String | DATA B.ByteString deriving (Show, Eq, Ord)
+
+instance Pretty Operation where
+  pretty x@JUMPDEST = text $ "------" ++ show x
+  pretty x@(PUSH vals) = text $ show x ++ " --" ++ show (bytes2Integer vals)
+  pretty x = text $ show x
 
 data OPData = OPData Word8 Operation Int Int String
 
@@ -116,8 +124,8 @@ opDatas =
 
     OPData 0xf0 CREATE 3 1 "Create a new account with associated code.",
     OPData 0xf1 CALL 7 1 "Message-call into an account.",
-    OPData 0xf2 CALLCODE undefined undefined "message-call with another account's code only",
-    OPData 0xf3 RETURN 2 0 "Halt execution returning output data.",
+    OPData 0xf2 RETURN 2 0 "Halt execution returning output data.",
+    OPData 0xf3 CALLCODE undefined undefined "message-call with another account's code only",
     OPData 0xff SUICIDE 1 0 "Halt execution and register account for later deletion."
   ]
 

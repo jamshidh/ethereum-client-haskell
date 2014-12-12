@@ -16,6 +16,7 @@ import Control.Monad.IO.Class
 import Control.Monad.State
 import Control.Monad.Trans.Resource
 import System.Directory
+import System.FilePath
 
 import Constants
 import Database.MerklePatricia
@@ -55,12 +56,12 @@ options::DB.Options
 options = DB.defaultOptions {
   DB.createIfMissing=True, DB.cacheSize=1024}
 
-openDBs::Bool->ResourceT IO Context
-openDBs useCppDBs = do
+openDBs::String->ResourceT IO Context
+openDBs theType = do
   homeDir <- liftIO getHomeDirectory                     
-  bdb <- DB.open (homeDir ++ dbDir useCppDBs ++ blockDBPath) options
-  ddb <- DB.open (homeDir ++ dbDir useCppDBs ++ detailsDBPath) options
-  sdb <- DB.open (homeDir ++ dbDir useCppDBs ++ stateDBPath) options
+  bdb <- DB.open (homeDir </> dbDir theType ++ blockDBPath) options
+  ddb <- DB.open (homeDir </> dbDir theType ++ detailsDBPath) options
+  sdb <- DB.open (homeDir </> dbDir theType ++ stateDBPath) options
   return $ Context
       []
       bdb

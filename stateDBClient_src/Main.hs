@@ -32,12 +32,8 @@ doit sr = do
 main = do
   [theType, addr] <- getArgs
   let sr = SHAPtr $ fst $ B16.decode $ BC.pack addr
-  let useCppDb =
-        case theType of
-          "h" -> False
-          "c" -> True
   DB.runResourceT $ do
-    cxt <- openDBs useCppDb --True = .ethereum, False = .ethereumH
+    cxt <- openDBs theType
     _ <- liftIO $ runStateT (doit sr) cxt
     return ()
 
