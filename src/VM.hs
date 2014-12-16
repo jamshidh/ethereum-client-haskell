@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 
 module VM (
   runCodeFromStart
@@ -9,8 +10,12 @@ import Control.Monad.IO.Class
 import Data.Bits
 import qualified Data.ByteString as B
 import Data.Function
+import Data.Functor
 import Data.Time.Clock.POSIX
+import qualified Data.Vector.Unboxed.Mutable as V
 import Network.Haskoin.Crypto (Word256)
+import Numeric
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Context
 import Data.Address
@@ -20,6 +25,7 @@ import Database.MerklePatricia
 import qualified Data.NibbleString as N
 import Data.RLP
 import ExtDBs
+import Format
 import SHA
 import Util
 import VM.Code
@@ -73,7 +79,7 @@ runOperation AND env state = binaryAction (.&.) env state
 runOperation OR env state = binaryAction (.|.) env state
 runOperation XOR env state = binaryAction xor env state
 
-runOperation BYTE env state = binaryAction (\x y -> y `shiftR` fromIntegral x .&. 0xFF) env state
+runOperation BYTE env state = binaryAction (\x y -> y `shiftR` (8*(31 - fromIntegral x)) .&. 0xFF) env state
 
 runOperation SHA3 _ state@VMState{stack=(p:size:rest)} = do
   SHA theHash <- fmap hash $ liftIO $ mLoadByteString (memory state) p size
@@ -93,8 +99,12 @@ runOperation CALLER Environment{envOrigin=Address owner} state = return state{st
 runOperation CALLVALUE Environment{envValue=val} state = return state{stack=fromIntegral val:stack state}
 
 runOperation CALLDATALOAD Environment{envInputData=d} state@VMState{stack=p:rest} = do
-  let val = bytes2Integer $ B.unpack $ B.take 32 $ B.drop (fromIntegral p) d
+  let val = bytes2Integer $ appendZerosTo32 $ B.unpack $ B.take 32 $ B.drop (fromIntegral p) d
   return state{stack=fromIntegral val:rest}
+    where
+      appendZerosTo32 x | length x < 32 = x ++ replicate (32-length x) 0
+      appendZerosTo32 x = x
+      
 runOperation CALLDATALOAD _ s = return s{ vmException=Just StackTooSmallException } 
 
 runOperation CALLDATASIZE Environment{envInputData=d} state = return state{stack=fromIntegral (B.length d):stack state}
@@ -191,30 +201,28 @@ runOperation (PUSH vals) _ state =
 
 --               | CREATE | CALL | RETURN | SUICIDE deriving (Show, Eq, Ord)
 
-runOperation DUP1 _ state@VMState{stack=val:rest} = return state{stack=replicate 2 val ++ rest}
-runOperation DUP2 _ state@VMState{stack=val:rest} = return state{stack=replicate 3 val ++ rest}
-runOperation DUP3 _ state@VMState{stack=val:rest} = return state{stack=replicate 4 val ++ rest}
-runOperation DUP4 _ state@VMState{stack=val:rest} = return state{stack=replicate 5 val ++ rest}
-runOperation DUP5 _ state@VMState{stack=val:rest} = return state{stack=replicate 6 val ++ rest}
-runOperation DUP6 _ state@VMState{stack=val:rest} = return state{stack=replicate 7 val ++ rest}
-runOperation DUP7 _ state@VMState{stack=val:rest} = return state{stack=replicate 8 val ++ rest}
-runOperation DUP8 _ state@VMState{stack=val:rest} = return state{stack=replicate 9 val ++ rest}
-runOperation DUP9 _ state@VMState{stack=val:rest} = return state{stack=replicate 10 val ++ rest}
-runOperation DUP10 _ state@VMState{stack=val:rest} = return state{stack=replicate 11 val ++ rest}
-runOperation DUP11 _ state@VMState{stack=val:rest} = return state{stack=replicate 12 val ++ rest}
-runOperation DUP12 _ state@VMState{stack=val:rest} = return state{stack=replicate 13 val ++ rest}
-runOperation DUP13 _ state@VMState{stack=val:rest} = return state{stack=replicate 14 val ++ rest}
-runOperation DUP14 _ state@VMState{stack=val:rest} = return state{stack=replicate 15 val ++ rest}
-runOperation DUP15 _ state@VMState{stack=val:rest} = return state{stack=replicate 16 val ++ rest}
-runOperation DUP16 _ state@VMState{stack=val:rest} = return state{stack=replicate 17 val ++ rest}
+runOperation DUP1 _ state@VMState{stack=s@(v:_)} = return state{stack=v:s}
+runOperation DUP2 _ state@VMState{stack=s@(_:v:_)} = return state{stack=v:s}
+runOperation DUP3 _ state@VMState{stack=s@(_:_:v:_)} = return state{stack=v:s}
+runOperation DUP4 _ state@VMState{stack=s@(_:_:_:v:_)} = return state{stack=v:s}
+runOperation DUP5 _ state@VMState{stack=s@(_:_:_:_:v:_)} = return state{stack=v:s}
+runOperation DUP6 _ state@VMState{stack=s@(_:_:_:_:_:v:_)} = return state{stack=v:s}
+runOperation DUP7 _ state@VMState{stack=s@(_:_:_:_:_:_:v:_)} = return state{stack=v:s}
+runOperation DUP8 _ state@VMState{stack=s@(_:_:_:_:_:_:_:v:_)} = return state{stack=v:s}
+runOperation DUP9 _ state@VMState{stack=s@(_:_:_:_:_:_:_:_:v:_)} = return state{stack=v:s}
+runOperation DUP10 _ state@VMState{stack=s@(_:_:_:_:_:_:_:_:_:v:_)} = return state{stack=v:s}
+runOperation DUP11 _ state@VMState{stack=s@(_:_:_:_:_:_:_:_:_:_:v:_)} = return state{stack=v:s}
+runOperation DUP12 _ state@VMState{stack=s@(_:_:_:_:_:_:_:_:_:_:_:v:_)} = return state{stack=v:s}
+runOperation DUP13 _ state@VMState{stack=s@(_:_:_:_:_:_:_:_:_:_:_:_:v:_)} = return state{stack=v:s}
+runOperation DUP14 _ state@VMState{stack=s@(_:_:_:_:_:_:_:_:_:_:_:_:_:v:_)} = return state{stack=v:s}
+runOperation DUP15 _ state@VMState{stack=s@(_:_:_:_:_:_:_:_:_:_:_:_:_:_:v:_)} = return state{stack=v:s}
+runOperation DUP16 _ state@VMState{stack=s@(_:_:_:_:_:_:_:_:_:_:_:_:_:_:_:v:_)} = return state{stack=v:s}
 
 
-runOperation RETURN _ state@VMState{stack=[address, size]} = do
+
+runOperation RETURN _ state@VMState{stack=(address:size:rest)} = do
   retVal <- liftIO $ mLoadByteString (memory state) address size
-  return $ state { done=True, returnVal=Just retVal }
-
-runOperation RETURN _ VMState{stack=x} | length x > 2 =
-  error "Stack was too large in when RETURN was called"
+  return $ state { stack=rest, done=True, returnVal=Just retVal }
 
 runOperation RETURN _ state =
   return $ state { vmException=Just StackTooSmallException } 
@@ -264,22 +272,34 @@ decreaseGasForOp op state = do
   val <- opGasPrice state op
   return $ decreaseGas val state
 
-runCode::Environment->VMState->ContextM VMState
-runCode env state = do
+nibbleString2ByteString::N.NibbleString->B.ByteString
+nibbleString2ByteString (N.EvenNibbleString s) = s
+nibbleString2ByteString (N.OddNibbleString c s) = c `B.cons` s
+
+
+runCode::Environment->VMState->Int->ContextM VMState
+runCode env state c = do
   let (op, len) = getOperationAt (envCode env) (pc state)
-  liftIO $ putStrLn $ " > OP: " ++ show op
+  liftIO $ putStrLn $ " > OP: " ++ show op ++ " #" ++ show c ++ " (" ++ show (vmGasRemaining state) ++ ")"
   state' <- decreaseGasForOp op state
   result <- runOperation op env state'
+  memString <- liftIO $ getShow (memory result)
+  liftIO $ putStrLn $ " > memory: " ++ memString
+  liftIO $ putStrLn "STACK"
+  liftIO $ putStrLn $ unlines (("    " ++) <$> padZeros 64 <$> flip showHex "" <$> stack result)
+  kvs <- getStorageKeyVals ""
+  liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHex (byteString2Integer $ nibbleString2ByteString k) "" ++ ": " ++ show (pretty (rlpDecode v::Integer))) kvs)
   case result of
     VMState{vmException=Just _} -> return result{ vmGasRemaining = 0 } 
     VMState{done=True} -> do
                          memSize <- liftIO $ getSize $ memory result
                          return $ decreaseGas (fromIntegral memSize) $ movePC result len
-    state2 -> runCode env $ movePC state2 len
+    state2 -> runCode env (movePC state2 len) (c+1)
 
 runCodeFromStart::SHAPtr->Integer->Environment->ContextM VMState
 runCodeFromStart storageRoot' gasLimit' env = do
+  liftIO $ putStrLn $ "Running code:\n    Input Data = " ++ format (envInputData env)
   setStorageStateRoot storageRoot'
   vmState <- liftIO startingState
-  runCode env vmState{vmGasRemaining=gasLimit'}
+  runCode env vmState{vmGasRemaining=gasLimit'} 0
 
