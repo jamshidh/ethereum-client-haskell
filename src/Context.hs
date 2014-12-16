@@ -4,6 +4,7 @@ module Context (
   ContextM,
   setStateRoot,
   setStorageStateRoot,
+  getStorageStateRoot,
   openDBs,
   DetailsDB,
   BlockDB
@@ -51,6 +52,11 @@ setStorageStateRoot::SHAPtr->ContextM ()
 setStorageStateRoot stateRoot' = do
   ctx <- get
   put ctx{storageDB=(storageDB ctx){stateRoot=stateRoot'}}
+
+getStorageStateRoot::ContextM SHAPtr
+getStorageStateRoot = do
+  ctx <- get
+  return $ stateRoot $ storageDB ctx
 
 options::DB.Options
 options = DB.defaultOptions {

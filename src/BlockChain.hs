@@ -112,11 +112,6 @@ checkValidity b = do
 -}
 
 
-pay::Address->Address->Integer->ContextM ()
-pay fromAddr toAddr val = do
-  addToBalance fromAddr (-val)
-  addToBalance toAddr val
-
 runCodeForTransaction::Block->Integer->SignedTransaction->ContextM ()
 runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@ContractCreationTX{}} = do
   let tAddr = whoSignedThisTransaction t
@@ -126,7 +121,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
   let newAddress = getNewAddress t
 
   vmState <- 
-    runCodeFromStart tAddr emptyTriePtr availableGas
+    runCodeFromStart tAddr availableGas
           Environment{
             envGasPrice=gasPrice ut,
             envBlock=b,
@@ -183,7 +178,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
   liftIO $ putStrLn $ "availableGas: " ++ show availableGas
 
   vmState <- 
-          runCodeFromStart (to ut) (contractRoot recipientAddressState) availableGas
+          runCodeFromStart (to ut) availableGas
                  Environment{
                            envGasPrice=gasPrice ut,
                            envBlock=b,
@@ -204,16 +199,17 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
         Just e -> do
           liftIO $ putStrLn $ CL.red $ show e
           --addToBalance tAddr (-value ut) --zombie account, money lost forever
-          addressState <- getAddressState (to ut)
+          {-addressState <- getAddressState (to ut)
           cxt <- get
           putAddressState (to ut)
-                 addressState{contractRoot=stateRoot $ storageDB cxt}
+                 addressState{contractRoot=stateRoot $ storageDB cxt}-}
           pay (whoSignedThisTransaction t) (to ut) (value ut)
         Nothing -> do
+          {-
           addressState <- getAddressState (to ut)
           cxt <- get
           putAddressState (to ut)
-                 addressState{contractRoot=stateRoot $ storageDB cxt}
+                 addressState{contractRoot=stateRoot $ storageDB cxt}-}
           pay (whoSignedThisTransaction t) (to ut) (value ut)
 
 

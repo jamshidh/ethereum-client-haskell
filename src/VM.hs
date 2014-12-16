@@ -13,19 +13,18 @@ import Data.Function
 import Data.Functor
 import Data.Maybe
 import Data.Time.Clock.POSIX
-import qualified Data.Vector.Unboxed.Mutable as V
 import Network.Haskoin.Crypto (Word256)
 import Numeric
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+--import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Context
 import Data.Address
 import Data.AddressState
 import Data.Block
-import Database.MerklePatricia
 import qualified Data.NibbleString as N
 import Data.RLP
 import DB.CodeDB
+import DB.ModifyStateDB
 import ExtDBs
 import Format
 import SHA
@@ -224,7 +223,7 @@ runOperation DUP16 _ state@VMState{stack=s@(_:_:_:_:_:_:_:_:_:_:_:_:_:_:_:v:_)} 
 
 
 
-runOperation CALL _ state@VMState{stack=(gas:to:value:inOffset:inSize:outOffset:outSize:rest)} = do
+runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffset:outSize:rest)} = do
   {-error $ "CALL not defined yet\n"
     ++ "gas: " ++ show (toInteger gas) ++ "\n"
     ++ "address: " ++ show (pretty to) ++ "\n"
@@ -239,7 +238,7 @@ runOperation CALL _ state@VMState{stack=(gas:to:value:inOffset:inSize:outOffset:
   let address = Address $ fromIntegral to
 
   state' <-
-    runCodeFromStart address undefined
+    runCodeFromStart address
      (fromIntegral gas)
      Environment {
        envOwner = error "envOwner undefined",
@@ -247,7 +246,7 @@ runOperation CALL _ state@VMState{stack=(gas:to:value:inOffset:inSize:outOffset:
        envGasPrice = error "envGasPrice undefined",
        envInputData = inputData,
        envSender = error "envSender undefined",
-       envValue = error "envValue undefined",
+       envValue = fromIntegral value,
        envCode = error "envCode undefined",
        envBlock = error "envBlock undefined"
        }
@@ -257,6 +256,8 @@ runOperation CALL _ state@VMState{stack=(gas:to:value:inOffset:inSize:outOffset:
   state'' <- liftIO $ mStoreByteString state' outOffset retVal
 
   let success = 1
+      
+  pay (envOwner env) address (fromIntegral value)
 
   return state''{stack=success:rest}
 
@@ -337,8 +338,8 @@ runCode env state c = do
                          return $ decreaseGas (fromIntegral memSize) $ movePC result len
     state2 -> runCode env (movePC state2 len) (c+1)
 
-runCodeFromStart::Address->SHAPtr->Integer->Environment->ContextM VMState
-runCodeFromStart address storageRoot' gasLimit' env = do
+runCodeFromStart::Address->Integer->Environment->ContextM VMState
+runCodeFromStart address gasLimit' env = do
   addressState <- getAddressState address
   code <- 
       fromMaybe B.empty <$>
@@ -346,7 +347,11 @@ runCodeFromStart address storageRoot' gasLimit' env = do
 
   
   liftIO $ putStrLn $ "Running code:\n    Input Data = " ++ format (envInputData env)
+  oldStateRoot <- getStorageStateRoot
   setStorageStateRoot (contractRoot addressState)
   vmState <- liftIO startingState
-  runCode env{envCode=Code code} vmState{vmGasRemaining=gasLimit'} 0
-
+  state' <- runCode env{envCode=Code code} vmState{vmGasRemaining=gasLimit'} 0
+  newStateRoot <- getStorageStateRoot
+  putAddressState address addressState{contractRoot=newStateRoot} 
+  setStorageStateRoot oldStateRoot
+  return state'

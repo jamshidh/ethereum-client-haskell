@@ -1,9 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module DB.ModifyStateDB (
-                         putAddressStates,
-                         addToBalance,
-                         addNonce
+  putAddressStates,
+  addToBalance,
+  addNonce,
+  pay
 ) where
 
 import Context
@@ -29,6 +30,10 @@ addNonce address = do
   addressState <- getAddressState address
   putAddressState address addressState{ addressStateNonce = addressStateNonce addressState + 1 }
 
+pay::Address->Address->Integer->ContextM ()
+pay fromAddr toAddr val = do
+  addToBalance fromAddr (-val)
+  addToBalance toAddr val
 
 
 
