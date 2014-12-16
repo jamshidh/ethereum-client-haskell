@@ -11,6 +11,7 @@ import Data.Bits
 import qualified Data.ByteString as B
 import Data.Function
 import Data.Functor
+import Data.Maybe
 import Data.Time.Clock.POSIX
 import qualified Data.Vector.Unboxed.Mutable as V
 import Network.Haskoin.Crypto (Word256)
@@ -24,6 +25,7 @@ import Data.Block
 import Database.MerklePatricia
 import qualified Data.NibbleString as N
 import Data.RLP
+import DB.CodeDB
 import ExtDBs
 import Format
 import SHA
@@ -111,7 +113,7 @@ runOperation CALLDATASIZE Environment{envInputData=d} state = return state{stack
 
 runOperation CALLDATACOPY Environment{envInputData=d} state@VMState{stack=memP:codeP:size:rest} = do
   state'<-liftIO $ mStoreByteString state memP $ B.take (fromIntegral size) $ B.drop (fromIntegral codeP) d
-  return state{stack=rest}
+  return state'{stack=rest}
 
 runOperation CODESIZE Environment{envCode=c} state = return state{stack=fromIntegral (codeLength c):stack state}
 
@@ -220,6 +222,45 @@ runOperation DUP16 _ state@VMState{stack=s@(_:_:_:_:_:_:_:_:_:_:_:_:_:_:_:v:_)} 
 
 
 
+
+
+runOperation CALL _ state@VMState{stack=(gas:to:value:inOffset:inSize:outOffset:outSize:rest)} = do
+  {-error $ "CALL not defined yet\n"
+    ++ "gas: " ++ show (toInteger gas) ++ "\n"
+    ++ "address: " ++ show (pretty to) ++ "\n"
+    ++ "value: " ++ show (pretty value) ++ "\n"
+    ++ "inOffset: " ++ show (pretty inOffset) ++ "\n"
+    ++ "inSize: " ++ show (pretty inSize) ++ "\n"
+    ++ "outOffset: " ++ show (pretty outOffset) ++ "\n"
+    ++ "outSize: " ++ show (pretty outOffset) ++ "\n"-}
+
+  inputData <- liftIO $ mLoadByteString state inOffset inSize
+
+  let address = Address $ fromIntegral to
+
+  state' <-
+    runCodeFromStart address undefined
+     (fromIntegral gas)
+     Environment {
+       envOwner = error "envOwner undefined",
+       envOrigin = error "envOrigin undefined",
+       envGasPrice = error "envGasPrice undefined",
+       envInputData = inputData,
+       envSender = error "envSender undefined",
+       envValue = error "envValue undefined",
+       envCode = error "envCode undefined",
+       envBlock = error "envBlock undefined"
+       }
+
+  let retVal = fromMaybe B.empty $ returnVal state'
+ 
+  state'' <- liftIO $ mStoreByteString state' outOffset retVal
+
+  let success = 1
+
+  return state''{stack=success:rest}
+
+
 runOperation RETURN _ state@VMState{stack=(address:size:rest)} = do
   retVal <- liftIO $ mLoadByteString state address size
   return $ state { stack=rest, done=True, returnVal=Just retVal }
@@ -296,10 +337,16 @@ runCode env state c = do
                          return $ decreaseGas (fromIntegral memSize) $ movePC result len
     state2 -> runCode env (movePC state2 len) (c+1)
 
-runCodeFromStart::SHAPtr->Integer->Environment->ContextM VMState
-runCodeFromStart storageRoot' gasLimit' env = do
+runCodeFromStart::Address->SHAPtr->Integer->Environment->ContextM VMState
+runCodeFromStart address storageRoot' gasLimit' env = do
+  addressState <- getAddressState address
+  code <- 
+      fromMaybe B.empty <$>
+                getCode (codeHash addressState)
+
+  
   liftIO $ putStrLn $ "Running code:\n    Input Data = " ++ format (envInputData env)
-  setStorageStateRoot storageRoot'
+  setStorageStateRoot (contractRoot addressState)
   vmState <- liftIO startingState
-  runCode env vmState{vmGasRemaining=gasLimit'} 0
+  runCode env{envCode=Code code} vmState{vmGasRemaining=gasLimit'} 0
 

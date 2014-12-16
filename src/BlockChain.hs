@@ -126,7 +126,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
   let newAddress = getNewAddress t
 
   vmState <- 
-    runCodeFromStart emptyTriePtr availableGas
+    runCodeFromStart tAddr emptyTriePtr availableGas
           Environment{
             envGasPrice=gasPrice ut,
             envBlock=b,
@@ -183,7 +183,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
   liftIO $ putStrLn $ "availableGas: " ++ show availableGas
 
   vmState <- 
-          runCodeFromStart (contractRoot recipientAddressState) availableGas
+          runCodeFromStart (to ut) (contractRoot recipientAddressState) availableGas
                  Environment{
                            envGasPrice=gasPrice ut,
                            envBlock=b,
