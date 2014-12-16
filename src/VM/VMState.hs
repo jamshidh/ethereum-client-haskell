@@ -1,18 +1,23 @@
 
 module VM.VMState (
   VMState(..),
+  Memory(..),
   startingState,
   VMException(..),
-  addErr,
-  getReturnValue
+  addErr
+--  getReturnValue
   ) where
 
+import Control.Monad
+import qualified Data.Vector.Unboxed.Mutable as V
 import qualified Data.ByteString as B
+import Data.IORef
+import Data.Word
+
 
 import ExtWord
 import Format
 import VM.Code
-import VM.Memory
 
 data VMException = OutOfGasException | StackTooSmallException | VMException String deriving (Show)
 
@@ -20,6 +25,20 @@ addErr::String->Code->VMState->IO VMState
 addErr message c state = do
   let (op, _) = getOperationAt c (pc state)
   return state{vmException=Just $ VMException (message ++ " for a call to " ++ show op)}
+
+data Memory =
+  Memory {
+    mVector::V.IOVector Word8,
+    mSize::IORef Word256
+    }
+  
+
+newMemory::IO Memory
+newMemory = do
+  arr <- V.new 100
+  size <- newIORef 0
+  forM [0..99] $ \p -> V.write arr (fromIntegral p) 0
+  return $ Memory arr size
 
 data VMState =
   VMState {
@@ -55,7 +74,7 @@ startingState = do
     stack=[],
     memory=m, markedForSuicide=False }
 
-
+{-
 getReturnValue::VMState->IO B.ByteString
 getReturnValue state = 
   case stack state of
@@ -65,3 +84,4 @@ getReturnValue state =
     _ -> error "Error in getReturnValue: VM ended with stack in an unsupported case"
 
   
+-}

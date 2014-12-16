@@ -1,7 +1,6 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
 module VM.Memory (
   Memory(..),
-  newMemory,
   getSize,
   getShow,
   mLoad,
@@ -23,36 +22,41 @@ import Data.Word
 import Numeric
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
-import Context
 import ExtWord
 import Format
 import Util
-
-data Memory = Memory (V.IOVector Word8) (IORef Word256)
-
-
-newMemory::IO Memory
-newMemory = do
-  arr <- V.new 100
-  size <- newIORef 0
-  forM [0..99] $ \p -> V.write arr (fromIntegral p) 0
-  return $ Memory arr size
+import VM.VMState
 
 getSize::Memory->IO Word256
 getSize (Memory _ size) = (ceiling . (/ (32::Double)) . fromIntegral) <$> readIORef size
 
-setNewMaxSize::Memory->Word256->IO Memory
-setNewMaxSize m@(Memory arr size) newVal = do
-  oldVal <- readIORef size
-  when (newVal > oldVal) $
-    writeIORef size newVal
-  let oldLength = fromIntegral $ V.length arr
-  if newVal > oldLength
-    then do
-      arr' <- V.grow arr $ fromIntegral $ 2*newVal
-      forM [oldLength-1..2*oldLength-1] $ \p -> V.write arr' (fromIntegral p) 0
-      return $ Memory arr' size
-    else return m
+--In this function I use the words "size" and "length" to mean 2 different things....
+--"size" is the highest memory location used (as described in the yellowpaper).
+--"length" is the IOVector length, which will often be larger than the size.
+--Basically, to avoid resizing the vector constantly (which could be expensive),
+--I keep something larger around until it fills up, then reallocate (something even
+--larger).
+setNewMaxSize::VMState->Word256->IO VMState
+setNewMaxSize state newSize = do
+  oldSize <- readIORef (mSize $ memory state)
+  when (newSize > oldSize) $ do
+    writeIORef (mSize $ memory state) newSize
+
+  let gasCharge =
+        if newSize > oldSize
+        then fromInteger $ (toInteger newSize `quot` 32) - (toInteger oldSize `quot` 32)
+        else 0
+
+  let oldLength = fromIntegral $ V.length (mVector $ memory state)
+  state' <-
+    if newSize > oldLength
+      then do
+        arr' <- V.grow (mVector $ memory state) $ fromIntegral $ 2*newSize
+        forM [oldLength-1..2*oldLength-1] $ \p -> V.write arr' (fromIntegral p) 0
+        return $ state{memory=(memory state){mVector = arr'}}
+      else return state
+
+  return state'{vmGasRemaining=vmGasRemaining state - gasCharge}
 
 getShow::Memory->IO String
 getShow (Memory arr sizeRef) = do
@@ -60,37 +64,37 @@ getShow (Memory arr sizeRef) = do
   fmap (show . B16.encode . B.pack) $ sequence $ V.read arr <$> fromIntegral <$> [0..fromIntegral msize-1] 
 
 
-mLoad::Memory->Word256->IO [Word8]
-mLoad (Memory arr _) p = do
+mLoad::VMState->Word256->IO [Word8]
+mLoad state p = do
   --setNewMaxSize m (p+31)
-  sequence $ V.read arr <$> fromIntegral <$> [p..p+31] 
+  sequence $ V.read (mVector $ memory state) <$> fromIntegral <$> [p..p+31] 
 
-mLoad8::Memory->Word256->IO Word8
-mLoad8 (Memory arr _) p = do
+mLoad8::VMState->Word256->IO Word8
+mLoad8 state p = do
   --setNewMaxSize m p
-  V.read arr (fromIntegral p)
+  V.read (mVector $ memory state) (fromIntegral p)
 
-mLoadByteString::Memory->Word256->Word256->IO B.ByteString
-mLoadByteString (Memory arr _) p size = do
+mLoadByteString::VMState->Word256->Word256->IO B.ByteString
+mLoadByteString state p size = do
   --setNewMaxSize m (p+size)
-  fmap B.pack $ sequence $ V.read arr <$> fromIntegral <$> [p..p+size-1] 
+  fmap B.pack $ sequence $ V.read (mVector $ memory state) <$> fromIntegral <$> [p..p+size-1] 
 
 
-mStore::Memory->Word256->Word256->IO Memory
-mStore m p val = do
-  m'@(Memory arr' _) <- setNewMaxSize m (p+32)
-  sequence_ $ uncurry (V.write arr') <$> zip [fromIntegral p..] (word256ToBytes val)
-  return m'
+mStore::VMState->Word256->Word256->IO VMState
+mStore state p val = do
+  state' <- setNewMaxSize state (p+32)
+  sequence_ $ uncurry (V.write $ mVector $ memory state') <$> zip [fromIntegral p..] (word256ToBytes val)
+  return state'
 
-mStore8::Memory->Word256->Word8->IO Memory
-mStore8 m p val = do
-  m'@(Memory arr' _) <- setNewMaxSize m p
-  V.write arr' (fromIntegral p) val
-  return m'
+mStore8::VMState->Word256->Word8->IO VMState
+mStore8 state p val = do
+  state' <- setNewMaxSize state p
+  V.write (mVector $ memory state') (fromIntegral p) val
+  return state'
 
-mStoreByteString::Memory->Word256->B.ByteString->IO Memory
-mStoreByteString m p theData = do
-  m'@(Memory arr' _) <- setNewMaxSize m (p + fromIntegral (B.length theData))
-  sequence_ $ uncurry (V.write arr') <$> zip (fromIntegral <$> [p..p+fromIntegral (B.length theData)]) (B.unpack theData)
-  return m'
+mStoreByteString::VMState->Word256->B.ByteString->IO VMState
+mStoreByteString state p theData = do
+  state' <- setNewMaxSize state (p + fromIntegral (B.length theData))
+  sequence_ $ uncurry (V.write $ mVector $ memory state') <$> zip (fromIntegral <$> [p..p+fromIntegral (B.length theData)]) (B.unpack theData)
+  return state'
 

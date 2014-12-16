@@ -82,7 +82,7 @@ runOperation XOR env state = binaryAction xor env state
 runOperation BYTE env state = binaryAction (\x y -> y `shiftR` (8*(31 - fromIntegral x)) .&. 0xFF) env state
 
 runOperation SHA3 _ state@VMState{stack=(p:size:rest)} = do
-  SHA theHash <- fmap hash $ liftIO $ mLoadByteString (memory state) p size
+  SHA theHash <- fmap hash $ liftIO $ mLoadByteString state p size
   return state{stack=theHash:rest}
 
 runOperation ADDRESS Environment{envOwner=Address a} state = return state{stack=fromIntegral a:stack state}
@@ -110,14 +110,14 @@ runOperation CALLDATALOAD _ s = return s{ vmException=Just StackTooSmallExceptio
 runOperation CALLDATASIZE Environment{envInputData=d} state = return state{stack=fromIntegral (B.length d):stack state}
 
 runOperation CALLDATACOPY Environment{envInputData=d} state@VMState{stack=memP:codeP:size:rest} = do
-  m'<-liftIO $ mStoreByteString (memory state) memP $ B.take (fromIntegral size) $ B.drop (fromIntegral codeP) d
-  return state{stack=rest, memory=m'}
+  state'<-liftIO $ mStoreByteString state memP $ B.take (fromIntegral size) $ B.drop (fromIntegral codeP) d
+  return state{stack=rest}
 
 runOperation CODESIZE Environment{envCode=c} state = return state{stack=fromIntegral (codeLength c):stack state}
 
 runOperation CODECOPY Environment{envCode=Code c} state@VMState{stack=memP:codeP:size:rest} = do
-  m' <- liftIO $ mStoreByteString (memory state) memP $ B.take (fromIntegral size) $ B.drop (fromIntegral codeP) c
-  return state{stack=rest, memory=m'}
+  state' <- liftIO $ mStoreByteString state memP $ B.take (fromIntegral size) $ B.drop (fromIntegral codeP) c
+  return state'{stack=rest}
 
 runOperation GASPRICE Environment{envGasPrice=gp} state = return state{stack=fromIntegral gp:stack state}
 
@@ -140,17 +140,17 @@ runOperation SWAP _ state@VMState{stack=x:y:rest} = return state{stack=y:x:rest}
 runOperation SWAP env state = liftIO $ addErr "Stack did not contain enough items" (envCode env) state
 
 runOperation MLOAD _ state@VMState{stack=(p:rest)} = do
-  bytes <- liftIO $ mLoad (memory state) p --sequence $ readArray (memory state) <$> fromIntegral <$> [p..p+31]
+  bytes <- liftIO $ mLoad state p
   return $ state { stack=fromInteger (bytes2Integer bytes):rest }
   
 runOperation MSTORE _ state@VMState{stack=(p:val:rest)} = do
-  m' <- liftIO $ mStore (memory state) p val
-  return state{stack=rest, memory=m'}
+  state' <- liftIO $ mStore state p val
+  return state'{stack=rest}
 
 runOperation MSTORE8 _ state@VMState{stack=(p:val:rest)} = do
-  m' <- liftIO $ mStore8 (memory state) (fromIntegral p) (fromIntegral $ val .&. 0xFF)
+  state' <- liftIO $ mStore8 state (fromIntegral p) (fromIntegral $ val .&. 0xFF)
   return $
-    state { stack=rest, memory=m' }
+    state' { stack=rest }
 
 runOperation SLOAD _ state@VMState{stack=(p:rest)} = do
   vals <- getStorageKeyVals (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
@@ -221,7 +221,7 @@ runOperation DUP16 _ state@VMState{stack=s@(_:_:_:_:_:_:_:_:_:_:_:_:_:_:_:v:_)} 
 
 
 runOperation RETURN _ state@VMState{stack=(address:size:rest)} = do
-  retVal <- liftIO $ mLoadByteString (memory state) address size
+  retVal <- liftIO $ mLoadByteString state address size
   return $ state { stack=rest, done=True, returnVal=Just retVal }
 
 runOperation RETURN _ state =
@@ -288,7 +288,7 @@ runCode env state c = do
   liftIO $ putStrLn "STACK"
   liftIO $ putStrLn $ unlines (("    " ++) <$> padZeros 64 <$> flip showHex "" <$> stack result)
   kvs <- getStorageKeyVals ""
-  liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHex (byteString2Integer $ nibbleString2ByteString k) "" ++ ": " ++ show (pretty (rlpDecode v::Integer))) kvs)
+  liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHex (byteString2Integer $ nibbleString2ByteString k) "" ++ ": 0x" ++ showHex (rlpDecode $ rlpDeserialize $ rlpDecode v::Integer) "") kvs)
   case result of
     VMState{vmException=Just _} -> return result{ vmGasRemaining = 0 } 
     VMState{done=True} -> do
