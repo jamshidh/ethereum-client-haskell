@@ -19,7 +19,7 @@ import ExtWord
 import Format
 import VM.Code
 
-data VMException = OutOfGasException | StackTooSmallException | VMException String deriving (Show)
+data VMException = OutOfGasException | StackTooSmallException | VMException String | MalformedOpcodeException deriving (Show)
 
 addErr::String->Code->VMState->IO VMState
 addErr message c state = do

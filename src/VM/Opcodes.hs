@@ -27,7 +27,9 @@ data Operation =
     DUP13 | DUP14 | DUP15 | DUP16 |
     CREATE | CALL | RETURN | CALLCODE | SUICIDE |
     --Pseudo Opcodes
-    LABEL String | PUSHLABEL String | PUSHDIFF String String | DATA B.ByteString deriving (Show, Eq, Ord)
+    LABEL String | PUSHLABEL String |
+    PUSHDIFF String String | DATA B.ByteString |
+    MalformedOpcode deriving (Show, Eq, Ord)
 
 instance Pretty Operation where
   pretty x@JUMPDEST = text $ "------" ++ show x
@@ -158,7 +160,8 @@ opCode2Op rom =
   if opcode >= 0x60 && opcode <= 0x7f
   then (PUSH $ B.unpack $ B.take (fromIntegral $ opcode-0x5F) $ B.tail rom, fromIntegral $ opcode - 0x5E)
   else
-    let op = fromMaybe (error $ "code is missing in code2OpMap: 0x" ++ showHex (B.head rom) "")
+--    let op = fromMaybe (error $ "code is missing in code2OpMap: 0x" ++ showHex (B.head rom) "")
+    let op = fromMaybe MalformedOpcode
              $ M.lookup opcode code2OpMap in
     (op, 1)
 

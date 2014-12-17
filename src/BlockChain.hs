@@ -120,6 +120,8 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
 
   let newAddress = getNewAddress t
 
+  liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty $ tInit ut)))
+
   (vmState, newStorageStateRoot) <- 
     runCodeFromStart tAddr availableGas
           Environment{
@@ -127,7 +129,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
             envBlock=b,
             envOwner = undefined,
             envOrigin = tAddr,
-            envInputData = error "envInputData is being used in init",
+            envInputData = B.empty, --error "envInputData is being used in init",
             envSender = newAddress,
             envValue = value ut,
             envCode = tInit ut

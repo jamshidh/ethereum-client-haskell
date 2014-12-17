@@ -18,6 +18,7 @@ import Numeric
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Context
+import qualified Colors as CL
 import Data.Address
 import Data.AddressState
 import Data.Block
@@ -68,6 +69,7 @@ runOperation DIV env state = binaryAction quot env state
 runOperation SDIV env state = binaryAction ((fromIntegral .) . quot `on` s256ToInteger) env state
 runOperation MOD env state = binaryAction mod env state
 runOperation SMOD env state = binaryAction ((fromIntegral .) . mod `on` s256ToInteger) env state
+runOperation ADDMOD env state = binaryAction ((fromIntegral .) . (+) `on` s256ToInteger) env state
 runOperation EXP env state = binaryAction (^) env state
 runOperation NEG env state = unaryAction negate env state
 runOperation LT env state = binaryAction ((bool2Word256 .) . (<)) env state
@@ -150,8 +152,7 @@ runOperation MSTORE _ state@VMState{stack=(p:val:rest)} = do
 
 runOperation MSTORE8 _ state@VMState{stack=(p:val:rest)} = do
   state' <- liftIO $ mStore8 state (fromIntegral p) (fromIntegral $ val .&. 0xFF)
-  return $
-    state' { stack=rest }
+  return state'{stack=rest}
 
 runOperation SLOAD _ state@VMState{stack=(p:rest)} = do
   vals <- getStorageKeyVals (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
@@ -269,6 +270,11 @@ runOperation RETURN _ state =
 
 runOperation SUICIDE _ state =
   return $ state { done=True, markedForSuicide=True }
+
+
+runOperation MalformedOpcode _ state = do
+  liftIO $ putStrLn $ CL.red "Malformed Opcode"
+  return state { vmException=Just MalformedOpcodeException }
 
 runOperation x _ _ = error $ "Missing case in runOperation: " ++ show x
 
