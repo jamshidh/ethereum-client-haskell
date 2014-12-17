@@ -46,7 +46,7 @@ data VMState =
     pc::Int,
     memory::Memory,
     stack::[Word256],
-
+    
     markedForSuicide::Bool,
     done::Bool,
     returnVal::Maybe B.ByteString,

@@ -20,6 +20,7 @@ import BlockChain
 import Communication
 import Context
 import ExtDBs
+import Format
 import SHA
 import Data.Wire
 
@@ -49,8 +50,9 @@ handleNewBlockHashes socket blockHashes = do
                 sendMessage socket $ GetBlockHashes [last blockHashes] 0x500
     Just hashInDB -> do
                 liftIO $ putStrLn $ "Found a serverblock already in our database: " ++ show (pretty hashInDB)
-                cxt <- get 
-                put cxt{neededBlockHashes=takeWhile (/= hashInDB) blockHashes ++ neededBlockHashes cxt}
+                cxt <- get
+                --liftIO $ putStrLn $ show (pretty blockHashes)
+                put cxt{neededBlockHashes=reverse (takeWhile (/= hashInDB) blockHashes) ++ neededBlockHashes cxt}
                 askForSomeBlocks socket
   
 askForSomeBlocks::Socket->ContextM ()

@@ -7,6 +7,8 @@ module DB.ModifyStateDB (
   pay
 ) where
 
+--import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+
 import Context
 import Data.Address
 import Data.AddressState

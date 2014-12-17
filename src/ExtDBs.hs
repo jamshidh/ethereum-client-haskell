@@ -24,6 +24,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import qualified Database.LevelDB as DB
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import qualified Data.NibbleString as N
 import SHA
@@ -31,6 +32,9 @@ import Data.RLP
 import qualified Database.MerklePatricia as MP
 
 import Context
+import Format
+
+--import Debug.Trace
 
 detailsDBPut::B.ByteString->B.ByteString->ContextM ()
 detailsDBPut key val = do
@@ -55,7 +59,7 @@ blockDBGet key = do
   ctx <- get
   runResourceT $ 
     DB.get (blockDB ctx) def key
-    
+
 
 codeDBPut::B.ByteString->ContextM ()
 codeDBPut code = do
@@ -108,6 +112,7 @@ putStorageKeyVal key val = do
   ctx <- get
   newStorageDB <-
     liftIO $ runResourceT $ MP.putKeyVal (storageDB ctx) key val
+  liftIO $ putStrLn $ "storage state root is " ++ show (pretty $ MP.stateRoot newStorageDB)
   put ctx{storageDB=newStorageDB}
 
 getStorageKeyVals::N.NibbleString->ContextM [(N.NibbleString, RLPObject)]

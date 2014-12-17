@@ -120,12 +120,12 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
 
   let newAddress = getNewAddress t
 
-  vmState <- 
+  (vmState, newStorageStateRoot) <- 
     runCodeFromStart tAddr availableGas
           Environment{
             envGasPrice=gasPrice ut,
             envBlock=b,
-            envOwner = tAddr,
+            envOwner = undefined,
             envOrigin = tAddr,
             envInputData = error "envInputData is being used in init",
             envSender = newAddress,
@@ -148,14 +148,14 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
           let result = fromMaybe B.empty $ returnVal vmState
           liftIO $ putStrLn $ "Result: " ++ show result
           liftIO $ putStrLn $ show (pretty newAddress) ++ ": " ++ format result
-          cxt <- get
-          liftIO $ putStrLn $ "adding storage " ++ show (stateRoot $ storageDB cxt)
+          --cxt <- get
+          liftIO $ putStrLn $ "adding storage " ++ show (pretty newStorageStateRoot) -- stateRoot $ storageDB cxt)
           addCode result
           putAddressState newAddress
                    AddressState{
                      addressStateNonce=0,
                      balance=0,
-                     contractRoot=stateRoot $ storageDB cxt,
+                     contractRoot=newStorageStateRoot,
                      codeHash=hash result
                      }
           liftIO $ putStrLn $ "paying: " ++ show (value ut)
@@ -177,18 +177,22 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
 
   liftIO $ putStrLn $ "availableGas: " ++ show availableGas
 
-  vmState <- 
+  pay (whoSignedThisTransaction t) (to ut) (value ut)
+
+  (vmState, newStorageStateRoot) <- 
           runCodeFromStart (to ut) availableGas
                  Environment{
                            envGasPrice=gasPrice ut,
                            envBlock=b,
-                           envOwner = tAddr,
+                           envOwner = undefined,
                            envOrigin = tAddr,
                            envInputData = tData ut,
                            envSender = error "envSender is not set",
                            envValue = value ut,
                            envCode = Code contractCode
                          }
+
+  liftIO $ putStrLn $ "newStorageStateRoot: " ++ show (pretty newStorageStateRoot)
 
   liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
   let usedGas = availableGas - vmGasRemaining vmState
@@ -203,14 +207,14 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
           cxt <- get
           putAddressState (to ut)
                  addressState{contractRoot=stateRoot $ storageDB cxt}-}
-          pay (whoSignedThisTransaction t) (to ut) (value ut)
         Nothing -> do
           {-
           addressState <- getAddressState (to ut)
           cxt <- get
           putAddressState (to ut)
                  addressState{contractRoot=stateRoot $ storageDB cxt}-}
-          pay (whoSignedThisTransaction t) (to ut) (value ut)
+          return ()
+
 
 
 

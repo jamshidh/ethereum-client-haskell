@@ -16,13 +16,17 @@ import qualified Database.LevelDB as DB
 import Control.Monad.IO.Class
 import Control.Monad.State
 import Control.Monad.Trans.Resource
+import qualified Data.ByteString as B
 import System.Directory
 import System.FilePath
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
 
 import Constants
 import Database.MerklePatricia
 import Data.Peer
 import SHA
+
+import Debug.Trace
 
 type BlockDB = DB.DB
 type CodeDB = DB.DB
@@ -74,6 +78,6 @@ openDBs theType = do
       ddb
       MPDB{ ldb=sdb, stateRoot=error "no stateRoot defined"}
       sdb
-      MPDB{ ldb=sdb, stateRoot=error "no stateRoot defined"}
+      MPDB{ ldb=sdb, stateRoot=SHAPtr B.empty} --error "no storage stateRoot defined"}
       0
       []

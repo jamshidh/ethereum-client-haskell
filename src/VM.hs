@@ -15,7 +15,7 @@ import Data.Maybe
 import Data.Time.Clock.POSIX
 import Network.Haskoin.Crypto (Word256)
 import Numeric
---import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Context
 import Data.Address
@@ -200,7 +200,7 @@ runOperation (PUSH vals) _ state =
 
 
 
---               | CREATE | CALL | RETURN | SUICIDE deriving (Show, Eq, Ord)
+--               | CREATE | SUICIDE deriving (Show, Eq, Ord)
 
 runOperation DUP1 _ state@VMState{stack=s@(v:_)} = return state{stack=v:s}
 runOperation DUP2 _ state@VMState{stack=s@(_:v:_)} = return state{stack=v:s}
@@ -224,20 +224,18 @@ runOperation DUP16 _ state@VMState{stack=s@(_:_:_:_:_:_:_:_:_:_:_:_:_:_:_:v:_)} 
 
 
 runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffset:outSize:rest)} = do
-  {-error $ "CALL not defined yet\n"
-    ++ "gas: " ++ show (toInteger gas) ++ "\n"
-    ++ "address: " ++ show (pretty to) ++ "\n"
-    ++ "value: " ++ show (pretty value) ++ "\n"
-    ++ "inOffset: " ++ show (pretty inOffset) ++ "\n"
-    ++ "inSize: " ++ show (pretty inSize) ++ "\n"
-    ++ "outOffset: " ++ show (pretty outOffset) ++ "\n"
-    ++ "outSize: " ++ show (pretty outOffset) ++ "\n"-}
 
   inputData <- liftIO $ mLoadByteString state inOffset inSize
 
   let address = Address $ fromIntegral to
 
-  state' <-
+  addressState <- getAddressState address
+  code <- 
+      fromMaybe B.empty <$>
+                getCode (codeHash addressState)
+
+
+  (nestedState, _) <-
     runCodeFromStart address
      (fromIntegral gas)
      Environment {
@@ -247,19 +245,19 @@ runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffse
        envInputData = inputData,
        envSender = error "envSender undefined",
        envValue = fromIntegral value,
-       envCode = error "envCode undefined",
+       envCode = Code code,
        envBlock = error "envBlock undefined"
        }
 
-  let retVal = fromMaybe B.empty $ returnVal state'
+  let retVal = fromMaybe B.empty $ returnVal nestedState
  
-  state'' <- liftIO $ mStoreByteString state' outOffset retVal
+  state' <- liftIO $ mStoreByteString state outOffset retVal
 
   let success = 1
-      
+
   pay (envOwner env) address (fromIntegral value)
 
-  return state''{stack=success:rest}
+  return state'{stack=success:rest}
 
 
 runOperation RETURN _ state@VMState{stack=(address:size:rest)} = do
@@ -286,7 +284,7 @@ movePC state l = state{ pc=pc state + l }
 
 opGasPrice::VMState->Operation->ContextM Integer
 opGasPrice _ STOP = return 0
---opGasPrice _ MSTORE = return 2
+opGasPrice _ MSTORE = return 2
 opGasPrice VMState{stack=_:_:size:_} CODECOPY = return $ 1 + ceiling (fromIntegral size / (32::Double))
 opGasPrice VMState{ stack=_:_ } SLOAD = return 20
 opGasPrice VMState{ stack=p:val:_ } SSTORE = do
@@ -326,11 +324,11 @@ runCode env state c = do
   state' <- decreaseGasForOp op state
   result <- runOperation op env state'
   memString <- liftIO $ getShow (memory result)
-  liftIO $ putStrLn $ " > memory: " ++ memString
-  liftIO $ putStrLn "STACK"
-  liftIO $ putStrLn $ unlines (("    " ++) <$> padZeros 64 <$> flip showHex "" <$> stack result)
-  kvs <- getStorageKeyVals ""
-  liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHex (byteString2Integer $ nibbleString2ByteString k) "" ++ ": 0x" ++ showHex (rlpDecode $ rlpDeserialize $ rlpDecode v::Integer) "") kvs)
+  --liftIO $ putStrLn $ " > memory: " ++ memString
+  --liftIO $ putStrLn "STACK"
+  --liftIO $ putStrLn $ unlines (("    " ++) <$> padZeros 64 <$> flip showHex "" <$> stack result)
+  --kvs <- getStorageKeyVals ""
+  --liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHex (byteString2Integer $ nibbleString2ByteString k) "" ++ ": 0x" ++ showHex (rlpDecode $ rlpDeserialize $ rlpDecode v::Integer) "") kvs)
   case result of
     VMState{vmException=Just _} -> return result{ vmGasRemaining = 0 } 
     VMState{done=True} -> do
@@ -338,20 +336,19 @@ runCode env state c = do
                          return $ decreaseGas (fromIntegral memSize) $ movePC result len
     state2 -> runCode env (movePC state2 len) (c+1)
 
-runCodeFromStart::Address->Integer->Environment->ContextM VMState
+runCodeFromStart::Address->Integer->Environment->ContextM (VMState, SHAPtr)
 runCodeFromStart address gasLimit' env = do
   addressState <- getAddressState address
-  code <- 
-      fromMaybe B.empty <$>
-                getCode (codeHash addressState)
-
-  
-  liftIO $ putStrLn $ "Running code:\n    Input Data = " ++ format (envInputData env)
+  --liftIO $ putStrLn $ "Running code:\n    Input Data = " ++ format (envInputData env)
   oldStateRoot <- getStorageStateRoot
   setStorageStateRoot (contractRoot addressState)
+
   vmState <- liftIO startingState
-  state' <- runCode env{envCode=Code code} vmState{vmGasRemaining=gasLimit'} 0
+  state' <- runCode env{envOwner=address} vmState{vmGasRemaining=gasLimit'} 0
+
   newStateRoot <- getStorageStateRoot
-  putAddressState address addressState{contractRoot=newStateRoot} 
+  newAddressState <- getAddressState address
+  putAddressState address newAddressState{contractRoot=newStateRoot} 
   setStorageStateRoot oldStateRoot
-  return state'
+
+  return (state', newStateRoot)
