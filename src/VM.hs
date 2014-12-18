@@ -290,9 +290,18 @@ movePC state l = state{ pc=pc state + l }
 
 opGasPrice::VMState->Operation->ContextM Integer
 opGasPrice _ STOP = return 0
-opGasPrice _ MSTORE = return 2
+opGasPrice _ SUICIDE = return 0
+
+
+opGasPrice _ BALANCE = return 20
+opGasPrice _ SHA3 = return 20
+opGasPrice _ SLOAD = return 20
+opGasPrice _ CALL = return 20
+
+opGasPrice _  CREATE = return 100
+
 opGasPrice VMState{stack=_:_:size:_} CODECOPY = return $ 1 + ceiling (fromIntegral size / (32::Double))
-opGasPrice VMState{ stack=_:_ } SLOAD = return 20
+opGasPrice VMState{stack=_:_:size:_} CALLDATACOPY = return $ 1 + ceiling (fromIntegral size / (32::Double))
 opGasPrice VMState{ stack=p:val:_ } SSTORE = do
   oldVals <- getStorageKeyVals (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
   let oldVal =
@@ -306,6 +315,21 @@ opGasPrice VMState{ stack=p:val:_ } SSTORE = do
       (x, 0) | x /= 0 -> 0
       _ -> 100
 opGasPrice _ _ = return 1
+
+--missing stuff
+--Gexp 1 Partial payment for an EXP operation.
+--Gexpbyte 1 Partial payment when multiplied by dlog256(exponent)e for the EXP operation.
+--Glog 1 Partial payment for a LOG operation.
+--Glogdata 1 Paid for each byte in a LOG operation’s data.
+--Glogtopic 1 Paid for each topic of a LOG operation.
+
+
+
+
+
+
+
+
 
 decreaseGas::Integer->VMState->VMState
 decreaseGas val state = do
@@ -337,9 +361,7 @@ runCode env state c = do
   --liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHex (byteString2Integer $ nibbleString2ByteString k) "" ++ ": 0x" ++ showHex (rlpDecode $ rlpDeserialize $ rlpDecode v::Integer) "") kvs)
   case result of
     VMState{vmException=Just _} -> return result{ vmGasRemaining = 0 } 
-    VMState{done=True} -> do
-                         memSize <- liftIO $ getSize $ memory result
-                         return $ decreaseGas (fromIntegral memSize) $ movePC result len
+    VMState{done=True} -> return $ movePC result len
     state2 -> runCode env (movePC state2 len) (c+1)
 
 runCodeFromStart::Address->Integer->Environment->ContextM (VMState, SHAPtr)

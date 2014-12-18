@@ -44,7 +44,7 @@ setNewMaxSize state newSize = do
 
   let gasCharge =
         if newSize > oldSize
-        then fromInteger $ (toInteger newSize `quot` 32) - (toInteger oldSize `quot` 32)
+        then fromInteger $ (ceiling $ fromIntegral newSize/32) - (ceiling $ fromIntegral oldSize/32)
         else 0
 
   let oldLength = fromIntegral $ V.length (mVector $ memory state)

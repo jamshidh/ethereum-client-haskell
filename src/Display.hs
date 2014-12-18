@@ -48,6 +48,8 @@ displayMessage _ Ping = return ()
 displayMessage _ Pong = return ()
 displayMessage _ GetPeers = return ()
 displayMessage _ (Peers _) = return ()
+displayMessage _ (GetBlocks blocks) = do
+  liftIO $ putStrLn $ CL.blue "GetBlocks: " ++ "(Requesting " ++ show (length blocks) ++ " blocks)"
 displayMessage _ QqqqPacket = return ()
 displayMessage outbound (BlockHashes shas) = do
   liftIO $ putStrLn $ prefix outbound ++ CL.blue "BlockHashes: " ++ "(" ++ show (length shas) ++ " new hashes)"

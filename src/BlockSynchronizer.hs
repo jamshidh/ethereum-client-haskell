@@ -46,7 +46,7 @@ handleNewBlockHashes socket blockHashes = do
     Nothing -> do
                 --liftIO $ putStrLn "Requesting more block hashes"
                 cxt <- get 
-                put cxt{neededBlockHashes=blockHashes ++ neededBlockHashes cxt}
+                put cxt{neededBlockHashes=reverse blockHashes ++ neededBlockHashes cxt}
                 sendMessage socket $ GetBlockHashes [last blockHashes] 0x500
     Just hashInDB -> do
                 liftIO $ putStrLn $ "Found a serverblock already in our database: " ++ show (pretty hashInDB)
