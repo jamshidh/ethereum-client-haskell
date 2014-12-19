@@ -4,7 +4,8 @@ module Constants where
 
 
 ethVersion::Integer
-ethVersion=45
+ethVersion=49
+--ethVersion=45
 --ethVersion=48
 shhVersion::Integer
 shhVersion=2

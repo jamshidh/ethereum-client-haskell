@@ -251,6 +251,7 @@ addTransaction b t@SignedTransaction{unsignedTransaction=ut} = do
   let intrinsicGas' = intrinsicGas ut
   liftIO $ putStrLn $ "intrinsicGas: " ++ show (intrinsicGas')
   --TODO- return here if not enough gas
+  --liftIO $ putStrLn $ "Paying " ++ show (intrinsicGas' * gasPrice ut) ++ " from " ++ show (pretty signAddress) ++ " to " ++ show (pretty $ coinbase $ blockData b)
   pay signAddress (coinbase $ blockData b) (intrinsicGas' * gasPrice ut)
 
   liftIO $ putStrLn "running code"

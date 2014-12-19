@@ -41,7 +41,7 @@ instance Format AddressState where
                  "\ncodeHash: " ++ show (pretty $ codeHash a))
   
 instance RLPSerializable AddressState where
-  rlpEncode a | balance a < 0 = error "Error in cal to rlpEncode for AddressState: AddressState has negative balance"
+  rlpEncode a | balance a < 0 = error $ "Error in cal to rlpEncode for AddressState: AddressState has negative balance: " ++ format a
   rlpEncode a = RLPArray [
     rlpEncode $ toInteger $ addressStateNonce a,
     rlpEncode $ toInteger $ balance a,

@@ -59,7 +59,7 @@ instance Format Transaction where
       "tInit: " ++ tab ("\n" ++ show (pretty init')) ++ "\n")
 
 instance RLPSerializable Transaction where
-  rlpDecode (RLPArray [n, gp, gl, toAddr, val, i]) | rlpDecode toAddr == (0::Integer) =
+  rlpDecode (RLPArray [n, gp, gl, toAddr, val, i]) | rlpDecode toAddr == (0::Integer) && not (null $ (rlpDecode i::String)) =
     ContractCreationTX {
       tNonce = rlpDecode n,
       gasPrice = rlpDecode gp,

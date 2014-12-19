@@ -61,7 +61,7 @@ askForSomeBlocks socket = do
   if null (neededBlockHashes cxt)
     then return ()
     else do
-      let (firstBlocks, lastBlocks) = splitAt 0x40 (neededBlockHashes cxt)
+      let (firstBlocks, lastBlocks) = splitAt 0x20 (neededBlockHashes cxt)
       put cxt{neededBlockHashes=lastBlocks}
       sendMessage socket $ GetBlocks firstBlocks
 
