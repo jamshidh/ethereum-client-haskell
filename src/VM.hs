@@ -388,11 +388,12 @@ runCode env state c = do
   state' <- decreaseGasForOp op state
   result <- runOperation op env state'
   memString <- liftIO $ getShow (memory result)
-  --liftIO $ putStrLn $ " > memory: " ++ memString
+  liftIO $ putStrLn $ " > memory: " ++ memString
   liftIO $ putStrLn "STACK"
   liftIO $ putStrLn $ unlines (("    " ++) <$> padZeros 64 <$> flip showHex "" <$> stack result)
-  --kvs <- getStorageKeyVals ""
-  --liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHex (byteString2Integer $ nibbleString2ByteString k) "" ++ ": 0x" ++ showHex (rlpDecode $ rlpDeserialize $ rlpDecode v::Integer) "") kvs)
+  liftIO $ putStrLn "STORAGE"
+  kvs <- getStorageKeyVals ""
+  liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHex (byteString2Integer $ nibbleString2ByteString k) "" ++ ": 0x" ++ showHex (rlpDecode $ rlpDeserialize $ rlpDecode v::Integer) "") kvs)
   case result of
     VMState{vmException=Just _} -> return result{ vmGasRemaining = 0 } 
     VMState{done=True} -> return $ movePC result len

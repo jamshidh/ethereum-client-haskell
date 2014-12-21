@@ -41,8 +41,8 @@ stateDBPath::String
 stateDBPath="/state/"
 
 dbDir::String->String
-dbDir "c" = ".ethereum"
---dbDir "c" = "Library/Application Support/Ethereum"
+--dbDir "c" = ".ethereum"
+dbDir "c" = "Library/Application Support/Ethereum"
 dbDir "h" = ".ethereumH"
 dbDir "t" = "/tmp/tmpDB"
 dbDir x = error $ "Unknown DB specifier: " ++ show x

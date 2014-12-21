@@ -146,10 +146,18 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
   case vmException vmState of
         Just e -> do
           liftIO $ putStrLn $ CL.red $ show e
+          putAddressState newAddress
+                   AddressState{
+                     addressStateNonce=0,
+                     balance=0,
+                     contractRoot=emptyTriePtr,
+                     codeHash=hash B.empty
+                     }
           addToBalance tAddr (-value ut) --zombie account, money lost forever
         Nothing -> do
           let result = fromMaybe B.empty $ returnVal vmState
           liftIO $ putStrLn $ "Result: " ++ show result
+          pay tAddr (coinbase $ blockData b) (5*toInteger (B.length result)*gasPrice ut)
           liftIO $ putStrLn $ show (pretty newAddress) ++ ": " ++ format result
           --cxt <- get
           liftIO $ putStrLn $ "adding storage " ++ show (pretty newStorageStateRoot) -- stateRoot $ storageDB cxt)
@@ -212,11 +220,8 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
           putAddressState (to ut)
                  addressState{contractRoot=stateRoot $ storageDB cxt}-}
         Nothing -> do
-          {-
           addressState <- getAddressState (to ut)
-          cxt <- get
-          putAddressState (to ut)
-                 addressState{contractRoot=stateRoot $ storageDB cxt}-}
+          putAddressState (to ut) addressState{contractRoot=newStorageStateRoot}
           return ()
 
 
@@ -263,6 +268,7 @@ addTransactions::Block->[SignedTransaction]->ContextM ()
 addTransactions _ [] = return ()
 addTransactions b (t:rest) = do
   valid <- isTransactionValid t
+  liftIO $ putStrLn $ "Coinbase: " ++ show (pretty $ coinbase $ blockData b)
   liftIO $ putStrLn $ "Transaction signed by: " ++ show (pretty $ whoSignedThisTransaction t)
   liftIO $ putStrLn $ "Transaction is valid: " ++ show valid
   when valid $ addTransaction b t
