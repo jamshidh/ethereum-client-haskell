@@ -126,8 +126,8 @@ opDatas =
 
     OPData 0xf0 CREATE 3 1 "Create a new account with associated code.",
     OPData 0xf1 CALL 7 1 "Message-call into an account.",
-    OPData 0xf2 RETURN 2 0 "Halt execution returning output data.",
-    OPData 0xf3 CALLCODE undefined undefined "message-call with another account's code only",
+    OPData 0xf2 CALLCODE undefined undefined "message-call with another account's code only",
+    OPData 0xf3 RETURN 2 0 "Halt execution returning output data.",
     OPData 0xff SUICIDE 1 0 "Halt execution and register account for later deletion."
   ]
 

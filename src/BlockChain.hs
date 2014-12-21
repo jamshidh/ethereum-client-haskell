@@ -114,6 +114,7 @@ checkValidity b = do
 
 runCodeForTransaction::Block->Integer->SignedTransaction->ContextM ()
 runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@ContractCreationTX{}} = do
+  liftIO $ putStrLn "runCodeForTransaction: ContractCreationTX"
   let tAddr = whoSignedThisTransaction t
 
   liftIO $ putStrLn $ "availableGas: " ++ show availableGas
@@ -164,6 +165,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
           pay tAddr newAddress (value ut)
 
 runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@MessageTX{}} = do
+  liftIO $ putStrLn "runCodeForTransaction: MessageTX"
   recipientAddressState <- getAddressState (to ut)
 
   liftIO $ putStrLn $ "Looking for contract code for: " ++ show (pretty $ to ut)
@@ -261,6 +263,7 @@ addTransactions::Block->[SignedTransaction]->ContextM ()
 addTransactions _ [] = return ()
 addTransactions b (t:rest) = do
   valid <- isTransactionValid t
+  liftIO $ putStrLn $ "Transaction signed by: " ++ show (pretty $ whoSignedThisTransaction t)
   liftIO $ putStrLn $ "Transaction is valid: " ++ show valid
   when valid $ addTransaction b t
   addTransactions b rest

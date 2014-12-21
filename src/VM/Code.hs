@@ -5,6 +5,7 @@ import qualified Data.ByteString as B
 import Text.PrettyPrint.ANSI.Leijen
 
 import Data.RLP
+import Format
 import VM.Opcodes
 
 newtype Code = Code B.ByteString deriving (Show)
@@ -16,7 +17,7 @@ getOperationAt (Code rom) p = opCode2Op $ B.drop p rom
 
 showCode::Int->Code->String
 showCode _ (Code rom) | B.null rom = ""
-showCode lineNumber c@(Code rom) = show lineNumber ++ " " ++ show (pretty op) ++ "\n" ++  showCode (lineNumber + nextP) (Code $ B.drop nextP rom)
+showCode lineNumber c@(Code rom) = show lineNumber ++ " " ++ format (B.pack $ op2OpCode op) ++ " " ++ show (pretty op) ++ "\n" ++  showCode (lineNumber + nextP) (Code $ B.drop nextP rom)
         where
           (op, nextP) = getOperationAt c 0
 

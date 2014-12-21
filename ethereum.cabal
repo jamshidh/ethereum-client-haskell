@@ -23,13 +23,12 @@ executable ethereumH
                  , filepath
                  , haskoin
                  , leveldb-haskell
-                 , mtl
-                 , network
-                 , network-simple
+--                 , mtl
+--                 , network
+--                 , network-simple
                  , nibblestring
-                 , pretty-class
                  , resourcet
-                 , time
+--                 , time
                  , transformers
                  , vector
                  , ansi-wl-pprint

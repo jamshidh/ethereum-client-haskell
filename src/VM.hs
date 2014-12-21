@@ -190,11 +190,6 @@ runOperation GAS _ state =
 
 runOperation JUMPDEST _ state = return state
 
---runOperation CALLCODE _ state@VMState{stack=gas:to:val:inOffset:inSize:outOffset:outSize:rest} = return state
---runOperation CALLCODE _ state =
---  return $ state { vmException=Just StackTooSmallException } 
-
-                                                               
 runOperation (PUSH vals) _ state =
   return $
   state { stack=fromIntegral (bytes2Integer vals):stack state }
@@ -260,6 +255,45 @@ runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffse
 
   return state'{stack=success:rest}
 
+runOperation CALLCODE env state@VMState{stack=gas:to:value:inOffset:inSize:outOffset:outSize:rest} = do
+
+  inputData <- liftIO $ mLoadByteString state inOffset inSize
+  let address = Address $ fromIntegral to
+  addressState <- getAddressState address
+  code <- 
+      fromMaybe B.empty <$>
+                getCode (codeHash addressState)
+
+  (nestedState, _) <-
+    runCodeFromStart (envOwner env)
+     (fromIntegral gas)
+     Environment {
+       envOwner = error "envOwner undefined",
+       envOrigin = error "envOrigin undefined",
+       envGasPrice = error "envGasPrice undefined",
+       envInputData = inputData,
+       envSender = error "envSender undefined",
+       envValue = fromIntegral value,
+       envCode = Code code,
+       envBlock = error "envBlock undefined"
+       }
+
+  let retVal = fromMaybe B.empty $ returnVal nestedState
+ 
+  state' <- liftIO $ mStoreByteString state outOffset retVal
+
+  let success = 1
+
+  pay (envOwner env) address (fromIntegral value)
+
+  return state'{stack=success:rest}
+
+
+
+runOperation CALLCODE _ state =
+  return $ state { vmException=Just StackTooSmallException } 
+
+                                                               
 
 runOperation RETURN _ state@VMState{stack=(address:size:rest)} = do
   retVal <- liftIO $ mLoadByteString state address size
@@ -355,8 +389,8 @@ runCode env state c = do
   result <- runOperation op env state'
   memString <- liftIO $ getShow (memory result)
   --liftIO $ putStrLn $ " > memory: " ++ memString
-  --liftIO $ putStrLn "STACK"
-  --liftIO $ putStrLn $ unlines (("    " ++) <$> padZeros 64 <$> flip showHex "" <$> stack result)
+  liftIO $ putStrLn "STACK"
+  liftIO $ putStrLn $ unlines (("    " ++) <$> padZeros 64 <$> flip showHex "" <$> stack result)
   --kvs <- getStorageKeyVals ""
   --liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHex (byteString2Integer $ nibbleString2ByteString k) "" ++ ": 0x" ++ showHex (rlpDecode $ rlpDeserialize $ rlpDecode v::Integer) "") kvs)
   case result of
@@ -375,8 +409,8 @@ runCodeFromStart address gasLimit' env = do
   state' <- runCode env{envOwner=address} vmState{vmGasRemaining=gasLimit'} 0
 
   newStateRoot <- getStorageStateRoot
-  newAddressState <- getAddressState address
-  putAddressState address newAddressState{contractRoot=newStateRoot} 
+  --newAddressState <- getAddressState address
+  --putAddressState address newAddressState{contractRoot=newStateRoot} 
   setStorageStateRoot oldStateRoot
 
   return (state', newStateRoot)
