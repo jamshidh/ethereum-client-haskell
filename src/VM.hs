@@ -443,7 +443,7 @@ runCode env state c = do
   state' <- decreaseGasForOp op state
   result <- runOperation op env state'
   memAfter <- liftIO $ getSize $ memory result
-  liftIO $ putStrLn $ "EVM [ 19:22:55 | eth | " ++ show (callDepth state) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc state)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining state) ++ " | " ++ show (vmGasRemaining result - vmGasRemaining state) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
+  liftIO $ putStrLn $ "EVM [ 19:22:56 | eth | " ++ show (callDepth state) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc state)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining state) ++ " | " ++ show (vmGasRemaining result - vmGasRemaining state) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
   memString <- liftIO $ getShow (memory result)
   liftIO $ putStrLn $ " > memory: " ++ memString
   liftIO $ putStrLn "STACK"
