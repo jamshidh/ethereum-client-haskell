@@ -6,6 +6,7 @@ module VM (
 
 import Prelude hiding (LT, GT, EQ)
 
+import Control.Monad
 import Control.Monad.IO.Class
 import Data.Bits
 import qualified Data.ByteString as B
@@ -204,7 +205,7 @@ runOperation (PUSH vals) _ state =
 
 
 
---               | CREATE | SUICIDE deriving (Show, Eq, Ord)
+--               | SUICIDE deriving (Show, Eq, Ord)
 
 runOperation DUP1 _ state@VMState{stack=s@(v:_)} = return state{stack=v:s}
 runOperation DUP2 _ state@VMState{stack=s@(_:v:_)} = return state{stack=v:s}
@@ -242,49 +243,40 @@ runOperation SWAP16 _ state = swapn 16 state
 
 
 
+runOperation CREATE env state@VMState{stack=value:input:size:rest} = do
+    addressState <- getAddressState $ envOwner env
+    let newAddress = getNewAddress (envOwner env) (addressStateNonce addressState)
+    putAddressState (envOwner env) addressState{addressStateNonce=addressStateNonce addressState + 1}
 
+    codeBytes <- liftIO $ mLoadByteString state input size
 
+    liftIO $ putStrLn $ "qqqqqqqqqqqqqqqqqqq:" ++ show (B.length codeBytes)
+
+    addCode codeBytes
+
+    putAddressState newAddress 
+                    blankAddressState
+                    {
+                      codeHash=hash codeBytes
+                    }
+
+    (state', retValue) <- nestedRun env state{stack=rest} (fromIntegral $ vmGasRemaining state) newAddress value B.empty
+
+    addCode retValue
+    addressState' <- getAddressState newAddress
+    putAddressState newAddress addressState'{codeHash=hash retValue}
+
+    return state'
 
 runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffset:outSize:rest)} = do
 
   inputData <- liftIO $ mLoadByteString state inOffset inSize
 
-  let address = Address $ fromIntegral to
+  (state', retValue) <- nestedRun env state{stack=rest} gas (Address $ fromIntegral to) value inputData
 
-  addressState <- getAddressState address
-  code <- 
-      fromMaybe B.empty <$>
-                getCode (codeHash addressState)
+  liftIO $ mStoreByteString state' outOffset retValue
 
-
-  (nestedState, newStorageStateRoot) <-
-    runCodeFromStart address (callDepth state + 1)
-     (fromIntegral gas)
-     Environment {
-       envOwner = address,
-       envOrigin = envOrigin env,
-       envGasPrice = envGasPrice env,
-       envInputData = inputData,
-       envSender = envOwner env,
-       envValue = fromIntegral value,
-       envCode = Code code,
-       envBlock = envBlock env
-       }
-
-  let retVal = fromMaybe B.empty $ returnVal nestedState
-
-  let usedGas = fromIntegral gas - vmGasRemaining nestedState
-
-  state' <- liftIO $ mStoreByteString state outOffset retVal
-
-  let success = 1
-
-  addressState <- getAddressState address
-  putAddressState address addressState{contractRoot=newStorageStateRoot}
-
-  pay (envOwner env) address (fromIntegral value)
-
-  return state'{stack=success:rest, vmGasRemaining = vmGasRemaining state' - usedGas}
+  return state'
 
 runOperation CALLCODE env state@VMState{stack=gas:to:value:inOffset:inSize:outOffset:outSize:rest} = do
 
@@ -476,3 +468,47 @@ runCodeFromStart address callDepth' gasLimit' env = do
   setStorageStateRoot oldStateRoot
 
   return (state', newStateRoot)
+
+
+nestedRun::Environment->VMState->Word256->Address->Word256->B.ByteString->ContextM (VMState, B.ByteString)
+nestedRun env state gas address value inputData = do
+
+  addressState <- getAddressState address
+  code <-
+      fromMaybe B.empty <$>
+                getCode (codeHash addressState)
+
+
+  (nestedState, newStorageStateRoot) <-
+    runCodeFromStart address (callDepth state + 1)
+     (fromIntegral gas)
+     Environment {
+       envOwner = address,
+       envOrigin = envOrigin env,
+       envGasPrice = envGasPrice env,
+       envInputData = inputData,
+       envSender = envOwner env,
+       envValue = fromIntegral value,
+       envCode = Code code,
+       envBlock = envBlock env
+       }
+
+  let retVal = fromMaybe B.empty $ returnVal nestedState
+
+  {-state' <- 
+      if storeRetVal 
+      then do
+        liftIO $ mStoreByteString state outOffset retVal
+      else return state-}
+
+  let usedGas = fromIntegral gas - vmGasRemaining nestedState
+
+
+  let success = 1
+
+  addressState <- getAddressState address
+  putAddressState address addressState{contractRoot=newStorageStateRoot}
+
+  pay (envOwner env) address (fromIntegral value)
+
+  return (state{stack=success:stack state, vmGasRemaining = vmGasRemaining state - usedGas}, retVal)

@@ -2,11 +2,12 @@
 module Data.Address (
   Address(..),
   prvKey2Address,
-  pubKey2Address
+  pubKey2Address,
+  getNewAddress
   ) where
 
 import Control.Monad
-import Crypto.Hash.SHA3
+import qualified Crypto.Hash.SHA3 as C
 import Data.Binary
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
@@ -18,6 +19,7 @@ import Numeric
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Data.RLP
+import SHA
 import Util
 
 newtype Address = Address Word160 deriving (Show, Eq)
@@ -35,7 +37,7 @@ instance Binary Address where
 
 prvKey2Address::PrvKey->Address
 prvKey2Address prvKey =
-  Address $ fromInteger $ byteString2Integer $ hash 256 $ BL.toStrict $ encode x `BL.append` encode y
+  Address $ fromInteger $ byteString2Integer $ C.hash 256 $ BL.toStrict $ encode x `BL.append` encode y
   --B16.encode $ hash 256 $ BL.toStrict $ encode x `BL.append` encode y
   where
     PubKey point = derivePubKey prvKey
@@ -44,7 +46,7 @@ prvKey2Address prvKey =
 
 pubKey2Address::PubKey->Address
 pubKey2Address (PubKey point) =
-  Address $ fromInteger $ byteString2Integer $ hash 256 $ BL.toStrict $ encode x `BL.append` encode y
+  Address $ fromInteger $ byteString2Integer $ C.hash 256 $ BL.toStrict $ encode x `BL.append` encode y
   --B16.encode $ hash 256 $ BL.toStrict $ encode x `BL.append` encode y
   where
     x = fromMaybe (error "getX failed in prvKey2Address") $ getX point
@@ -56,4 +58,9 @@ instance RLPSerializable Address where
   rlpEncode (Address a) = RLPString $ BLC.unpack $ encode a
   rlpDecode (RLPString s) = Address $ decode $ BLC.pack s
   rlpDecode x = error ("Malformed rlp object sent to rlp2Address: " ++ show x)
+
+getNewAddress::Address->Integer->Address
+getNewAddress a n =
+    let theHash = hash $ rlpSerialize $ RLPArray [rlpEncode a, rlpEncode n]
+    in decode $ BL.drop 12 $ encode theHash
 

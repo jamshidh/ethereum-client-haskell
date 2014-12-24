@@ -119,7 +119,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
 
   liftIO $ putStrLn $ "availableGas: " ++ show availableGas
 
-  let newAddress = getNewAddress t
+  let newAddress = getNewAddress tAddr $ tNonce $ unsignedTransaction t
 
   liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty $ tInit ut)))
 
@@ -233,11 +233,6 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
 addBlocks::[Block]->ContextM ()
 addBlocks blocks = 
   forM_ blocks addBlock
-
-getNewAddress::SignedTransaction->Address
-getNewAddress t =
-  let theHash = hash $ rlpSerialize $ RLPArray [rlpEncode $ whoSignedThisTransaction t, rlpEncode $ tNonce $ unsignedTransaction t]
-  in decode $ BL.drop 12 $ encode theHash
 
 isTransactionValid::SignedTransaction->ContextM Bool
 isTransactionValid t = do
