@@ -9,6 +9,7 @@ import Prelude hiding (LT, GT, EQ)
 import Control.Monad.IO.Class
 import Data.Bits
 import qualified Data.ByteString as B
+import Data.Char
 import Data.Function
 import Data.Functor
 import Data.Maybe
@@ -36,7 +37,7 @@ import VM.Memory
 import VM.Opcodes
 import VM.VMState
 
---import Debug.Trace
+import Debug.Trace
 
 bool2Word256::Bool->Word256
 bool2Word256 True = 1
@@ -59,6 +60,13 @@ s256ToInteger::Word256->Integer
 s256ToInteger i | i < 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF = toInteger i
 s256ToInteger i = 0x10000000000000000000000000000000000000000000000000000000000000000 - toInteger i
 
+
+swapn::Int->VMState->ContextM VMState
+swapn n state@VMState{stack=v1:rest1} | length rest1 > n = return state{stack=v2:(middle++(v1:rest2))}
+    where
+      (middle, v2:rest2) = splitAt (n-1) rest1
+
+
 runOperation::Operation->Environment->VMState->ContextM VMState
 runOperation STOP _ state = return state{done=True}
 
@@ -77,7 +85,7 @@ runOperation GT env state = binaryAction ((bool2Word256 .) . (>)) env state
 runOperation SLT env state = binaryAction ((bool2Word256 .) . ((<) `on` s256ToInteger)) env state
 runOperation SGT env state = binaryAction ((bool2Word256 .) . ((>) `on` s256ToInteger)) env state
 runOperation EQ env state = binaryAction ((bool2Word256 .) . (==)) env state
-runOperation ISZERO env state = unaryAction (bool2Word256 . not . word2562Bool) env state
+runOperation ISZERO env state = unaryAction (bool2Word256 . (==0)) env state
 runOperation AND env state = binaryAction (.&.) env state
 runOperation OR env state = binaryAction (.|.) env state
 runOperation XOR env state = binaryAction xor env state
@@ -97,7 +105,7 @@ runOperation BALANCE env state = liftIO $ addErr "stack did not contain enough e
 
 runOperation ORIGIN Environment{envSender=Address sender} state = return state{stack=fromIntegral sender:stack state}
 
-runOperation CALLER Environment{envOrigin=Address owner} state = return state{stack=fromIntegral owner:stack state}
+runOperation CALLER Environment{envSender=Address owner} state = return state{stack=fromIntegral owner:stack state}
 
 runOperation CALLVALUE Environment{envValue=val} state = return state{stack=fromIntegral val:stack state}
 
@@ -136,11 +144,11 @@ runOperation GASLIMIT Environment{envBlock=Block{blockData=bd}} state = return s
 runOperation POP _ state@VMState{stack=_:rest} = return state{stack=rest}
 runOperation POP env state = liftIO $ addErr "Stack did not contain any items" (envCode env) state
 
-runOperation DUP _ state@VMState{stack=x:rest} = return state{stack=x:x:rest}
-runOperation DUP env state = liftIO $ addErr "Stack did not contain any items" (envCode env) state
-
-runOperation SWAP _ state@VMState{stack=x:y:rest} = return state{stack=y:x:rest}
-runOperation SWAP env state = liftIO $ addErr "Stack did not contain enough items" (envCode env) state
+runOperation LOG0 env state@VMState{stack=_:_:rest} = return state{stack=rest}
+runOperation LOG1 env state@VMState{stack=_:_:_:rest} = return state{stack=rest}
+runOperation LOG2 env state@VMState{stack=_:_:_:_:rest} = return state{stack=rest}
+runOperation LOG3 env state@VMState{stack=_:_:_:_:_:rest} = return state{stack=rest}
+runOperation LOG4 env state@VMState{stack=_:_:_:_:_:_:rest} = return state{stack=rest}
 
 runOperation MLOAD _ state@VMState{stack=(p:rest)} = do
   bytes <- liftIO $ mLoad state p
@@ -215,6 +223,24 @@ runOperation DUP14 _ state@VMState{stack=s@(_:_:_:_:_:_:_:_:_:_:_:_:_:v:_)} = re
 runOperation DUP15 _ state@VMState{stack=s@(_:_:_:_:_:_:_:_:_:_:_:_:_:_:v:_)} = return state{stack=v:s}
 runOperation DUP16 _ state@VMState{stack=s@(_:_:_:_:_:_:_:_:_:_:_:_:_:_:_:v:_)} = return state{stack=v:s}
 
+runOperation SWAP1 _ state = swapn 1 state
+runOperation SWAP2 _ state = swapn 2 state
+runOperation SWAP3 _ state = swapn 3 state
+runOperation SWAP4 _ state = swapn 4 state
+runOperation SWAP5 _ state = swapn 5 state
+runOperation SWAP6 _ state = swapn 6 state
+runOperation SWAP7 _ state = swapn 7 state
+runOperation SWAP8 _ state = swapn 8 state
+runOperation SWAP9 _ state = swapn 9 state
+runOperation SWAP10 _ state = swapn 10 state
+runOperation SWAP11 _ state = swapn 11 state
+runOperation SWAP12 _ state = swapn 12 state
+runOperation SWAP13 _ state = swapn 13 state
+runOperation SWAP14 _ state = swapn 14 state
+runOperation SWAP15 _ state = swapn 15 state
+runOperation SWAP16 _ state = swapn 16 state
+
+
 
 
 
@@ -231,29 +257,34 @@ runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffse
                 getCode (codeHash addressState)
 
 
-  (nestedState, _) <-
-    runCodeFromStart address
+  (nestedState, newStorageStateRoot) <-
+    runCodeFromStart address (callDepth state + 1)
      (fromIntegral gas)
      Environment {
-       envOwner = error "envOwner undefined",
-       envOrigin = error "envOrigin undefined",
-       envGasPrice = error "envGasPrice undefined",
+       envOwner = address,
+       envOrigin = envOrigin env,
+       envGasPrice = envGasPrice env,
        envInputData = inputData,
-       envSender = error "envSender undefined",
+       envSender = envOwner env,
        envValue = fromIntegral value,
        envCode = Code code,
-       envBlock = error "envBlock undefined"
+       envBlock = envBlock env
        }
 
   let retVal = fromMaybe B.empty $ returnVal nestedState
- 
+
+  let usedGas = fromIntegral gas - vmGasRemaining nestedState
+
   state' <- liftIO $ mStoreByteString state outOffset retVal
 
   let success = 1
 
+  addressState <- getAddressState address
+  putAddressState address addressState{contractRoot=newStorageStateRoot}
+
   pay (envOwner env) address (fromIntegral value)
 
-  return state'{stack=success:rest}
+  return state'{stack=success:rest, vmGasRemaining = vmGasRemaining state' - usedGas}
 
 runOperation CALLCODE env state@VMState{stack=gas:to:value:inOffset:inSize:outOffset:outSize:rest} = do
 
@@ -264,29 +295,34 @@ runOperation CALLCODE env state@VMState{stack=gas:to:value:inOffset:inSize:outOf
       fromMaybe B.empty <$>
                 getCode (codeHash addressState)
 
-  (nestedState, _) <-
-    runCodeFromStart (envOwner env)
+  (nestedState, newStorageStateRoot) <-
+    runCodeFromStart (envOwner env) (callDepth state + 1)
      (fromIntegral gas)
      Environment {
-       envOwner = error "envOwner undefined",
-       envOrigin = error "envOrigin undefined",
-       envGasPrice = error "envGasPrice undefined",
+       envOwner = address,
+       envOrigin = envOrigin env,
+       envGasPrice = envGasPrice env,
        envInputData = inputData,
-       envSender = error "envSender undefined",
+       envSender = envOwner env,
        envValue = fromIntegral value,
        envCode = Code code,
-       envBlock = error "envBlock undefined"
+       envBlock = envBlock env
        }
 
   let retVal = fromMaybe B.empty $ returnVal nestedState
  
+  let usedGas = fromIntegral gas - vmGasRemaining nestedState
+
   state' <- liftIO $ mStoreByteString state outOffset retVal
 
   let success = 1
 
+  addressState <- getAddressState address
+  putAddressState address addressState{contractRoot=newStorageStateRoot}
+
   pay (envOwner env) address (fromIntegral value)
 
-  return state'{stack=success:rest}
+  return state'{stack=success:rest, vmGasRemaining = vmGasRemaining state' - usedGas}
 
 
 
@@ -306,8 +342,8 @@ runOperation SUICIDE _ state =
   return $ state { done=True, markedForSuicide=True }
 
 
-runOperation MalformedOpcode _ state = do
-  liftIO $ putStrLn $ CL.red "Malformed Opcode"
+runOperation (MalformedOpcode opcode) _ state = do
+  liftIO $ putStrLn $ CL.red ("Malformed Opcode: " ++ showHex opcode "")
   return state { vmException=Just MalformedOpcodeException }
 
 runOperation x _ _ = error $ "Missing case in runOperation: " ++ show x
@@ -328,11 +364,19 @@ opGasPrice _ SUICIDE = return 0
 
 
 opGasPrice _ BALANCE = return 20
-opGasPrice _ SHA3 = return 20
+opGasPrice _ SHA3 = return 30
 opGasPrice _ SLOAD = return 20
 opGasPrice _ CALL = return 20
 
+opGasPrice _ LOG0 = return 96
+opGasPrice _ LOG1 = return 96
+opGasPrice _ LOG2 = return 96
+opGasPrice _ LOG3 = return 128
+opGasPrice _ LOG4 = return 128
+
 opGasPrice _  CREATE = return 100
+
+opGasPrice VMState{stack=_:exp:_} EXP = return $ 1 + ceiling (log (fromIntegral exp) / log 256)
 
 opGasPrice VMState{stack=_:_:size:_} CODECOPY = return $ 1 + ceiling (fromIntegral size / (32::Double))
 opGasPrice VMState{stack=_:_:size:_} CALLDATACOPY = return $ 1 + ceiling (fromIntegral size / (32::Double))
@@ -351,8 +395,6 @@ opGasPrice VMState{ stack=p:val:_ } SSTORE = do
 opGasPrice _ _ = return 1
 
 --missing stuff
---Gexp 1 Partial payment for an EXP operation.
---Gexpbyte 1 Partial payment when multiplied by dlog256(exponent)e for the EXP operation.
 --Glog 1 Partial payment for a LOG operation.
 --Glogdata 1 Paid for each byte in a LOG operation’s data.
 --Glogtopic 1 Paid for each topic of a LOG operation.
@@ -381,12 +423,27 @@ nibbleString2ByteString (N.EvenNibbleString s) = s
 nibbleString2ByteString (N.OddNibbleString c s) = c `B.cons` s
 
 
+showHex4::Int->String
+showHex4 i = replicate (4 - length rawOutput) '0' ++ rawOutput
+    where rawOutput = showHex i ""
+
+formatOp::Operation->String
+formatOp (PUSH x) = "PUSH" ++ show (length x) -- ++ show x
+formatOp x = show x
+
+formatAddressWithoutColor::Address->String
+formatAddressWithoutColor (Address x) = padZeros 40 $ showHex x ""
+
+
 runCode::Environment->VMState->Int->ContextM VMState
 runCode env state c = do
+  memBefore <- liftIO $ getSize $ memory state
   let (op, len) = getOperationAt (envCode env) (pc state)
-  liftIO $ putStrLn $ " > OP: " ++ show op ++ " #" ++ show c ++ " (" ++ show (vmGasRemaining state) ++ ")"
+  --liftIO $ putStrLn $ "EVM [ 19:22" ++ show op ++ " #" ++ show c ++ " (" ++ show (vmGasRemaining state) ++ ")"
   state' <- decreaseGasForOp op state
   result <- runOperation op env state'
+  memAfter <- liftIO $ getSize $ memory result
+  liftIO $ putStrLn $ "EVM [ 19:22:55 | eth | " ++ show (callDepth state) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc state)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining state) ++ " | " ++ show (vmGasRemaining result - vmGasRemaining state) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
   memString <- liftIO $ getShow (memory result)
   liftIO $ putStrLn $ " > memory: " ++ memString
   liftIO $ putStrLn "STACK"
@@ -399,15 +456,15 @@ runCode env state c = do
     VMState{done=True} -> return $ movePC result len
     state2 -> runCode env (movePC state2 len) (c+1)
 
-runCodeFromStart::Address->Integer->Environment->ContextM (VMState, SHAPtr)
-runCodeFromStart address gasLimit' env = do
+runCodeFromStart::Address->Int->Integer->Environment->ContextM (VMState, SHAPtr)
+runCodeFromStart address callDepth' gasLimit' env = do
   addressState <- getAddressState address
   --liftIO $ putStrLn $ "Running code:\n    Input Data = " ++ format (envInputData env)
   oldStateRoot <- getStorageStateRoot
   setStorageStateRoot (contractRoot addressState)
 
   vmState <- liftIO startingState
-  state' <- runCode env{envOwner=address} vmState{vmGasRemaining=gasLimit'} 0
+  state' <- runCode env vmState{callDepth=callDepth', vmGasRemaining=gasLimit'} 0
 
   newStateRoot <- getStorageStateRoot
   --newAddressState <- getAddressState address

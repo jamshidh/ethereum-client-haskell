@@ -18,18 +18,23 @@ import Util
 data Operation = 
     STOP | ADD | MUL | SUB | DIV | SDIV | MOD | SMOD | ADDMOD | MULMOD | EXP | SIGNEXTEND | NEG | LT | GT | SLT | SGT | EQ | ISZERO | NOT | AND | OR | XOR | BYTE | SHA3 | 
     ADDRESS | BALANCE | ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | EXTCODESIZE | EXTCODECOPY |
-    PREVHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | POP | DUP | SWAP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | 
+    PREVHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | POP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | 
     JUMP | JUMPI | PC | MSIZE | GAS | JUMPDEST | 
     PUSH [Word8] | 
     DUP1 | DUP2 | DUP3 | DUP4 |
     DUP5 | DUP6 | DUP7 | DUP8 |
     DUP9 | DUP10 | DUP11 | DUP12 |
     DUP13 | DUP14 | DUP15 | DUP16 |
+    SWAP1 | SWAP2 | SWAP3 | SWAP4 |
+    SWAP5 | SWAP6 | SWAP7 | SWAP8 |
+    SWAP9 | SWAP10 | SWAP11 | SWAP12 |
+    SWAP13 | SWAP14 | SWAP15 | SWAP16 |
+    LOG0 | LOG1 | LOG2 | LOG3 | LOG4 |
     CREATE | CALL | RETURN | CALLCODE | SUICIDE |
     --Pseudo Opcodes
     LABEL String | PUSHLABEL String |
     PUSHDIFF String String | DATA B.ByteString |
-    MalformedOpcode deriving (Show, Eq, Ord)
+    MalformedOpcode Word8 deriving (Show, Eq, Ord)
 
 instance Pretty Operation where
   pretty x@JUMPDEST = text $ "------" ++ show x
@@ -124,6 +129,29 @@ opDatas =
     OPData 0x8e DUP15 undefined undefined undefined,
     OPData 0x8f DUP16 undefined undefined undefined,
 
+    OPData 0x90 SWAP1 undefined undefined undefined,
+    OPData 0x91 SWAP2 undefined undefined undefined,
+    OPData 0x92 SWAP3 undefined undefined undefined,
+    OPData 0x93 SWAP4 undefined undefined undefined,
+    OPData 0x94 SWAP5 undefined undefined undefined,
+    OPData 0x95 SWAP6 undefined undefined undefined,
+    OPData 0x96 SWAP7 undefined undefined undefined,
+    OPData 0x97 SWAP8 undefined undefined undefined,
+    OPData 0x98 SWAP9 undefined undefined undefined,
+    OPData 0x99 SWAP10 undefined undefined undefined,
+    OPData 0x9a SWAP11 undefined undefined undefined,
+    OPData 0x9b SWAP12 undefined undefined undefined,
+    OPData 0x9c SWAP13 undefined undefined undefined,
+    OPData 0x9d SWAP14 undefined undefined undefined,
+    OPData 0x9e SWAP15 undefined undefined undefined,
+    OPData 0x9f SWAP16 undefined undefined undefined,
+
+    OPData 0xa0 LOG0 undefined undefined undefined,
+    OPData 0xa1 LOG1 undefined undefined undefined,
+    OPData 0xa2 LOG2 undefined undefined undefined,
+    OPData 0xa3 LOG3 undefined undefined undefined,
+    OPData 0xa4 LOG4 undefined undefined undefined,
+
     OPData 0xf0 CREATE 3 1 "Create a new account with associated code.",
     OPData 0xf1 CALL 7 1 "Message-call into an account.",
     OPData 0xf2 CALLCODE undefined undefined "message-call with another account's code only",
@@ -161,7 +189,7 @@ opCode2Op rom =
   then (PUSH $ B.unpack $ B.take (fromIntegral $ opcode-0x5F) $ B.tail rom, fromIntegral $ opcode - 0x5E)
   else
 --    let op = fromMaybe (error $ "code is missing in code2OpMap: 0x" ++ showHex (B.head rom) "")
-    let op = fromMaybe MalformedOpcode
+    let op = fromMaybe (MalformedOpcode opcode)
              $ M.lookup opcode code2OpMap in
     (op, 1)
 

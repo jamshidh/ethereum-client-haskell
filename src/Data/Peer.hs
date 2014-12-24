@@ -41,4 +41,4 @@ instance RLPSerializable Peer where
       }
   rlpDecode x = error ("rlp2Peer called on non block object: " ++ show x)
 
-  rlpEncode = undefined
+  rlpEncode = error "rlpEncode undefined for Peer"

@@ -46,6 +46,7 @@ data VMState =
     pc::Int,
     memory::Memory,
     stack::[Word256],
+    callDepth::Int,
     
     markedForSuicide::Bool,
     done::Bool,
@@ -65,14 +66,18 @@ instance Format VMState where
 startingState::IO VMState
 startingState = do
   m <- newMemory
-  return VMState {
-    pc = 0,
-    done=False,
-    returnVal=Nothing,
-    vmException=Nothing,
-    vmGasRemaining=0,
-    stack=[],
-    memory=m, markedForSuicide=False }
+  return VMState 
+             {
+               pc = 0,
+               done=False,
+               returnVal=Nothing,
+               vmException=Nothing,
+               vmGasRemaining=0,
+               stack=[],
+               memory=m, 
+               callDepth=0,
+               markedForSuicide=False 
+             }
 
 {-
 getReturnValue::VMState->IO B.ByteString

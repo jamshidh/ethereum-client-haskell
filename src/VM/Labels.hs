@@ -63,7 +63,7 @@ getLabel::Labels->String->Word256
 getLabel labels label = fromMaybe (error $ "Missing label: " ++ show label) $ M.lookup label labels
 
 getNextLabels::(Labels->[Operation])->Labels
-getNextLabels = undefined
+getNextLabels = error "getNextLabels undefined"
 
 substituteLabels::Labels->[Operation]->[Operation]
 substituteLabels labels ops = substituteLabel labels =<< ops

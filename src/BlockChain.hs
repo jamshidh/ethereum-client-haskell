@@ -124,14 +124,14 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
   liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty $ tInit ut)))
 
   (vmState, newStorageStateRoot) <- 
-    runCodeFromStart tAddr availableGas
+    runCodeFromStart tAddr 0 availableGas
           Environment{
             envGasPrice=gasPrice ut,
             envBlock=b,
-            envOwner = undefined,
+            envOwner = newAddress,
             envOrigin = tAddr,
             envInputData = B.empty, --error "envInputData is being used in init",
-            envSender = newAddress,
+            envSender = tAddr,
             envValue = value ut,
             envCode = tInit ut
             }
@@ -152,7 +152,8 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
                      balance=0,
                      contractRoot=emptyTriePtr,
                      codeHash=hash B.empty
-                     }
+                   }
+
           addToBalance tAddr (-value ut) --zombie account, money lost forever
         Nothing -> do
           let result = fromMaybe B.empty $ returnVal vmState
@@ -168,7 +169,8 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
                      balance=0,
                      contractRoot=newStorageStateRoot,
                      codeHash=hash result
-                     }
+                   }
+
           liftIO $ putStrLn $ "paying: " ++ show (value ut)
           pay tAddr newAddress (value ut)
 
@@ -192,14 +194,14 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
   pay (whoSignedThisTransaction t) (to ut) (value ut)
 
   (vmState, newStorageStateRoot) <- 
-          runCodeFromStart (to ut) availableGas
+          runCodeFromStart (to ut) 0 availableGas
                  Environment{
                            envGasPrice=gasPrice ut,
                            envBlock=b,
-                           envOwner = undefined,
+                           envOwner = to ut,
                            envOrigin = tAddr,
                            envInputData = tData ut,
-                           envSender = error "envSender is not set",
+                           envSender = tAddr,
                            envValue = value ut,
                            envCode = Code contractCode
                          }
