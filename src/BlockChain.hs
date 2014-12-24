@@ -123,6 +123,8 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
 
   liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty $ tInit ut)))
 
+  pay tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
+
   (vmState, newStorageStateRoot) <- 
     runCodeFromStart tAddr 0 availableGas
           Environment{
@@ -139,7 +141,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
   liftIO $ putStrLn "VM has finished running"
 
   liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
-  let usedGas = availableGas - vmGasRemaining vmState - refund vmState
+  let usedGas =  - vmGasRemaining vmState - refund vmState
   liftIO $ putStrLn $ "gasUsed: " ++ show usedGas
   pay tAddr (coinbase $ blockData b) (usedGas * gasPrice ut)
 
@@ -191,6 +193,8 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
 
   liftIO $ putStrLn $ "availableGas: " ++ show availableGas
 
+  pay tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
+
   pay (whoSignedThisTransaction t) (to ut) (value ut)
 
   (vmState, newStorageStateRoot) <- 
@@ -209,7 +213,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
   liftIO $ putStrLn $ "newStorageStateRoot: " ++ show (pretty newStorageStateRoot)
 
   liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
-  let usedGas = availableGas - vmGasRemaining vmState - refund vmState
+  let usedGas = - vmGasRemaining vmState - refund vmState
   liftIO $ putStrLn $ "gasUsed: " ++ show usedGas
   pay tAddr (coinbase $ blockData b) (usedGas * gasPrice ut)
 
@@ -267,6 +271,8 @@ addTransactions b (t:rest) = do
   valid <- isTransactionValid t
   liftIO $ putStrLn $ "Coinbase: " ++ show (pretty $ coinbase $ blockData b)
   liftIO $ putStrLn $ "Transaction signed by: " ++ show (pretty $ whoSignedThisTransaction t)
+  addressState <- getAddressState $ whoSignedThisTransaction t
+  liftIO $ putStrLn $ "User balance: " ++ show (balance $ addressState)
   liftIO $ putStrLn $ "Transaction is valid: " ++ show valid
   when valid $ addTransaction b t
   addTransactions b rest
