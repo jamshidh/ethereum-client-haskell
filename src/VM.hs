@@ -356,7 +356,6 @@ opGasPrice _ SUICIDE = return (0, 0)
 
 
 opGasPrice _ BALANCE = return (20, 0)
-opGasPrice _ SHA3 = return (30, 0)
 opGasPrice _ SLOAD = return (20, 0)
 opGasPrice _ CALL = return (20, 0)
 
@@ -367,6 +366,8 @@ opGasPrice _ LOG3 = return (128, 0)
 opGasPrice _ LOG4 = return (128, 0)
 
 opGasPrice _  CREATE = return (100, 0)
+
+opGasPrice VMState{stack=_:size:_} SHA3 = return (10+10*ceiling(fromIntegral size/32), 0)
 
 opGasPrice VMState{stack=_:exp:_} EXP = return (1 + ceiling (log (fromIntegral exp) / log 256), 0)
 
@@ -439,7 +440,7 @@ runCode env state c = do
   state' <- decreaseGasForOp op state
   result <- runOperation op env state'
   memAfter <- liftIO $ getSize $ memory result
-  liftIO $ putStrLn $ "EVM [ 19:22:56 | eth | " ++ show (callDepth state) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc state)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining state) ++ " | " ++ show (vmGasRemaining result - vmGasRemaining state) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
+  liftIO $ putStrLn $ "EVM [ 19:23:05 | eth | " ++ show (callDepth state) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc state)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining state) ++ " | " ++ show (vmGasRemaining result - vmGasRemaining state) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
   memString <- liftIO $ getShow (memory result)
   liftIO $ putStrLn $ " > memory: " ++ memString
   liftIO $ putStrLn "STACK"
