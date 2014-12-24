@@ -139,7 +139,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
   liftIO $ putStrLn "VM has finished running"
 
   liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
-  let usedGas = availableGas - vmGasRemaining vmState
+  let usedGas = availableGas - vmGasRemaining vmState - refund vmState
   liftIO $ putStrLn $ "gasUsed: " ++ show usedGas
   pay tAddr (coinbase $ blockData b) (usedGas * gasPrice ut)
 
@@ -209,7 +209,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
   liftIO $ putStrLn $ "newStorageStateRoot: " ++ show (pretty newStorageStateRoot)
 
   liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
-  let usedGas = availableGas - vmGasRemaining vmState
+  let usedGas = availableGas - vmGasRemaining vmState - refund vmState
   liftIO $ putStrLn $ "gasUsed: " ++ show usedGas
   pay tAddr (coinbase $ blockData b) (usedGas * gasPrice ut)
 

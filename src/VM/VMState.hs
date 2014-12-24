@@ -47,6 +47,7 @@ data VMState =
     memory::Memory,
     stack::[Word256],
     callDepth::Int,
+    refund::Integer,
     
     markedForSuicide::Bool,
     done::Bool,
@@ -76,6 +77,7 @@ startingState = do
                stack=[],
                memory=m, 
                callDepth=0,
+               refund=0,
                markedForSuicide=False 
              }
 

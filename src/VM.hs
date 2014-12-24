@@ -358,28 +358,28 @@ runOperation x _ _ = error $ "Missing case in runOperation: " ++ show x
 movePC::VMState->Int->VMState
 movePC state l = state{ pc=pc state + l }
 
-opGasPrice::VMState->Operation->ContextM Integer
-opGasPrice _ STOP = return 0
-opGasPrice _ SUICIDE = return 0
+opGasPrice::VMState->Operation->ContextM (Integer, Integer)
+opGasPrice _ STOP = return (0, 0)
+opGasPrice _ SUICIDE = return (0, 0)
 
 
-opGasPrice _ BALANCE = return 20
-opGasPrice _ SHA3 = return 30
-opGasPrice _ SLOAD = return 20
-opGasPrice _ CALL = return 20
+opGasPrice _ BALANCE = return (20, 0)
+opGasPrice _ SHA3 = return (30, 0)
+opGasPrice _ SLOAD = return (20, 0)
+opGasPrice _ CALL = return (20, 0)
 
-opGasPrice _ LOG0 = return 96
-opGasPrice _ LOG1 = return 96
-opGasPrice _ LOG2 = return 96
-opGasPrice _ LOG3 = return 128
-opGasPrice _ LOG4 = return 128
+opGasPrice _ LOG0 = return (96, 0)
+opGasPrice _ LOG1 = return (96, 0)
+opGasPrice _ LOG2 = return (96, 0)
+opGasPrice _ LOG3 = return (128, 0)
+opGasPrice _ LOG4 = return (128, 0)
 
-opGasPrice _  CREATE = return 100
+opGasPrice _  CREATE = return (100, 0)
 
-opGasPrice VMState{stack=_:exp:_} EXP = return $ 1 + ceiling (log (fromIntegral exp) / log 256)
+opGasPrice VMState{stack=_:exp:_} EXP = return (1 + ceiling (log (fromIntegral exp) / log 256), 0)
 
-opGasPrice VMState{stack=_:_:size:_} CODECOPY = return $ 1 + ceiling (fromIntegral size / (32::Double))
-opGasPrice VMState{stack=_:_:size:_} CALLDATACOPY = return $ 1 + ceiling (fromIntegral size / (32::Double))
+opGasPrice VMState{stack=_:_:size:_} CODECOPY = return (1 + ceiling (fromIntegral size / (32::Double)), 0)
+opGasPrice VMState{stack=_:_:size:_} CALLDATACOPY = return (1 + ceiling (fromIntegral size / (32::Double)), 0)
 opGasPrice VMState{ stack=p:val:_ } SSTORE = do
   oldVals <- getStorageKeyVals (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
   let oldVal =
@@ -389,10 +389,11 @@ opGasPrice VMState{ stack=p:val:_ } SSTORE = do
             _ -> error "multiple values in storage"
   return $
     case (oldVal, val) of
-      (0, x) | x /= 0 -> 300
-      (x, 0) | x /= 0 -> 0
-      _ -> 100
-opGasPrice _ _ = return 1
+      (0, 0) -> (0, 0)
+      (0, x) | x /= 0 -> (300, 0)
+      (x, 0) | x /= 0 -> (0, 100)
+      _ -> (100, 0)
+opGasPrice _ _ = return (1, 0)
 
 --missing stuff
 --Glog 1 Partial payment for a LOG operation.
@@ -415,8 +416,11 @@ decreaseGas val state = do
 
 decreaseGasForOp::Operation->VMState->ContextM VMState
 decreaseGasForOp op state = do
-  val <- opGasPrice state op
-  return $ decreaseGas val state
+  (val, refund) <- opGasPrice state op
+  return $ addToRefund refund $ decreaseGas val state
+      where
+        addToRefund::Integer->VMState->VMState
+        addToRefund val state' = state'{refund=refund state' + val}
 
 nibbleString2ByteString::N.NibbleString->B.ByteString
 nibbleString2ByteString (N.EvenNibbleString s) = s
