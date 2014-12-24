@@ -154,7 +154,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
                      codeHash=hash B.empty
                    }
 
-          addToBalance tAddr (-value ut) --zombie account, money lost forever
+          pay tAddr newAddress (value ut)
         Nothing -> do
           let result = fromMaybe B.empty $ returnVal vmState
           liftIO $ putStrLn $ "Result: " ++ show result
