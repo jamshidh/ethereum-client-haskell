@@ -39,9 +39,10 @@ executable ethereumH
     buildable: True
     hs-source-dirs: src
 
-executable stateDBClient
+executable queryEth
     build-depends: 
                    base -any
+                 , cmdargs
                  , cryptohash
                  , binary
                  , bytestring
@@ -58,6 +59,7 @@ executable stateDBClient
                  , array
                  , directory
     main-is: Main.hs
+    C-sources: fastNonceFinder/nonceFinder.c
     buildable: True
     hs-source-dirs: stateDBClient_src, src
 
