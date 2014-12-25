@@ -13,18 +13,15 @@ module VM.Memory (
   ) where
 
 import Control.Monad
-import Control.Monad.IO.Class
 import qualified Data.Vector.Unboxed.Mutable as V
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import Data.Functor
 import Data.IORef
 import Data.Word
-import Numeric
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+--import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import ExtWord
-import Format
 import Util
 import VM.VMState
 
@@ -48,7 +45,7 @@ setNewMaxSize state newSize = do
 
   let gasCharge =
         if newSize > oldSize
-        then fromInteger $ (ceiling $ fromIntegral newSize/32) - (ceiling $ fromIntegral oldSize/32)
+        then fromInteger $ (ceiling $ fromIntegral newSize/(32::Double)) - (ceiling $ fromIntegral oldSize/(32::Double))
         else 0
 
   let oldLength = fromIntegral $ V.length (mVector $ memory state)
@@ -56,7 +53,7 @@ setNewMaxSize state newSize = do
     if newSize > oldLength
       then do
         arr' <- V.grow (mVector $ memory state) $ fromIntegral $ 2*newSize
-        forM [oldLength-1..2*oldLength-1] $ \p -> V.write arr' (fromIntegral p) 0
+        forM_ [oldLength-1..2*oldLength-1] $ \p -> V.write arr' (fromIntegral p) 0
         return $ state{memory=(memory state){mVector = arr'}}
       else return state
 
@@ -65,7 +62,8 @@ setNewMaxSize state newSize = do
 getShow::Memory->IO String
 getShow (Memory arr sizeRef) = do
   msize <- readIORef sizeRef
-  fmap (show . B16.encode . B.pack) $ sequence $ V.read arr <$> fromIntegral <$> [0..fromIntegral msize-1] 
+  --fmap (show . B16.encode . B.pack) $ sequence $ V.read arr <$> fromIntegral <$> [0..fromIntegral msize-1] 
+  fmap (show . B16.encode . B.pack) $ sequence $ V.read arr <$> [0..fromIntegral msize-1] 
 
 
 mLoad::VMState->Word256->IO [Word8]

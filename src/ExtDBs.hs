@@ -32,7 +32,6 @@ import Data.RLP
 import qualified Database.MerklePatricia as MP
 
 import Context
-import Format
 
 --import Debug.Trace
 

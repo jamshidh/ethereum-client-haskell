@@ -19,14 +19,14 @@ import Control.Monad.Trans.Resource
 import qualified Data.ByteString as B
 import System.Directory
 import System.FilePath
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
+--import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
 
 import Constants
 import Database.MerklePatricia
 import Data.Peer
 import SHA
 
-import Debug.Trace
+--import Debug.Trace
 
 type BlockDB = DB.DB
 type CodeDB = DB.DB

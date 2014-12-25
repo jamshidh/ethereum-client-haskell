@@ -8,7 +8,6 @@ import qualified Data.ByteString as B
 import Data.Functor
 import qualified Data.Map as M
 import Data.Maybe
-import Numeric
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Util

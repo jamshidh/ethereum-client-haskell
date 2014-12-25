@@ -6,7 +6,6 @@ module VM (
 
 import Prelude hiding (LT, GT, EQ)
 
-import Control.Monad
 import Control.Monad.IO.Class
 import Data.Bits
 import qualified Data.ByteString as B
@@ -17,7 +16,7 @@ import Data.Maybe
 import Data.Time.Clock.POSIX
 import Network.Haskoin.Crypto (Word256)
 import Numeric
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+--import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Context
 import qualified Colors as CL
@@ -29,7 +28,6 @@ import Data.RLP
 import DB.CodeDB
 import DB.ModifyStateDB
 import ExtDBs
-import Format
 import SHA
 import Util
 import VM.Code
@@ -38,7 +36,7 @@ import VM.Memory
 import VM.Opcodes
 import VM.VMState
 
-import Debug.Trace
+--import Debug.Trace
 
 bool2Word256::Bool->Word256
 bool2Word256 True = 1
@@ -146,11 +144,11 @@ runOperation GASLIMIT Environment{envBlock=Block{blockData=bd}} state = return s
 runOperation POP _ state@VMState{stack=_:rest} = return state{stack=rest}
 runOperation POP env state = liftIO $ addErr "Stack did not contain any items" (envCode env) state
 
-runOperation LOG0 env state@VMState{stack=_:_:rest} = return state{stack=rest}
-runOperation LOG1 env state@VMState{stack=_:_:_:rest} = return state{stack=rest}
-runOperation LOG2 env state@VMState{stack=_:_:_:_:rest} = return state{stack=rest}
-runOperation LOG3 env state@VMState{stack=_:_:_:_:_:rest} = return state{stack=rest}
-runOperation LOG4 env state@VMState{stack=_:_:_:_:_:_:rest} = return state{stack=rest}
+runOperation LOG0 _ state@VMState{stack=_:_:rest} = return state{stack=rest}
+runOperation LOG1 _ state@VMState{stack=_:_:_:rest} = return state{stack=rest}
+runOperation LOG2 _ state@VMState{stack=_:_:_:_:rest} = return state{stack=rest}
+runOperation LOG3 _ state@VMState{stack=_:_:_:_:_:rest} = return state{stack=rest}
+runOperation LOG4 _ state@VMState{stack=_:_:_:_:_:_:rest} = return state{stack=rest}
 
 runOperation MLOAD _ state@VMState{stack=(p:rest)} = do
   bytes <- liftIO $ mLoad state p
@@ -272,7 +270,7 @@ runOperation CREATE env state@VMState{stack=value:input:size:rest} = do
 
     return state'
 
-runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffset:outSize:rest)} = do
+runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffset:_:rest)} = do
 
   inputData <- liftIO $ mLoadByteString state inOffset inSize
 
@@ -282,7 +280,7 @@ runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffse
     Just bytes -> liftIO $ mStoreByteString state' outOffset bytes
     _ -> return state'
 
-runOperation CALLCODE env state@VMState{stack=gas:to:value:inOffset:inSize:outOffset:outSize:rest} = do
+runOperation CALLCODE env state@VMState{stack=gas:to:value:inOffset:inSize:outOffset:_:rest} = do
 
   inputData <- liftIO $ mLoadByteString state inOffset inSize
   let address = Address $ fromIntegral to
@@ -313,8 +311,8 @@ runOperation CALLCODE env state@VMState{stack=gas:to:value:inOffset:inSize:outOf
 
   let success = 1
 
-  addressState <- getAddressState address
-  putAddressState address addressState{contractRoot=newStorageStateRoot}
+  addressState' <- getAddressState address
+  putAddressState address addressState'{contractRoot=newStorageStateRoot}
 
   pay (envOwner env) address (fromIntegral value)
 
@@ -371,7 +369,7 @@ opGasPrice _ LOG4 = return (128, 0)
 
 opGasPrice _  CREATE = return (100, 0)
 
-opGasPrice VMState{stack=_:size:_} SHA3 = return (10+10*ceiling(fromIntegral size/32), 0)
+opGasPrice VMState{stack=_:size:_} SHA3 = return (10+10*ceiling(fromIntegral size/(32::Double)), 0)
 
 opGasPrice VMState{stack=_:e:_} EXP = return (1 + ceiling (log (fromIntegral e) / log (256::Double)), 0)
 

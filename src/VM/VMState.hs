@@ -37,7 +37,7 @@ newMemory::IO Memory
 newMemory = do
   arr <- V.new 100
   size <- newIORef 0
-  forM [0..99] $ \p -> V.write arr (fromIntegral p) 0
+  forM_ [0..99] $ \p -> V.write arr p 0
   return $ Memory arr size
 
 data VMState =
