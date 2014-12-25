@@ -262,9 +262,12 @@ runOperation CREATE env state@VMState{stack=value:input:size:rest} = do
 
     (state', retValue) <- nestedRun env state{stack=rest} (fromIntegral $ vmGasRemaining state) newAddress value B.empty
 
-    addCode retValue
-    addressState' <- getAddressState newAddress
-    putAddressState newAddress addressState'{codeHash=hash retValue}
+    case retValue of
+      Just bytes -> do
+                    addCode bytes
+                    addressState' <- getAddressState newAddress
+                    putAddressState newAddress addressState'{codeHash=hash bytes}
+      _ -> return ()
 
     return state'
 
@@ -274,9 +277,9 @@ runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffse
 
   (state', retValue) <- nestedRun env state{stack=rest} gas (Address $ fromIntegral to) value inputData
 
-  liftIO $ mStoreByteString state' outOffset retValue
-
-  return state'
+  case retValue of
+    Just bytes -> liftIO $ mStoreByteString state' outOffset bytes
+    _ -> return state'
 
 runOperation CALLCODE env state@VMState{stack=gas:to:value:inOffset:inSize:outOffset:outSize:rest} = do
 
@@ -472,45 +475,53 @@ runCodeFromStart address callDepth' gasLimit' env = do
   return (state', newStateRoot)
 
 
-nestedRun::Environment->VMState->Word256->Address->Word256->B.ByteString->ContextM (VMState, B.ByteString)
+nestedRun::Environment->VMState->Word256->Address->Word256->B.ByteString->ContextM (VMState, Maybe B.ByteString)
 nestedRun env state gas address value inputData = do
 
-  addressState <- getAddressState address
-  code <-
-      fromMaybe B.empty <$>
-                getCode (codeHash addressState)
+  balance <- fmap balance $ getAddressState $ envOwner env
+
+  if balance < fromIntegral value
+    then return (state{stack=0:stack state}, Nothing)
+    else do
+
+      pay (envOwner env) address (fromIntegral value)
+
+      addressState <- getAddressState address
+      code <-
+          fromMaybe B.empty <$>
+                    getCode (codeHash addressState)
 
 
-  (nestedState, newStorageStateRoot) <-
-    runCodeFromStart address (callDepth state + 1)
-     (fromIntegral gas)
-     Environment {
-       envOwner = address,
-       envOrigin = envOrigin env,
-       envGasPrice = envGasPrice env,
-       envInputData = inputData,
-       envSender = envOwner env,
-       envValue = fromIntegral value,
-       envCode = Code code,
-       envBlock = envBlock env
-       }
+      (nestedState, newStorageStateRoot) <-
+          runCodeFromStart address (callDepth state + 1)
+                               (fromIntegral gas)
+                               Environment {
+                                 envOwner = address,
+                                 envOrigin = envOrigin env,
+                                 envGasPrice = envGasPrice env,
+                                 envInputData = inputData,
+                                 envSender = envOwner env,
+                                 envValue = fromIntegral value,
+                                 envCode = Code code,
+                                 envBlock = envBlock env
+                               }
 
-  let retVal = fromMaybe B.empty $ returnVal nestedState
+      let retVal = fromMaybe B.empty $ returnVal nestedState
 
-  {-state' <- 
-      if storeRetVal 
-      then do
+      {-state' <- 
+        if storeRetVal 
+        then do
         liftIO $ mStoreByteString state outOffset retVal
-      else return state-}
+        else return state-}
 
-  let usedGas = fromIntegral gas - vmGasRemaining nestedState
+      let usedGas = fromIntegral gas - vmGasRemaining nestedState
+                                 
+      let success = 
+              case vmException nestedState of
+                Nothing -> 1
+                _ -> 0
 
+      addressState <- getAddressState address
+      putAddressState address addressState{contractRoot=newStorageStateRoot}
 
-  let success = 1
-
-  addressState <- getAddressState address
-  putAddressState address addressState{contractRoot=newStorageStateRoot}
-
-  pay (envOwner env) address (fromIntegral value)
-
-  return (state{stack=success:stack state, vmGasRemaining = vmGasRemaining state - usedGas}, retVal)
+      return (state{stack=success:stack state, vmGasRemaining = vmGasRemaining state - usedGas}, Just retVal)
