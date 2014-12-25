@@ -385,7 +385,6 @@ opGasPrice VMState{ stack=p:val:_ } SSTORE = do
             _ -> error "multiple values in storage"
   return $
     case (oldVal, val) of
-      (0, 0) -> (0, 0)
       (0, x) | x /= 0 -> (300, 0)
       (x, 0) | x /= 0 -> (0, 100)
       _ -> (100, 0)
