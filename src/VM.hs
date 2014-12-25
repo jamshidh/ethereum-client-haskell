@@ -66,6 +66,7 @@ swapn::Int->VMState->ContextM VMState
 swapn n state@VMState{stack=v1:rest1} | length rest1 > n = return state{stack=v2:(middle++(v1:rest2))}
     where
       (middle, v2:rest2) = splitAt (n-1) rest1
+swapn _ _ = error "swapn called with not enough elements in the stack"
 
 
 runOperation::Operation->Environment->VMState->ContextM VMState
@@ -372,7 +373,7 @@ opGasPrice _  CREATE = return (100, 0)
 
 opGasPrice VMState{stack=_:size:_} SHA3 = return (10+10*ceiling(fromIntegral size/32), 0)
 
-opGasPrice VMState{stack=_:exp:_} EXP = return (1 + ceiling (log (fromIntegral exp) / log 256), 0)
+opGasPrice VMState{stack=_:e:_} EXP = return (1 + ceiling (log (fromIntegral e) / log (256::Double)), 0)
 
 opGasPrice VMState{stack=_:_:size:_} CODECOPY = return (1 + ceiling (fromIntegral size / (32::Double)), 0)
 opGasPrice VMState{stack=_:_:size:_} CALLDATACOPY = return (1 + ceiling (fromIntegral size / (32::Double)), 0)
@@ -411,8 +412,8 @@ decreaseGas val state = do
 
 decreaseGasForOp::Operation->VMState->ContextM VMState
 decreaseGasForOp op state = do
-  (val, refund) <- opGasPrice state op
-  return $ addToRefund refund $ decreaseGas val state
+  (val, theRefund) <- opGasPrice state op
+  return $ addToRefund theRefund $ decreaseGas val state
       where
         addToRefund::Integer->VMState->VMState
         addToRefund val state' = state'{refund=refund state' + val}
@@ -477,9 +478,9 @@ runCodeFromStart address callDepth' gasLimit' env = do
 nestedRun::Environment->VMState->Word256->Address->Word256->B.ByteString->ContextM (VMState, Maybe B.ByteString)
 nestedRun env state gas address value inputData = do
 
-  balance <- fmap balance $ getAddressState $ envOwner env
+  theBalance <- fmap balance $ getAddressState $ envOwner env
 
-  if balance < fromIntegral value
+  if theBalance < fromIntegral value
     then return (state{stack=0:stack state}, Nothing)
     else do
 
@@ -520,7 +521,7 @@ nestedRun env state gas address value inputData = do
                 Nothing -> 1
                 _ -> 0
 
-      addressState <- getAddressState address
-      putAddressState address addressState{contractRoot=newStorageStateRoot}
+      addressState' <- getAddressState address
+      putAddressState address addressState'{contractRoot=newStorageStateRoot}
 
       return (state{stack=success:stack state, vmGasRemaining = vmGasRemaining state - usedGas}, Just retVal)

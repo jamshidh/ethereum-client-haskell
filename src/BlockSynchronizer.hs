@@ -20,7 +20,6 @@ import BlockChain
 import Communication
 import Context
 import ExtDBs
-import Format
 import SHA
 import Data.Wire
 
