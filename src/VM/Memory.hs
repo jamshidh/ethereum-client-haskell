@@ -1,7 +1,8 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
 module VM.Memory (
   Memory(..),
-  getSize,
+  getSizeInBytes,
+  getSizeInWords,
   getShow,
   mLoad,
   mLoad8,
@@ -27,8 +28,11 @@ import Format
 import Util
 import VM.VMState
 
-getSize::Memory->IO Word256
-getSize (Memory _ size) = (ceiling . (/ (32::Double)) . fromIntegral) <$> readIORef size
+getSizeInWords::Memory->IO Word256
+getSizeInWords (Memory _ size) = (ceiling . (/ (32::Double)) . fromIntegral) <$> readIORef size
+
+getSizeInBytes::Memory->IO Word256
+getSizeInBytes (Memory _ size) = (1+) <$> readIORef size
 
 --In this function I use the words "size" and "length" to mean 2 different things....
 --"size" is the highest memory location used (as described in the yellowpaper).

@@ -191,7 +191,7 @@ runOperation PC _ state =
   return state{stack=fromIntegral (pc state):stack state}
 
 runOperation MSIZE _ state@VMState{memory=m} = do
-  memSize <- liftIO $ getSize m
+  memSize <- liftIO $ getSizeInBytes m
   return state{stack=memSize:stack state}
 
 runOperation GAS _ state =
@@ -437,12 +437,12 @@ formatAddressWithoutColor (Address x) = padZeros 40 $ showHex x ""
 
 runCode::Environment->VMState->Int->ContextM VMState
 runCode env state c = do
-  memBefore <- liftIO $ getSize $ memory state
+  memBefore <- liftIO $ getSizeInWords $ memory state
   let (op, len) = getOperationAt (envCode env) (pc state)
   --liftIO $ putStrLn $ "EVM [ 19:22" ++ show op ++ " #" ++ show c ++ " (" ++ show (vmGasRemaining state) ++ ")"
   state' <- decreaseGasForOp op state
   result <- runOperation op env state'
-  memAfter <- liftIO $ getSize $ memory result
+  memAfter <- liftIO $ getSizeInWords $ memory result
   liftIO $ putStrLn $ "EVM [ eth | " ++ show (callDepth state) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc state)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining state) ++ " | " ++ show (vmGasRemaining result - vmGasRemaining state) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
   --liftIO $ putStrLn $ "EVM [ 19:23:05 | eth | " ++ show (callDepth state) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc state)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining state) ++ " | " ++ show (vmGasRemaining result - vmGasRemaining state) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
   memString <- liftIO $ getShow (memory result)
