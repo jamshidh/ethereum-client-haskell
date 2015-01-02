@@ -1,12 +1,24 @@
-name: ethereum
+name: ethereum-client-haskell
 version: 0.0.1
-cabal-version: >=1.2
+cabal-version: >=1.10
 build-type: Simple
-license: AllRightsReserved
+author: Jamshid
+license-file:  LICENSE
+maintainer:    jamshidnh@gmail.com
+synopsis: A Haskell version of an Ethereum client
+category:      Data Structures
+license: BSD3
 description:  
-extra-source-files: ""
- 
+    The client described in the Ethereum Yellowpaper
+
+source-repository this
+  type:     git
+  location: https://github.com/jamshidh/ethereum-client-haskell
+  branch:   master
+  tag:      v0.0.1
+
 executable ethereumH
+    default-language: Haskell98
     build-depends: 
                    base -any
                  , base16-bytestring
@@ -23,12 +35,12 @@ executable ethereumH
                  , filepath
                  , haskoin
                  , leveldb-haskell
---                 , mtl
---                 , network
---                 , network-simple
+                 , mtl
+                 , network
+                 , network-simple
                  , nibblestring
                  , resourcet
---                 , time
+                 , time
                  , transformers
                  , vector
                  , ansi-wl-pprint
@@ -39,14 +51,21 @@ executable ethereumH
     hs-source-dirs: src
 
 executable queryEth
+    default-language: Haskell98
     build-depends: 
                    base -any
+                 , ansi-wl-pprint
                  , cmdargs
                  , cryptohash
                  , binary
                  , bytestring
+                 , containers
+                 , ethereum-rlp
+                 , ethereum-merkle-patricia-db
+                 , filepath
                  , time
                  , network-simple
+                 , nibblestring
                  , haskoin
                  , base16-bytestring
                  , mtl
@@ -63,6 +82,7 @@ executable queryEth
     hs-source-dirs: queryEth_src, src
 
 Test-Suite test-ethereumH
+    default-language: Haskell98
   type:               exitcode-stdio-1.0
   main-is:            Main.hs
   hs-source-dirs:     test, src
