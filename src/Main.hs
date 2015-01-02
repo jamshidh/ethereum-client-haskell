@@ -218,7 +218,12 @@ doit socket = do
 main::IO ()    
 main = do
 
-  [ipNum] <- getArgs
+  args <- getArgs
+
+  let ipNum =
+          case args of
+            (arg:_) -> arg
+            [] -> "119" --Just default to the one I know works right now....  Yup, this is kind of dumb.
 
   let (ipAddress, port') = ipAddresses !! read ipNum
 
