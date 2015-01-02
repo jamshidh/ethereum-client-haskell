@@ -15,7 +15,6 @@ import Data.Time.Clock
 import Data.Word
 import Network.Haskoin.Crypto hiding (Address)
 import Network.Socket (socketToHandle)
-import PeerUrls
 --import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import System.Entropy
 import System.Environment
@@ -23,25 +22,26 @@ import System.IO
 
 import Network.Simple.TCP
 
-import Data.RLP
+import Blockchain.Data.RLP
 
-import BlockChain
-import BlockSynchronizer
-import Communication
-import Constants
-import Context
-import Data.Address
+import Blockchain.BlockChain
+import Blockchain.BlockSynchronizer
+import Blockchain.Communication
+import Blockchain.Constants
+import Blockchain.Context
+import Blockchain.Data.Address
 --import Data.AddressState
-import Data.Block
+import Blockchain.Data.Block
 --import Data.SignedTransaction
 --import Data.Transaction
-import Data.Wire
-import Database.MerklePatricia
-import Display
-import DB.ModifyStateDB
+import Blockchain.Data.Wire
+import Blockchain.Database.MerklePatricia
+import Blockchain.Display
+import Blockchain.DB.ModifyStateDB
+import Blockchain.PeerUrls
 --import SampleTransactions
-import SHA
-import Util
+import Blockchain.SHA
+import Blockchain.Util
 
 --import Debug.Trace
 
