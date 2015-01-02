@@ -20,7 +20,7 @@ source-repository this
 executable ethereumH
     default-language: Haskell98
     build-depends: 
-                   base -any
+                   base >= 4 && < 5
                  , base16-bytestring
                  , binary
                  , bytestring
@@ -53,7 +53,7 @@ executable ethereumH
 executable queryEth
     default-language: Haskell98
     build-depends: 
-                   base -any
+                   base >= 4 && < 5
                  , ansi-wl-pprint
                  , cmdargs
                  , cryptohash
@@ -86,7 +86,7 @@ Test-Suite test-ethereumH
   type:               exitcode-stdio-1.0
   main-is:            Main.hs
   hs-source-dirs:     test, src
-  build-depends:      base
+  build-depends:      base >= 4 && < 5
                     , test-framework
                     , test-framework-hunit
                     , HUnit
