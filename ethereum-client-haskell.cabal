@@ -1,11 +1,15 @@
 name: ethereum-client-haskell
-version: 0.0.1
+version: 0.0.4
 cabal-version: >=1.10
 build-type: Simple
 author: Jamshid
 license-file:  LICENSE
 maintainer:    jamshidnh@gmail.com
 synopsis: A Haskell version of an Ethereum client
+extra-source-files:
+               fastNonceFinder/bitfn.h
+               fastNonceFinder/sha3.c
+               fastNonceFinder/sha3.h
 category:      Data Structures
 license: BSD3
 description:  
@@ -15,7 +19,7 @@ source-repository this
   type:     git
   location: https://github.com/jamshidh/ethereum-client-haskell
   branch:   master
-  tag:      v0.0.1
+  tag:      v0.0.4
 
 executable ethereumH
     default-language: Haskell98
@@ -45,6 +49,41 @@ executable ethereumH
                  , vector
                  , ansi-wl-pprint
     main-is: Main.hs
+    other-modules: 
+                   Blockchain.BlockChain
+                   Blockchain.BlockSynchronizer
+                   Blockchain.Colors
+                   Blockchain.Communication
+                   Blockchain.Constants
+                   Blockchain.Context
+                   Blockchain.Data.Address
+                   Blockchain.Data.AddressState
+                   Blockchain.Data.Block
+                   Blockchain.Data.GenesisBlock
+                   Blockchain.Data.Peer
+                   Blockchain.Data.SignedTransaction
+                   Blockchain.Data.Transaction
+                   Blockchain.Data.TransactionReceipt
+                   Blockchain.Data.Wire
+                   Blockchain.DB.CodeDB
+                   Blockchain.DB.ModifyStateDB
+                   Blockchain.Display
+                   Blockchain.ExtDBs
+                   Blockchain.ExtendedECDSA
+                   Blockchain.ExtWord
+                   Blockchain.Format
+                   Blockchain.JCommand
+                   Blockchain.PeerUrls
+                   Blockchain.SampleTransactions
+                   Blockchain.SHA
+                   Blockchain.Util
+                   Blockchain.VM.Code
+                   Blockchain.VM.Environment
+                   Blockchain.VM.Labels
+                   Blockchain.VM.Memory
+                   Blockchain.VM.Opcodes
+                   Blockchain.VM.VMState
+                   Blockchain.VM
     C-sources: fastNonceFinder/nonceFinder.c
     ghc-options: -Wall
     buildable: True
@@ -77,6 +116,16 @@ executable queryEth
                  , array
                  , directory
     main-is: Main.hs
+    other-modules:
+                   Block
+                   Code
+                   Decompile1
+                   Decompile2
+                   DumpLevelDB
+                   Init
+                   Raw
+                   RLP
+                   State
     C-sources: fastNonceFinder/nonceFinder.c
     buildable: True
     hs-source-dirs: queryEth_src, src
