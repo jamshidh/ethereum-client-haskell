@@ -4,7 +4,8 @@ module Blockchain.Constants where
 
 
 ethVersion::Integer
-ethVersion=49
+ethVersion=51
+--ethVersion=49
 --ethVersion=45
 --ethVersion=48
 shhVersion::Integer

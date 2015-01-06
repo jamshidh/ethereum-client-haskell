@@ -69,6 +69,7 @@ options = DB.defaultOptions {
 openDBs::String->ResourceT IO Context
 openDBs theType = do
   homeDir <- liftIO getHomeDirectory                     
+  liftIO $ createDirectoryIfMissing False $ homeDir </> dbDir theType
   bdb <- DB.open (homeDir </> dbDir theType ++ blockDBPath) options
   ddb <- DB.open (homeDir </> dbDir theType ++ detailsDBPath) options
   sdb <- DB.open (homeDir </> dbDir theType ++ stateDBPath) options

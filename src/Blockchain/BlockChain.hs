@@ -57,7 +57,7 @@ initializeBlockChain = do
 nextDifficulty::Integer->UTCTime->UTCTime->Integer
 nextDifficulty oldDifficulty oldTime newTime =
     if round (utcTimeToPOSIXSeconds newTime) >=
-           (round (utcTimeToPOSIXSeconds oldTime) + 5::Integer)
+           (round (utcTimeToPOSIXSeconds oldTime) + 8::Integer)
     then oldDifficulty - oldDifficulty `shiftR` 10
     else oldDifficulty + oldDifficulty `shiftR` 10
 
