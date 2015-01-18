@@ -171,6 +171,7 @@ op2OpCode (PUSH theList) | length theList <= 32 && not (null theList) =
 op2OpCode (PUSH []) = error "PUSH needs at least one word"
 op2OpCode (PUSH x) = error $ "PUSH can only take up to 32 words: " ++ show x
 op2OpCode (DATA bytes) = B.unpack bytes
+op2OpCode (MalformedOpcode byte) = [byte]
 op2OpCode op =
   case M.lookup op op2CodeMap of
     Just x -> [x]
