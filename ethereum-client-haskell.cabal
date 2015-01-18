@@ -89,6 +89,73 @@ executable ethereumH
     buildable: True
     hs-source-dirs: src
 
+library
+    default-language: Haskell98
+    build-depends: 
+                   base >= 4 && < 5
+                 , base16-bytestring
+                 , binary
+                 , bytestring
+                 , containers
+                 , cryptohash
+                 , data-default
+                 , directory
+                 , either
+                 , entropy
+                 , ethereum-merkle-patricia-db
+                 , ethereum-rlp
+                 , filepath
+                 , haskoin
+                 , leveldb-haskell
+                 , mtl
+                 , network
+                 , network-simple
+                 , nibblestring
+                 , resourcet
+                 , time
+                 , transformers
+                 , vector
+                 , ansi-wl-pprint
+    exposed-modules: 
+                   Blockchain.BlockChain
+                   Blockchain.BlockSynchronizer
+                   Blockchain.Colors
+                   Blockchain.Communication
+                   Blockchain.Constants
+                   Blockchain.Context
+                   Blockchain.Data.Address
+                   Blockchain.Data.AddressState
+                   Blockchain.Data.Block
+                   Blockchain.Data.GenesisBlock
+                   Blockchain.Data.Peer
+                   Blockchain.Data.SignedTransaction
+                   Blockchain.Data.Transaction
+                   Blockchain.Data.TransactionReceipt
+                   Blockchain.Data.Wire
+                   Blockchain.DB.CodeDB
+                   Blockchain.DB.ModifyStateDB
+                   Blockchain.Display
+                   Blockchain.ExtDBs
+                   Blockchain.ExtendedECDSA
+                   Blockchain.ExtWord
+                   Blockchain.Format
+                   Blockchain.JCommand
+                   Blockchain.PeerUrls
+                   Blockchain.SampleTransactions
+                   Blockchain.SHA
+                   Blockchain.Util
+                   Blockchain.VM.Code
+                   Blockchain.VM.Environment
+                   Blockchain.VM.Labels
+                   Blockchain.VM.Memory
+                   Blockchain.VM.Opcodes
+                   Blockchain.VM.VMState
+                   Blockchain.VM
+    C-sources: fastNonceFinder/nonceFinder.c
+    ghc-options: -Wall
+    buildable: True
+    hs-source-dirs: src
+
 executable queryEth
     default-language: Haskell98
     build-depends: 

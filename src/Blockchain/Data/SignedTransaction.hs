@@ -12,7 +12,7 @@ import Data.Binary
 import Data.ByteString.Internal
 import Network.Haskoin.Internals hiding (Address)
 import Numeric
---import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Blockchain.ExtendedECDSA
 
@@ -36,8 +36,8 @@ data SignedTransaction =
     } deriving (Show)
 
 instance Format SignedTransaction where
-  format SignedTransaction{unsignedTransaction = x, v=v', r=r', s=s'} =
-      CL.blue "Transaction" ++
+  format t@SignedTransaction{unsignedTransaction = x, v=v', r=r', s=s'} =
+      CL.blue "Transaction" ++ " (" ++ show (pretty $ whoSignedThisTransaction t) ++ ")" ++
            tab (
                 "\n" ++
                 format x ++

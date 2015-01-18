@@ -228,9 +228,9 @@ main = do
   let (ipAddress, port') = ipAddresses !! read ipNum
 
   connect ipAddress port' $ \(socket, _) -> do
-    putStrLn "Connected"
-
-    runResourceT $ do
-      cxt <- openDBs "h"
-      _ <- liftIO $ runStateT (doit socket) cxt
-      return ()
+         putStrLn "Connected"
+                  
+         runResourceT $ do
+           cxt <- openDBs "h"
+           _ <- liftIO $ runStateT (doit socket) cxt
+           return ()

@@ -29,7 +29,7 @@ getSizeInWords::Memory->IO Word256
 getSizeInWords (Memory _ size) = (ceiling . (/ (32::Double)) . fromIntegral) <$> readIORef size
 
 getSizeInBytes::Memory->IO Word256
-getSizeInBytes (Memory _ size) = (1+) <$> readIORef size
+getSizeInBytes (Memory _ size) = readIORef size
 
 --In this function I use the words "size" and "length" to mean 2 different things....
 --"size" is the highest memory location used (as described in the yellowpaper).
@@ -90,7 +90,7 @@ mStore state p val = do
 
 mStore8::VMState->Word256->Word8->IO VMState
 mStore8 state p val = do
-  state' <- setNewMaxSize state p
+  state' <- setNewMaxSize state (p+1)
   V.write (mVector $ memory state') (fromIntegral p) val
   return state'
 

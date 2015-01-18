@@ -48,7 +48,7 @@ instance Format Transaction where
       "to: " ++ show (pretty to') ++ "\n" ++
       "value: " ++ show v ++ "\n" ++
       "tData: " ++ tab ("\n" ++ format d) ++ "\n")
-  format ContractCreationTX{tNonce=n, gasPrice=gp, tGasLimit=gl, value=v, tInit=init'} =
+  format ContractCreationTX{tNonce=n, gasPrice=gp, tGasLimit=gl, value=v, tInit=Code init'} =
     CL.blue "Contract Creation Transaction" ++
     tab (
       "\n" ++
@@ -56,7 +56,7 @@ instance Format Transaction where
       "gasPrice: " ++ show gp ++ "\n" ++
       "tGasLimit: " ++ show gl ++ "\n" ++
       "value: " ++ show v ++ "\n" ++
-      "tInit: " ++ tab ("\n" ++ show (pretty init')) ++ "\n")
+      "tInit: " ++ tab (format init') ++ "\n")
 
 instance RLPSerializable Transaction where
   rlpDecode (RLPArray [n, gp, gl, RLPString "", val, i]) =

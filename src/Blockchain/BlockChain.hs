@@ -160,18 +160,29 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
         Nothing -> do
           let result = fromMaybe B.empty $ returnVal vmState
           liftIO $ putStrLn $ "Result: " ++ show result
-          pay tAddr (coinbase $ blockData b) (5*toInteger (B.length result)*gasPrice ut)
+          liftIO $ putStrLn $ "Gas remaining: " ++ show (vmGasRemaining vmState) ++ ", needed: " ++ show (5*toInteger (B.length result))
           liftIO $ putStrLn $ show (pretty newAddress) ++ ": " ++ format result
-          --cxt <- get
           liftIO $ putStrLn $ "adding storage " ++ show (pretty newStorageStateRoot) -- stateRoot $ storageDB cxt)
-          addCode result
-          putAddressState newAddress
-                   AddressState{
-                     addressStateNonce=0,
-                     balance=0,
-                     contractRoot=newStorageStateRoot,
-                     codeHash=hash result
-                   }
+
+          if 5*toInteger (B.length result) < vmGasRemaining vmState
+            then do
+                pay tAddr (coinbase $ blockData b) (5*toInteger (B.length result)*gasPrice ut)
+                addCode result
+                putAddressState newAddress
+                       AddressState{
+                         addressStateNonce=0,
+                         balance=0,
+                         contractRoot=newStorageStateRoot,
+                         codeHash=hash result
+                       }
+            else putAddressState newAddress
+                       AddressState{
+                         addressStateNonce=0,
+                         balance=0,
+                         contractRoot=newStorageStateRoot,
+                         codeHash=hash B.empty
+                       }
+
 
           liftIO $ putStrLn $ "paying: " ++ show (value ut)
           pay tAddr newAddress (value ut)

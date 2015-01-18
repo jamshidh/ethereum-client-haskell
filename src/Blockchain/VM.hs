@@ -7,6 +7,7 @@ module Blockchain.VM (
 import Prelude hiding (LT, GT, EQ)
 
 import Control.Monad.IO.Class
+import Control.Monad.State
 import Data.Bits
 import qualified Data.ByteString as B
 import Data.Char
@@ -16,7 +17,7 @@ import Data.Maybe
 import Data.Time.Clock.POSIX
 import Network.Haskoin.Crypto (Word256)
 import Numeric
---import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Blockchain.Context
 import qualified Blockchain.Colors as CL
@@ -35,6 +36,8 @@ import Blockchain.VM.Environment
 import Blockchain.VM.Memory
 import Blockchain.VM.Opcodes
 import Blockchain.VM.VMState
+
+import Blockchain.Database.MerklePatricia
 
 --import Debug.Trace
 
@@ -451,7 +454,8 @@ runCode env state c = do
   liftIO $ putStrLn $ " > memory: " ++ memString
   liftIO $ putStrLn "STACK"
   liftIO $ putStrLn $ unlines (("    " ++) <$> padZeros 64 <$> flip showHex "" <$> stack result)
-  liftIO $ putStrLn "STORAGE"
+  cxt <- get
+  liftIO $ putStrLn $ "STORAGE (" ++ show (pretty $ stateRoot $ storageDB cxt) ++ ")"
   kvs <- getStorageKeyVals ""
   liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHex (byteString2Integer $ nibbleString2ByteString k) "" ++ ": 0x" ++ showHex (rlpDecode $ rlpDeserialize $ rlpDecode v::Integer) "") kvs)
   case result of
