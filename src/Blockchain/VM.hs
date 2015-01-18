@@ -64,10 +64,10 @@ s256ToInteger i = 0x100000000000000000000000000000000000000000000000000000000000
 
 
 swapn::Int->VMState->ContextM VMState
-swapn n state@VMState{stack=v1:rest1} | length rest1 > n = return state{stack=v2:(middle++(v1:rest2))}
+swapn n state@VMState{stack=v1:rest1} | length rest1 >= n = return state{stack=v2:(middle++(v1:rest2))}
     where
       (middle, v2:rest2) = splitAt (n-1) rest1
-swapn _ _ = error "swapn called with not enough elements in the stack"
+swapn _ state = return state{vmException=Just StackTooSmallException}
 
 
 --TODO- This really should be in its own monad!
@@ -451,7 +451,8 @@ runCode env state c = do
   liftIO $ putStrLn $ "EVM [ eth | " ++ show (callDepth state) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc state)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining state) ++ " | " ++ show (vmGasRemaining result - vmGasRemaining state) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
   --liftIO $ putStrLn $ "EVM [ 19:23:05 | eth | " ++ show (callDepth state) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc state)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining state) ++ " | " ++ show (vmGasRemaining result - vmGasRemaining state) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
   memString <- liftIO $ getShow (memory result)
-  liftIO $ putStrLn $ " > memory: " ++ memString
+  memSize <- liftIO $ getSizeInBytes $ memory result
+  liftIO $ putStrLn $ " > memory (" ++ showHex memSize "" ++ "): " ++ memString
   liftIO $ putStrLn "STACK"
   liftIO $ putStrLn $ unlines (("    " ++) <$> padZeros 64 <$> flip showHex "" <$> stack result)
   cxt <- get

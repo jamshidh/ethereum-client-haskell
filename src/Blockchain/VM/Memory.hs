@@ -38,7 +38,10 @@ getSizeInBytes (Memory _ size) = readIORef size
 --I keep something larger around until it fills up, then reallocate (something even
 --larger).
 setNewMaxSize::VMState->Word256->IO VMState
-setNewMaxSize state newSize = do
+setNewMaxSize state newSize' = do
+  --TODO- I should just store the number of words....  memory size can only be a multiple of words.
+  --For now I will just use this hack to allocate to the nearest higher number of words.
+  let newSize = 32 * ceiling (fromIntegral newSize'/32)
   oldSize <- readIORef (mSize $ memory state)
   when (newSize > oldSize) $ do
     writeIORef (mSize $ memory state) newSize
@@ -53,7 +56,7 @@ setNewMaxSize state newSize = do
     if newSize > oldLength
       then do
         arr' <- V.grow (mVector $ memory state) $ fromIntegral $ 2*newSize
-        forM_ [oldLength-1..2*oldLength-1] $ \p -> V.write arr' (fromIntegral p) 0
+        forM_ [oldLength..newSize-1] $ \p -> V.write arr' (fromIntegral p) 0
         return $ state{memory=(memory state){mVector = arr'}}
       else return state
 
