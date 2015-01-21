@@ -7,7 +7,7 @@ module Blockchain.VM (
 import Prelude hiding (LT, GT, EQ)
 
 import Control.Monad.IO.Class
-import Control.Monad.State
+import Control.Monad.State hiding (state)
 import Data.Bits
 import qualified Data.ByteString as B
 import Data.Char
@@ -275,7 +275,9 @@ runOperation CREATE env state@VMState{stack=value:input:size:rest} = do
                     putAddressState newAddress addressState'{codeHash=hash bytes}
       _ -> return ()
 
-    return state'
+    let usedGas = vmGasRemaining state - vmGasRemaining state'
+
+    return state'{vmGasRemaining = vmGasRemaining state' - usedGas}
 
 runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffset:_:rest)} = do
 
@@ -297,7 +299,7 @@ runOperation CALLCODE env state@VMState{stack=gas:to:value:inOffset:inSize:outOf
                 getCode (codeHash addressState)
 
   (nestedState, newStorageStateRoot) <-
-    runCodeFromStart (envOwner env) (callDepth state + 1)
+    runCodeFromStart (callDepth state + 1)
      (fromIntegral gas)
      Environment {
        envOwner = address,
@@ -321,7 +323,7 @@ runOperation CALLCODE env state@VMState{stack=gas:to:value:inOffset:inSize:outOf
   addressState' <- getAddressState address
   putAddressState address addressState'{contractRoot=newStorageStateRoot}
 
-  pay (envOwner env) address (fromIntegral value)
+  pay "CALLCODE fees" (envOwner env) address (fromIntegral value)
 
   return state'{stack=success:rest, vmGasRemaining = vmGasRemaining state' - usedGas}
 
@@ -464,10 +466,11 @@ runCode env state c = do
     VMState{done=True} -> return $ movePC result len
     state2 -> runCode env (movePC state2 len) (c+1)
 
-runCodeFromStart::Address->Int->Integer->Environment->ContextM (VMState, SHAPtr)
-runCodeFromStart address callDepth' gasLimit' env = do
-  addressState <- getAddressState address
-  --liftIO $ putStrLn $ "Running code:\n    Input Data = " ++ format (envInputData env)
+runCodeFromStart::Int->Integer->Environment->ContextM (VMState, SHAPtr)
+runCodeFromStart callDepth' gasLimit' env = do
+  liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty $ envCode env)))
+
+  addressState <- getAddressState (envOwner env)
   oldStateRoot <- getStorageStateRoot
   setStorageStateRoot (contractRoot addressState)
 
@@ -475,9 +478,9 @@ runCodeFromStart address callDepth' gasLimit' env = do
   state' <- runCode env vmState{callDepth=callDepth', vmGasRemaining=gasLimit'} 0
 
   newStateRoot <- getStorageStateRoot
-  --newAddressState <- getAddressState address
-  --putAddressState address newAddressState{contractRoot=newStateRoot} 
   setStorageStateRoot oldStateRoot
+
+  liftIO $ putStrLn "VM has finished running"
 
   return (state', newStateRoot)
 
@@ -491,7 +494,7 @@ nestedRun env state gas address value inputData = do
     then return (state{stack=0:stack state}, Nothing)
     else do
 
-      pay (envOwner env) address (fromIntegral value)
+      pay "nestedRun fees" (envOwner env) address (fromIntegral value)
 
       addressState <- getAddressState address
       code <-
@@ -500,7 +503,7 @@ nestedRun env state gas address value inputData = do
 
 
       (nestedState, newStorageStateRoot) <-
-          runCodeFromStart address (callDepth state + 1)
+          runCodeFromStart (callDepth state + 1)
                                (fromIntegral gas)
                                Environment {
                                  envOwner = address,

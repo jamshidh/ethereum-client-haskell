@@ -11,7 +11,7 @@ module Blockchain.BlockChain (
 
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Monad.State
+import Control.Monad.State hiding (state)
 import Data.Binary hiding (get)
 import Data.Bits
 import qualified Data.ByteString as B
@@ -38,7 +38,6 @@ import Blockchain.ExtDBs
 import Blockchain.Format
 import Blockchain.Data.GenesisBlock
 import Blockchain.SHA
-import Blockchain.Util
 import Blockchain.VM
 import Blockchain.VM.Code
 import Blockchain.VM.Environment
@@ -112,138 +111,85 @@ checkValidity b = do
 -}
 
 
-runCodeForTransaction::Block->Integer->SignedTransaction->ContextM ()
-runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@ContractCreationTX{}} = do
-  liftIO $ putStrLn "runCodeForTransaction: ContractCreationTX"
+runCodeForTransaction'::Block->SignedTransaction->Integer->Address->Code->B.ByteString->ContextM (B.ByteString, Integer)
+runCodeForTransaction' b t@SignedTransaction{unsignedTransaction=ut} availableGas owner code theData = do
   let tAddr = whoSignedThisTransaction t
 
   liftIO $ putStrLn $ "availableGas: " ++ show availableGas
+  pay "pre-VM fees" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
 
-  let newAddress = getNewAddress tAddr $ tNonce $ unsignedTransaction t
-
-  liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty $ tInit ut)))
-
-  pay tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
+  pay "transaction value transfer" tAddr owner (value ut)
 
   (vmState, newStorageStateRoot) <- 
-    runCodeFromStart tAddr 0 availableGas
+    runCodeFromStart 0 availableGas
           Environment{
             envGasPrice=gasPrice ut,
             envBlock=b,
-            envOwner = newAddress,
+            envOwner = owner,
             envOrigin = tAddr,
-            envInputData = B.empty, --error "envInputData is being used in init",
+            envInputData = theData,
             envSender = tAddr,
             envValue = value ut,
-            envCode = tInit ut
+            envCode = code
             }
-
-  liftIO $ putStrLn "VM has finished running"
 
   liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
   let usedGas =  - vmGasRemaining vmState - refund vmState
   liftIO $ putStrLn $ "gasUsed: " ++ show usedGas
-  pay tAddr (coinbase $ blockData b) (usedGas * gasPrice ut)
+  pay "VM refund fees" tAddr (coinbase $ blockData b) (usedGas * gasPrice ut)
+
+  addressState <- getAddressState owner
+  putAddressState owner addressState{contractRoot=newStorageStateRoot} 
 
   case vmException vmState of
         Just e -> do
           liftIO $ putStrLn $ CL.red $ show e
-          putAddressState newAddress
-                   AddressState{
-                     addressStateNonce=0,
-                     balance=0,
-                     contractRoot=emptyTriePtr,
-                     codeHash=hash B.empty
-                   }
+          return (B.empty, vmGasRemaining vmState)
 
-          pay tAddr newAddress (value ut)
         Nothing -> do
           let result = fromMaybe B.empty $ returnVal vmState
           liftIO $ putStrLn $ "Result: " ++ show result
           liftIO $ putStrLn $ "Gas remaining: " ++ show (vmGasRemaining vmState) ++ ", needed: " ++ show (5*toInteger (B.length result))
-          liftIO $ putStrLn $ show (pretty newAddress) ++ ": " ++ format result
+          liftIO $ putStrLn $ show (pretty owner) ++ ": " ++ format result
           liftIO $ putStrLn $ "adding storage " ++ show (pretty newStorageStateRoot) -- stateRoot $ storageDB cxt)
 
-          if 5*toInteger (B.length result) < vmGasRemaining vmState
-            then do
-                pay tAddr (coinbase $ blockData b) (5*toInteger (B.length result)*gasPrice ut)
-                addCode result
-                putAddressState newAddress
-                       AddressState{
-                         addressStateNonce=0,
-                         balance=0,
-                         contractRoot=newStorageStateRoot,
-                         codeHash=hash result
-                       }
-            else putAddressState newAddress
-                       AddressState{
-                         addressStateNonce=0,
-                         balance=0,
-                         contractRoot=newStorageStateRoot,
-                         codeHash=hash B.empty
-                       }
+          return (result, vmGasRemaining vmState)
 
 
-          liftIO $ putStrLn $ "paying: " ++ show (value ut)
-          pay tAddr newAddress (value ut)
+runCodeForTransaction::Block->Integer->SignedTransaction->ContextM ()
+runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@ContractCreationTX{}} = do
+  let tAddr = whoSignedThisTransaction t
+  liftIO $ putStrLn "runCodeForTransaction: ContractCreationTX"
+
+  let newAddress = getNewAddress tAddr $ tNonce $ unsignedTransaction t
+
+  --Create the new account
+  putAddressState newAddress blankAddressState
+
+  (result, remainingGas) <- runCodeForTransaction' b t availableGas newAddress (tInit ut) B.empty
+
+  liftIO $ putStrLn $ "Result: " ++ show result
+
+  if 5*toInteger (B.length result) < remainingGas
+    then do
+      pay "fee for assignment of code from init" tAddr (coinbase $ blockData b) (5*toInteger (B.length result)*gasPrice ut)
+      addCode result
+      addressState <- getAddressState newAddress
+      putAddressState newAddress addressState{codeHash=hash result}
+    else return ()
+
 
 runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@MessageTX{}} = do
-  liftIO $ putStrLn "runCodeForTransaction: MessageTX"
+  let tAddr = whoSignedThisTransaction t
+  liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ to ut)
+
   recipientAddressState <- getAddressState (to ut)
 
-  liftIO $ putStrLn $ "Looking for contract code for: " ++ show (pretty $ to ut)
-  --liftIO $ putStrLn $ "codeHash is: " ++ show (pretty $ sha2SHAPtr $ codeHash recipientAddressState)
+  contractCode <- fromMaybe B.empty <$> getCode (codeHash recipientAddressState)
 
-  contractCode <- 
-      fromMaybe B.empty <$>
-                getCode (codeHash recipientAddressState)
+  _ <- runCodeForTransaction' b t availableGas (to ut) (Code contractCode) (tData ut)
 
-  liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty (Code contractCode))))
-
-  let tAddr = whoSignedThisTransaction t
-
-  liftIO $ putStrLn $ "availableGas: " ++ show availableGas
-
-  pay tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
-
-  pay (whoSignedThisTransaction t) (to ut) (value ut)
-
-  (vmState, newStorageStateRoot) <- 
-          runCodeFromStart (to ut) 0 availableGas
-                 Environment{
-                           envGasPrice=gasPrice ut,
-                           envBlock=b,
-                           envOwner = to ut,
-                           envOrigin = tAddr,
-                           envInputData = tData ut,
-                           envSender = tAddr,
-                           envValue = value ut,
-                           envCode = Code contractCode
-                         }
-
-  liftIO $ putStrLn $ "newStorageStateRoot: " ++ show (pretty newStorageStateRoot)
-
-  liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
-  let usedGas = - vmGasRemaining vmState - refund vmState
-  liftIO $ putStrLn $ "gasUsed: " ++ show usedGas
-  pay tAddr (coinbase $ blockData b) (usedGas * gasPrice ut)
-
-  case vmException vmState of
-        Just e -> do
-          liftIO $ putStrLn $ CL.red $ show e
-          --addToBalance tAddr (-value ut) --zombie account, money lost forever
-          {-addressState <- getAddressState (to ut)
-          cxt <- get
-          putAddressState (to ut)
-                 addressState{contractRoot=stateRoot $ storageDB cxt}-}
-        Nothing -> do
-          addressState <- getAddressState (to ut)
-          putAddressState (to ut) addressState{contractRoot=newStorageStateRoot}
-          return ()
-
-
-
-
+  return ()
 
 addBlocks::[Block]->ContextM ()
 addBlocks blocks = 
@@ -271,7 +217,7 @@ addTransaction b t@SignedTransaction{unsignedTransaction=ut} = do
   liftIO $ putStrLn $ "intrinsicGas: " ++ show (intrinsicGas')
   --TODO- return here if not enough gas
   --liftIO $ putStrLn $ "Paying " ++ show (intrinsicGas' * gasPrice ut) ++ " from " ++ show (pretty signAddress) ++ " to " ++ show (pretty $ coinbase $ blockData b)
-  pay signAddress (coinbase $ blockData b) (intrinsicGas' * gasPrice ut)
+  pay "intrinsic gas payment" signAddress (coinbase $ blockData b) (intrinsicGas' * gasPrice ut)
 
   liftIO $ putStrLn "running code"
   runCodeForTransaction b (tGasLimit ut - intrinsicGas') t

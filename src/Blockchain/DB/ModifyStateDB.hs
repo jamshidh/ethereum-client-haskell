@@ -7,7 +7,8 @@ module Blockchain.DB.ModifyStateDB (
   pay
 ) where
 
---import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Control.Monad.IO.Class
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Blockchain.Context
 import Blockchain.Data.Address
@@ -32,8 +33,9 @@ addNonce address = do
   addressState <- getAddressState address
   putAddressState address addressState{ addressStateNonce = addressStateNonce addressState + 1 }
 
-pay::Address->Address->Integer->ContextM ()
-pay fromAddr toAddr val = do
+pay::String->Address->Address->Integer->ContextM ()
+pay description fromAddr toAddr val = do
+  liftIO $ putStrLn $ "payment: from " ++ show (pretty fromAddr) ++ " to " ++ show (pretty toAddr) ++ ": " ++ show val ++ ", " ++ description
   addToBalance fromAddr (-val)
   addToBalance toAddr val
 
