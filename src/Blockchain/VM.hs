@@ -263,35 +263,6 @@ runOperation CREATE env state@VMState{stack=value:input:size:rest} = do
 
   return state{stack=fromIntegral result:rest, vmGasRemaining=resultRemainingGas}
 
-{-
-
-    putAddressState (envOwner env) addressState{addressStateNonce=addressStateNonce addressState + 1}
-
-
-    liftIO $ putStrLn $ "qqqqqqqqqqqqqqqqqqq:" ++ show (B.length codeBytes)
-
-    addCode codeBytes
-
-    putAddressState newAddress 
-                    blankAddressState
-                    {
-                      codeHash=hash codeBytes
-                    }
-
-    (state', retValue) <- nestedRun env state{stack=rest} (fromIntegral $ vmGasRemaining state) newAddress value B.empty
-
-    case retValue of
-      Just bytes -> do
-                    addCode bytes
-                    addressState' <- getAddressState newAddress
-                    putAddressState newAddress addressState'{codeHash=hash bytes}
-      _ -> return ()
-
-    let usedGas = vmGasRemaining state - vmGasRemaining state'
-
-    return state'{vmGasRemaining = vmGasRemaining state' - usedGas}
-
--}
 
 runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffset:_:rest)} = do
 
@@ -503,7 +474,6 @@ runCodeForTransaction'::Block->Int->Address->Integer->Integer->Integer->Address-
 runCodeForTransaction' b callDepth' sender value' gasPrice' availableGas owner code theData = do
 
   liftIO $ putStrLn $ "availableGas: " ++ show availableGas
-  pay "pre-VM fees" sender (coinbase $ blockData b) (availableGas*gasPrice')
 
   pay "transaction value transfer" sender owner value'
 
@@ -520,18 +490,13 @@ runCodeForTransaction' b callDepth' sender value' gasPrice' availableGas owner c
             envCode = code
             }
 
-  liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
-  let usedGas =  - vmGasRemaining vmState - refund vmState
-  liftIO $ putStrLn $ "gasUsed: " ++ show usedGas
-  pay "VM refund fees" sender (coinbase $ blockData b) (usedGas * gasPrice')
-
   addressState <- getAddressState owner
   putAddressState owner addressState{contractRoot=newStorageStateRoot}
 
   case vmException vmState of
         Just e -> do
           liftIO $ putStrLn $ CL.red $ show e
-          return (B.empty, vmGasRemaining vmState)
+          return (B.empty, vmGasRemaining vmState + refund vmState)
 
         Nothing -> do
           let result = fromMaybe B.empty $ returnVal vmState
@@ -540,7 +505,7 @@ runCodeForTransaction' b callDepth' sender value' gasPrice' availableGas owner c
           liftIO $ putStrLn $ show (pretty owner) ++ ": " ++ format result
           liftIO $ putStrLn $ "adding storage " ++ show (pretty newStorageStateRoot) -- stateRoot $ storageDB cxt)                                                                                          
 
-          return (result, vmGasRemaining vmState)
+          return (result, vmGasRemaining vmState + refund vmState)
 
 
 
@@ -555,7 +520,7 @@ create b callDepth' sender value' gasPrice' availableGas newAddress init' = do
   liftIO $ putStrLn $ "Result: " ++ show result
   if 5*toInteger (B.length result) < remainingGas
     then do
-      pay "fee for assignment of code from init" sender (coinbase $ blockData b) (5*toInteger (B.length result)*gasPrice')
+      --pay "fee for assignment of code from init" sender (coinbase $ blockData b) (5*toInteger (B.length result)*gasPrice')
       addCode result
       addressState <- getAddressState newAddress
       putAddressState newAddress addressState{codeHash=hash result}

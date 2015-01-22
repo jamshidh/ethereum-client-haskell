@@ -121,7 +121,12 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
   --Create the new account
   putAddressState newAddress blankAddressState
 
-  create b 0 tAddr (value ut) (gasPrice ut) availableGas newAddress (tInit ut)
+  pay "pre-VM fees" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
+
+  resultRemainingGas <- create b 0 tAddr (value ut) (gasPrice ut) availableGas newAddress (tInit ut)
+
+  liftIO $ putStrLn $ "gasRemaining: " ++ show resultRemainingGas
+  pay "VM refund fees" tAddr (coinbase $ blockData b) (-resultRemainingGas * gasPrice ut)
 
   return ()
 
@@ -135,7 +140,12 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
 
   contractCode <- fromMaybe B.empty <$> getCode (codeHash recipientAddressState)
 
-  _ <- runCodeForTransaction' b 0 tAddr (value ut) (gasPrice ut) availableGas (to ut) (Code contractCode) (tData ut)
+  pay "pre-VM fees" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
+
+  (_, resultRemainingGas) <- runCodeForTransaction' b 0 tAddr (value ut) (gasPrice ut) availableGas (to ut) (Code contractCode) (tData ut)
+
+  liftIO $ putStrLn $ "gasRemaining: " ++ show resultRemainingGas
+  pay "VM refund fees" tAddr (coinbase $ blockData b) (-resultRemainingGas * gasPrice ut)
 
   return ()
 
