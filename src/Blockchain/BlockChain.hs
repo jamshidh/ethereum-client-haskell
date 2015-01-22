@@ -111,32 +111,31 @@ checkValidity b = do
 -}
 
 
-runCodeForTransaction'::Block->SignedTransaction->Integer->Address->Code->B.ByteString->ContextM (B.ByteString, Integer)
-runCodeForTransaction' b t@SignedTransaction{unsignedTransaction=ut} availableGas owner code theData = do
-  let tAddr = whoSignedThisTransaction t
+runCodeForTransaction'::Block->Address->Integer->Integer->Integer->Address->Code->B.ByteString->ContextM (B.ByteString, Integer)
+runCodeForTransaction' b sender value' gasPrice' availableGas owner code theData = do
 
   liftIO $ putStrLn $ "availableGas: " ++ show availableGas
-  pay "pre-VM fees" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
+  pay "pre-VM fees" sender (coinbase $ blockData b) (availableGas*gasPrice')
 
-  pay "transaction value transfer" tAddr owner (value ut)
+  pay "transaction value transfer" sender owner value'
 
   (vmState, newStorageStateRoot) <- 
     runCodeFromStart 0 availableGas
           Environment{
-            envGasPrice=gasPrice ut,
+            envGasPrice=gasPrice',
             envBlock=b,
             envOwner = owner,
-            envOrigin = tAddr,
+            envOrigin = sender,
             envInputData = theData,
-            envSender = tAddr,
-            envValue = value ut,
+            envSender = sender,
+            envValue = value',
             envCode = code
             }
 
   liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining vmState)
   let usedGas =  - vmGasRemaining vmState - refund vmState
   liftIO $ putStrLn $ "gasUsed: " ++ show usedGas
-  pay "VM refund fees" tAddr (coinbase $ blockData b) (usedGas * gasPrice ut)
+  pay "VM refund fees" sender (coinbase $ blockData b) (usedGas * gasPrice')
 
   addressState <- getAddressState owner
   putAddressState owner addressState{contractRoot=newStorageStateRoot} 
@@ -156,6 +155,27 @@ runCodeForTransaction' b t@SignedTransaction{unsignedTransaction=ut} availableGa
           return (result, vmGasRemaining vmState)
 
 
+
+
+--bool Executive::call(Address _receiveAddress, Address _codeAddress, Address _senderAddress, u256 _value, u256 _gasPrice, bytesConstRef _data, u256 _gas, Address _originAddress)
+
+
+
+--bool Executive::create(Address _sender, u256 _endowment, u256 _gasPrice, u256 _gas, bytesConstRef _init, Address _origin)
+create::Block->Address->Integer->Integer->Integer->Address->Code->ContextM ()
+create b sender value' gasPrice' availableGas newAddress init' = do
+
+  (result, remainingGas) <- runCodeForTransaction' b sender value' gasPrice' availableGas newAddress init' B.empty
+
+  liftIO $ putStrLn $ "Result: " ++ show result
+  if 5*toInteger (B.length result) < remainingGas
+    then do
+      pay "fee for assignment of code from init" sender (coinbase $ blockData b) (5*toInteger (B.length result)*gasPrice')
+      addCode result
+      addressState <- getAddressState newAddress
+      putAddressState newAddress addressState{codeHash=hash result}
+    else return ()
+
 runCodeForTransaction::Block->Integer->SignedTransaction->ContextM ()
 runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@ContractCreationTX{}} = do
   let tAddr = whoSignedThisTransaction t
@@ -166,17 +186,9 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
   --Create the new account
   putAddressState newAddress blankAddressState
 
-  (result, remainingGas) <- runCodeForTransaction' b t availableGas newAddress (tInit ut) B.empty
+  create b tAddr (value ut) (gasPrice ut) availableGas newAddress (tInit ut)
 
-  liftIO $ putStrLn $ "Result: " ++ show result
 
-  if 5*toInteger (B.length result) < remainingGas
-    then do
-      pay "fee for assignment of code from init" tAddr (coinbase $ blockData b) (5*toInteger (B.length result)*gasPrice ut)
-      addCode result
-      addressState <- getAddressState newAddress
-      putAddressState newAddress addressState{codeHash=hash result}
-    else return ()
 
 
 runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@MessageTX{}} = do
@@ -187,7 +199,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
 
   contractCode <- fromMaybe B.empty <$> getCode (codeHash recipientAddressState)
 
-  _ <- runCodeForTransaction' b t availableGas (to ut) (Code contractCode) (tData ut)
+  _ <- runCodeForTransaction' b tAddr (value ut) (gasPrice ut) availableGas (to ut) (Code contractCode) (tData ut)
 
   return ()
 
