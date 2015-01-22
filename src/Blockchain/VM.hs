@@ -257,9 +257,11 @@ runOperation CREATE env state@VMState{stack=value:input:size:rest} = do
   let newAddress = getNewAddress (envOwner env) (addressStateNonce addressState)
   init <- liftIO (Code <$> mLoadByteString state input size)
 
-  create (envBlock env) (callDepth state + 1) (envSender env) (toInteger value) (envGasPrice env) (vmGasRemaining state) newAddress init
+  resultRemainingGas <- create (envBlock env) (callDepth state + 1) (envSender env) (toInteger value) (envGasPrice env) (vmGasRemaining state) newAddress init
 
-  return state
+  let Address result = newAddress --TODO- check for failure, set result to 0 if failed
+
+  return state{stack=fromIntegral result:rest, vmGasRemaining=resultRemainingGas}
 
 {-
 
@@ -545,7 +547,7 @@ runCodeForTransaction' b callDepth' sender value' gasPrice' availableGas owner c
 --bool Executive::call(Address _receiveAddress, Address _codeAddress, Address _senderAddress, u256 _value, u256 _gasPrice, bytesConstRef _data, u256 _gas, Address _originAddress)
 
 --bool Executive::create(Address _sender, u256 _endowment, u256 _gasPrice, u256 _gas, bytesConstRef _init, Address _origin)
-create::Block->Int->Address->Integer->Integer->Integer->Address->Code->ContextM ()
+create::Block->Int->Address->Integer->Integer->Integer->Address->Code->ContextM Integer
 create b callDepth' sender value' gasPrice' availableGas newAddress init' = do
 
   (result, remainingGas) <- runCodeForTransaction' b callDepth' sender value' gasPrice' availableGas newAddress init' B.empty
@@ -557,7 +559,8 @@ create b callDepth' sender value' gasPrice' availableGas newAddress init' = do
       addCode result
       addressState <- getAddressState newAddress
       putAddressState newAddress addressState{codeHash=hash result}
-    else return ()
+      return (remainingGas - 5 * toInteger (B.length result))
+    else return remainingGas
 
 
 nestedRun::Environment->VMState->Word256->Address->Word256->B.ByteString->ContextM (VMState, Maybe B.ByteString)

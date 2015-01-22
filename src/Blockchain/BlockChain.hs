@@ -123,6 +123,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
 
   create b 0 tAddr (value ut) (gasPrice ut) availableGas newAddress (tInit ut)
 
+  return ()
 
 
 
