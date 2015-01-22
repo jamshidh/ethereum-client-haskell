@@ -121,7 +121,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
   --Create the new account
   putAddressState newAddress blankAddressState
 
-  create b tAddr (value ut) (gasPrice ut) availableGas newAddress (tInit ut)
+  create b 0 tAddr (value ut) (gasPrice ut) availableGas newAddress (tInit ut)
 
 
 
@@ -134,7 +134,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
 
   contractCode <- fromMaybe B.empty <$> getCode (codeHash recipientAddressState)
 
-  _ <- runCodeForTransaction' b tAddr (value ut) (gasPrice ut) availableGas (to ut) (Code contractCode) (tData ut)
+  _ <- runCodeForTransaction' b 0 tAddr (value ut) (gasPrice ut) availableGas (to ut) (Code contractCode) (tData ut)
 
   return ()
 

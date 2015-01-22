@@ -257,7 +257,7 @@ runOperation CREATE env state@VMState{stack=value:input:size:rest} = do
   let newAddress = getNewAddress (envOwner env) (addressStateNonce addressState)
   init <- liftIO (Code <$> mLoadByteString state input size)
 
-  create (envBlock env) (envSender env) (toInteger value) (envGasPrice env) (vmGasRemaining state) newAddress init
+  create (envBlock env) (callDepth state + 1) (envSender env) (toInteger value) (envGasPrice env) (vmGasRemaining state) newAddress init
 
   return state
 
@@ -497,8 +497,8 @@ runCodeFromStart callDepth' gasLimit' env = do
   return (state', newStateRoot)
 
 
-runCodeForTransaction'::Block->Address->Integer->Integer->Integer->Address->Code->B.ByteString->ContextM (B.ByteString, Integer)
-runCodeForTransaction' b sender value' gasPrice' availableGas owner code theData = do
+runCodeForTransaction'::Block->Int->Address->Integer->Integer->Integer->Address->Code->B.ByteString->ContextM (B.ByteString, Integer)
+runCodeForTransaction' b callDepth' sender value' gasPrice' availableGas owner code theData = do
 
   liftIO $ putStrLn $ "availableGas: " ++ show availableGas
   pay "pre-VM fees" sender (coinbase $ blockData b) (availableGas*gasPrice')
@@ -506,7 +506,7 @@ runCodeForTransaction' b sender value' gasPrice' availableGas owner code theData
   pay "transaction value transfer" sender owner value'
 
   (vmState, newStorageStateRoot) <-
-    runCodeFromStart 0 availableGas
+    runCodeFromStart callDepth' availableGas
           Environment{
             envGasPrice=gasPrice',
             envBlock=b,
@@ -545,10 +545,10 @@ runCodeForTransaction' b sender value' gasPrice' availableGas owner code theData
 --bool Executive::call(Address _receiveAddress, Address _codeAddress, Address _senderAddress, u256 _value, u256 _gasPrice, bytesConstRef _data, u256 _gas, Address _originAddress)
 
 --bool Executive::create(Address _sender, u256 _endowment, u256 _gasPrice, u256 _gas, bytesConstRef _init, Address _origin)
-create::Block->Address->Integer->Integer->Integer->Address->Code->ContextM ()
-create b sender value' gasPrice' availableGas newAddress init' = do
+create::Block->Int->Address->Integer->Integer->Integer->Address->Code->ContextM ()
+create b callDepth' sender value' gasPrice' availableGas newAddress init' = do
 
-  (result, remainingGas) <- runCodeForTransaction' b sender value' gasPrice' availableGas newAddress init' B.empty
+  (result, remainingGas) <- runCodeForTransaction' b callDepth' sender value' gasPrice' availableGas newAddress init' B.empty
 
   liftIO $ putStrLn $ "Result: " ++ show result
   if 5*toInteger (B.length result) < remainingGas
