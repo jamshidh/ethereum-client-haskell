@@ -253,11 +253,18 @@ runOperation SWAP16 _ state = swapn 16 state
 
 
 runOperation CREATE env state@VMState{stack=value:input:size:rest} = do
-    addressState <- getAddressState $ envOwner env
-    let newAddress = getNewAddress (envOwner env) (addressStateNonce addressState)
+  addressState <- getAddressState $ envOwner env
+  let newAddress = getNewAddress (envOwner env) (addressStateNonce addressState)
+  init <- liftIO (Code <$> mLoadByteString state input size)
+
+  create (envBlock env) (envSender env) (toInteger value) (envGasPrice env) (vmGasRemaining state) newAddress init
+
+  return state
+
+{-
+
     putAddressState (envOwner env) addressState{addressStateNonce=addressStateNonce addressState + 1}
 
-    codeBytes <- liftIO $ mLoadByteString state input size
 
     liftIO $ putStrLn $ "qqqqqqqqqqqqqqqqqqq:" ++ show (B.length codeBytes)
 
@@ -281,6 +288,8 @@ runOperation CREATE env state@VMState{stack=value:input:size:rest} = do
     let usedGas = vmGasRemaining state - vmGasRemaining state'
 
     return state'{vmGasRemaining = vmGasRemaining state' - usedGas}
+
+-}
 
 runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffset:_:rest)} = do
 
