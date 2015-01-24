@@ -4,6 +4,7 @@ module Blockchain.VM.Memory (
   getSizeInBytes,
   getSizeInWords,
   getShow,
+  getMemAsByteString,
   mLoad,
   mLoad8,
   mLoadByteString,
@@ -56,7 +57,7 @@ setNewMaxSize state newSize' = do
     if newSize > oldLength
       then do
         arr' <- V.grow (mVector $ memory state) $ fromIntegral $ 2*newSize
-        forM_ [oldLength..newSize-1] $ \p -> V.write arr' (fromIntegral p) 0
+        forM_ [oldLength..2*newSize-1] $ \p -> V.write arr' (fromIntegral p) 0
         return $ state{memory=(memory state){mVector = arr'}}
       else return state
 
@@ -67,6 +68,11 @@ getShow (Memory arr sizeRef) = do
   msize <- readIORef sizeRef
   --fmap (show . B16.encode . B.pack) $ sequence $ V.read arr <$> fromIntegral <$> [0..fromIntegral msize-1] 
   fmap (show . B16.encode . B.pack) $ sequence $ V.read arr <$> [0..fromIntegral msize-1] 
+
+getMemAsByteString::Memory->IO B.ByteString
+getMemAsByteString (Memory arr sizeRef) = do
+  msize <- readIORef sizeRef
+  fmap B.pack $ sequence $ V.read arr <$> [0..fromIntegral msize-1] 
 
 
 mLoad::VMState->Word256->IO [Word8]

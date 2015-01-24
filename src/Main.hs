@@ -43,7 +43,7 @@ import Blockchain.PeerUrls
 import Blockchain.SHA
 import Blockchain.Util
 
---import Debug.Trace
+import Debug.Trace
 
 
 prvKey::PrvKey
@@ -191,6 +191,7 @@ doit::Socket->ContextM ()
 doit socket = do
   sendMessage socket =<< (liftIO mkHello)
   (setStateRoot . bStateRoot . blockData) =<< getBestBlock
+
   --signedTx <- createTransaction simpleTX
   --signedTx <- createTransaction outOfGasTX
   --signedTx <- createTransaction simpleStorageTX
@@ -207,7 +208,6 @@ doit socket = do
 
                 
   --liftIO $ sendMessage socket $ Transactions [signedTx]
-
 
   --signedTxs <- createTransactions [createMysteryContract]
   --liftIO $ sendMessage socket $ Transactions signedTxs

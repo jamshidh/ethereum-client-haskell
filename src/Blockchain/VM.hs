@@ -12,6 +12,7 @@ import Control.Monad.IO.Class
 import Control.Monad.State hiding (state)
 import Data.Bits
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as BC
 import Data.Char
 import Data.Function
 import Data.Functor
@@ -120,6 +121,14 @@ runOperation CALLER Environment{envSender=Address owner} state = return state{st
 runOperation CALLVALUE Environment{envValue=val} state = return state{stack=fromIntegral val:stack state}
 
 runOperation CALLDATALOAD Environment{envInputData=d} state@VMState{stack=p:rest} = do
+
+  liftIO $ putStrLn $ "################## " ++ show (d)
+  liftIO $ putStrLn $ "################## " ++ show (B.drop (fromIntegral p) d)
+  liftIO $ putStrLn $ "################## " ++ show (B.take 32 $ B.drop (fromIntegral p) d)
+  liftIO $ putStrLn $ "################## " ++ show (B.unpack $ B.take 32 $ B.drop (fromIntegral p) d)
+  liftIO $ putStrLn $ "################## " ++ show (appendZerosTo32 $ B.unpack $ B.take 32 $ B.drop (fromIntegral p) d)
+  liftIO $ putStrLn $ "################## " ++ show (bytes2Integer $ appendZerosTo32 $ B.unpack $ B.take 32 $ B.drop (fromIntegral p) d)
+
   let val = bytes2Integer $ appendZerosTo32 $ B.unpack $ B.take 32 $ B.drop (fromIntegral p) d
   return state{stack=fromIntegral val:rest}
     where
@@ -257,7 +266,9 @@ runOperation CREATE env state@VMState{stack=value:input:size:rest} = do
   let newAddress = getNewAddress (envOwner env) (addressStateNonce addressState)
   init <- liftIO (Code <$> mLoadByteString state input size)
 
-  resultRemainingGas <- create (envBlock env) (callDepth state + 1) (envSender env) (toInteger value) (envGasPrice env) (vmGasRemaining state) newAddress init
+  incrementNonce (envOwner env)
+
+  resultRemainingGas <- create (envBlock env) (callDepth state + 1) (envOwner env) (envOrigin env) (toInteger value) (envGasPrice env) (vmGasRemaining state) newAddress init
 
   let Address result = newAddress --TODO- check for failure, set result to 0 if failed
 
@@ -268,7 +279,7 @@ runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffse
 
   inputData <- liftIO $ mLoadByteString state inOffset inSize
 
-  (state', retValue) <- nestedRun env state{stack=rest} gas (Address $ fromIntegral to) value inputData
+  (state', retValue) <- nestedRun env state{stack=rest} gas (Address $ fromIntegral to) (envOwner env) value inputData
 
   case retValue of
     Just bytes -> liftIO $ mStoreByteString state' outOffset bytes
@@ -359,7 +370,7 @@ opGasPrice _ LOG0 = return (96, 0)
 opGasPrice _ LOG1 = return (96, 0)
 opGasPrice _ LOG2 = return (96, 0)
 opGasPrice _ LOG3 = return (128, 0)
-opGasPrice _ LOG4 = return (128, 0)
+opGasPrice _ LOG4 = return (192, 0)
 
 opGasPrice _  CREATE = return (100, 0)
 
@@ -427,6 +438,8 @@ formatAddressWithoutColor::Address->String
 formatAddressWithoutColor (Address x) = padZeros 40 $ showHex x ""
 
 
+showHexU = map toUpper . flip showHex ""
+
 runCode::Environment->VMState->Int->ContextM VMState
 runCode env state c = do
   memBefore <- liftIO $ getSizeInWords $ memory state
@@ -436,16 +449,16 @@ runCode env state c = do
   result <- runOperation op env state'
   memAfter <- liftIO $ getSizeInWords $ memory result
   liftIO $ putStrLn $ "EVM [ eth | " ++ show (callDepth state) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc state)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining state) ++ " | " ++ show (vmGasRemaining result - vmGasRemaining state) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
-  --liftIO $ putStrLn $ "EVM [ 19:23:05 | eth | " ++ show (callDepth state) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc state)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining state) ++ " | " ++ show (vmGasRemaining result - vmGasRemaining state) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
-  memString <- liftIO $ getShow (memory result)
+  liftIO $ putStrLn $ "EVM [ eth ] "
+  memByteString <- liftIO $ getMemAsByteString (memory result)
   memSize <- liftIO $ getSizeInBytes $ memory result
-  liftIO $ putStrLn $ " > memory (" ++ showHex memSize "" ++ "): " ++ memString
-  liftIO $ putStrLn "STACK"
-  liftIO $ putStrLn $ unlines (("    " ++) <$> padZeros 64 <$> flip showHex "" <$> stack result)
+  liftIO $ putStrLn "    STACK"
+  liftIO $ putStr $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack result))
+  liftIO $ putStr $ "    MEMORY\n" ++ showMem 0 (B.unpack $ memByteString)
   cxt <- get
-  liftIO $ putStrLn $ "STORAGE (" ++ show (pretty $ stateRoot $ storageDB cxt) ++ ")"
+  liftIO $ putStrLn $ "    STORAGE"
   kvs <- getStorageKeyVals ""
-  liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHex (byteString2Integer $ nibbleString2ByteString k) "" ++ ": 0x" ++ showHex (rlpDecode $ rlpDeserialize $ rlpDecode v::Integer) "") kvs)
+  liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (rlpDecode $ rlpDeserialize $ rlpDecode v::Integer)) kvs)
   case result of
     VMState{vmException=Just _} -> return result{ vmGasRemaining = 0 } 
     VMState{done=True} -> return $ movePC result len
@@ -470,8 +483,8 @@ runCodeFromStart callDepth' gasLimit' env = do
   return (state', newStateRoot)
 
 
-runCodeForTransaction'::Block->Int->Address->Integer->Integer->Integer->Address->Code->B.ByteString->ContextM (B.ByteString, Integer)
-runCodeForTransaction' b callDepth' sender value' gasPrice' availableGas owner code theData = do
+runCodeForTransaction'::Block->Int->Address->Address->Integer->Integer->Integer->Address->Code->B.ByteString->ContextM (B.ByteString, Integer)
+runCodeForTransaction' b callDepth' sender origin value' gasPrice' availableGas owner code theData = do
 
   liftIO $ putStrLn $ "availableGas: " ++ show availableGas
 
@@ -483,7 +496,7 @@ runCodeForTransaction' b callDepth' sender value' gasPrice' availableGas owner c
             envGasPrice=gasPrice',
             envBlock=b,
             envOwner = owner,
-            envOrigin = sender,
+            envOrigin = origin,
             envInputData = theData,
             envSender = sender,
             envValue = value',
@@ -512,10 +525,10 @@ runCodeForTransaction' b callDepth' sender value' gasPrice' availableGas owner c
 --bool Executive::call(Address _receiveAddress, Address _codeAddress, Address _senderAddress, u256 _value, u256 _gasPrice, bytesConstRef _data, u256 _gas, Address _originAddress)
 
 --bool Executive::create(Address _sender, u256 _endowment, u256 _gasPrice, u256 _gas, bytesConstRef _init, Address _origin)
-create::Block->Int->Address->Integer->Integer->Integer->Address->Code->ContextM Integer
-create b callDepth' sender value' gasPrice' availableGas newAddress init' = do
+create::Block->Int->Address->Address->Integer->Integer->Integer->Address->Code->ContextM Integer
+create b callDepth' sender origin value' gasPrice' availableGas newAddress init' = do
 
-  (result, remainingGas) <- runCodeForTransaction' b callDepth' sender value' gasPrice' availableGas newAddress init' B.empty
+  (result, remainingGas) <- runCodeForTransaction' b callDepth' sender origin value' gasPrice' availableGas newAddress init' B.empty
 
   liftIO $ putStrLn $ "Result: " ++ show result
   if 5*toInteger (B.length result) < remainingGas
@@ -528,8 +541,8 @@ create b callDepth' sender value' gasPrice' availableGas newAddress init' = do
     else return remainingGas
 
 
-nestedRun::Environment->VMState->Word256->Address->Word256->B.ByteString->ContextM (VMState, Maybe B.ByteString)
-nestedRun env state gas address value inputData = do
+nestedRun::Environment->VMState->Word256->Address->Address->Word256->B.ByteString->ContextM (VMState, Maybe B.ByteString)
+nestedRun env state gas address sender value inputData = do
 
   theBalance <- fmap balance $ getAddressState $ envOwner env
 
@@ -553,7 +566,7 @@ nestedRun env state gas address value inputData = do
                                  envOrigin = envOrigin env,
                                  envGasPrice = envGasPrice env,
                                  envInputData = inputData,
-                                 envSender = envOwner env,
+                                 envSender = sender,
                                  envValue = fromIntegral value,
                                  envCode = Code code,
                                  envBlock = envBlock env

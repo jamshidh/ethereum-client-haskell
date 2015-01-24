@@ -7,13 +7,18 @@ module Blockchain.Util (
   word160ToBytes,
   word256ToBytes,
   padZeros,
-  tab
+  tab,
+  showMem
   ) where
 
 import Data.Bits
 import qualified Data.ByteString as B
+import Data.ByteString.Internal
+import Data.Functor
+import Data.List
 import Data.Word
 import Network.Haskoin.Crypto (Word160, Word256)
+import Numeric
 
 --I hate this, it is an ugly way to create an Integer from its component bytes.
 --There should be an easier way....
@@ -49,3 +54,18 @@ tab::String->String
 tab [] = []
 tab ('\n':rest) = '\n':' ':' ':' ':' ':tab rest
 tab (c:rest) = c:tab rest
+
+showWord8::Word8->Char
+showWord8 c | c >= 32 && c < 128 = w2c c
+showWord8 _ = '?'
+
+showMem::Int->[Word8]->String
+showMem p [] = "" 
+showMem p (v1:v2:v3:v4:v5:v6:v7:v8:rest) = 
+    padZeros 4 (showHex p "") ++ " " 
+             ++ [showWord8 v1] ++ [showWord8 v2] ++ [showWord8 v3] ++ [showWord8 v4]
+             ++ [showWord8 v5] ++ [showWord8 v6] ++ [showWord8 v7] ++ [showWord8 v8] ++ " "
+             ++ padZeros 2 (showHex v1 "") ++ " " ++ padZeros 2 (showHex v2 "") ++ " " ++ padZeros 2 (showHex v3 "") ++ " " ++ padZeros 2 (showHex v4 "") ++ " "
+             ++ padZeros 2 (showHex v5 "") ++ " " ++ padZeros 2 (showHex v6 "") ++ " " ++ padZeros 2 (showHex v7 "") ++ " " ++ padZeros 2 (showHex v8 "") ++ "\n"
+             ++ showMem (p+8) rest
+showMem p x = padZeros 4 (showHex p "") ++ " " ++ (showWord8 <$> x) ++ " " ++ intercalate " " (padZeros 2 <$> flip showHex "" <$> x)

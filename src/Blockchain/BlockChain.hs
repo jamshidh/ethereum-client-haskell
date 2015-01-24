@@ -56,9 +56,10 @@ initializeBlockChain = do
 nextDifficulty::Integer->UTCTime->UTCTime->Integer
 nextDifficulty oldDifficulty oldTime newTime =
     if round (utcTimeToPOSIXSeconds newTime) >=
+           --(round (utcTimeToPOSIXSeconds oldTime) + 5::Integer)
            (round (utcTimeToPOSIXSeconds oldTime) + 8::Integer)
-    then oldDifficulty - oldDifficulty `shiftR` 10
-    else oldDifficulty + oldDifficulty `shiftR` 10
+      then oldDifficulty - oldDifficulty `shiftR` 10
+      else oldDifficulty + oldDifficulty `shiftR` 10
 
 nextGasLimit::Integer->Integer->Integer
 nextGasLimit oldGasLimit oldGasUsed = max 125000 ((oldGasLimit * 1023 + oldGasUsed *6 `quot` 5) `quot` 1024)
@@ -123,7 +124,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
 
   pay "pre-VM fees" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
 
-  resultRemainingGas <- create b 0 tAddr (value ut) (gasPrice ut) availableGas newAddress (tInit ut)
+  resultRemainingGas <- create b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas newAddress (tInit ut)
 
   liftIO $ putStrLn $ "gasRemaining: " ++ show resultRemainingGas
   pay "VM refund fees" tAddr (coinbase $ blockData b) (-resultRemainingGas * gasPrice ut)
@@ -142,7 +143,7 @@ runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@
 
   pay "pre-VM fees" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
 
-  (_, resultRemainingGas) <- runCodeForTransaction' b 0 tAddr (value ut) (gasPrice ut) availableGas (to ut) (Code contractCode) (tData ut)
+  (_, resultRemainingGas) <- runCodeForTransaction' b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas (to ut) (Code contractCode) (tData ut)
 
   liftIO $ putStrLn $ "gasRemaining: " ++ show resultRemainingGas
   pay "VM refund fees" tAddr (coinbase $ blockData b) (-resultRemainingGas * gasPrice ut)
@@ -168,7 +169,7 @@ addTransaction::Block->SignedTransaction->ContextM ()
 addTransaction b t@SignedTransaction{unsignedTransaction=ut} = do
   liftIO $ putStrLn "adding to nonces"
   let signAddress = whoSignedThisTransaction t
-  addNonce signAddress
+  incrementNonce signAddress
   liftIO $ putStrLn "paying value to recipient"
 
   let intrinsicGas' = intrinsicGas ut

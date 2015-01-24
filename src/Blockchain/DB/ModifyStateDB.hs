@@ -3,7 +3,7 @@
 module Blockchain.DB.ModifyStateDB (
   putAddressStates,
   addToBalance,
-  addNonce,
+  incrementNonce,
   pay
 ) where
 
@@ -28,8 +28,8 @@ addToBalance address val = do
   addressState <- getAddressState address
   putAddressState address addressState{ balance = balance addressState + fromIntegral val }
 
-addNonce::Address->ContextM ()
-addNonce address = do
+incrementNonce::Address->ContextM ()
+incrementNonce address = do
   addressState <- getAddressState address
   putAddressState address addressState{ addressStateNonce = addressStateNonce addressState + 1 }
 
