@@ -43,7 +43,7 @@ import Blockchain.PeerUrls
 import Blockchain.SHA
 import Blockchain.Util
 
-import Debug.Trace
+--import Debug.Trace
 
 
 prvKey::PrvKey

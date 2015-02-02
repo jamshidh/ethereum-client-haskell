@@ -9,10 +9,8 @@ module Blockchain.VM (
 import Prelude hiding (LT, GT, EQ)
 
 import Control.Monad.IO.Class
-import Control.Monad.State hiding (state)
 import Data.Bits
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as BC
 import Data.Char
 import Data.Function
 import Data.Functor
@@ -264,11 +262,11 @@ runOperation SWAP16 _ state = swapn 16 state
 runOperation CREATE env state@VMState{stack=value:input:size:rest} = do
   addressState <- getAddressState $ envOwner env
   let newAddress = getNewAddress (envOwner env) (addressStateNonce addressState)
-  init <- liftIO (Code <$> mLoadByteString state input size)
+  initCode <- liftIO (Code <$> mLoadByteString state input size)
 
   incrementNonce (envOwner env)
 
-  resultRemainingGas <- create (envBlock env) (callDepth state + 1) (envOwner env) (envOrigin env) (toInteger value) (envGasPrice env) (vmGasRemaining state) newAddress init
+  resultRemainingGas <- create (envBlock env) (callDepth state + 1) (envOwner env) (envOrigin env) (toInteger value) (envGasPrice env) (vmGasRemaining state) newAddress initCode
 
   let Address result = newAddress --TODO- check for failure, set result to 0 if failed
 
@@ -437,7 +435,7 @@ formatOp x = show x
 formatAddressWithoutColor::Address->String
 formatAddressWithoutColor (Address x) = padZeros 40 $ showHex x ""
 
-
+showHexU::Integer->[Char]
 showHexU = map toUpper . flip showHex ""
 
 runCode::Environment->VMState->Int->ContextM VMState
@@ -451,11 +449,9 @@ runCode env state c = do
   liftIO $ putStrLn $ "EVM [ eth | " ++ show (callDepth state) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc state)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining state) ++ " | " ++ show (vmGasRemaining result - vmGasRemaining state) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
   liftIO $ putStrLn $ "EVM [ eth ] "
   memByteString <- liftIO $ getMemAsByteString (memory result)
-  memSize <- liftIO $ getSizeInBytes $ memory result
   liftIO $ putStrLn "    STACK"
   liftIO $ putStr $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack result))
   liftIO $ putStr $ "    MEMORY\n" ++ showMem 0 (B.unpack $ memByteString)
-  cxt <- get
   liftIO $ putStrLn $ "    STORAGE"
   kvs <- getStorageKeyVals ""
   liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (rlpDecode $ rlpDeserialize $ rlpDecode v::Integer)) kvs)

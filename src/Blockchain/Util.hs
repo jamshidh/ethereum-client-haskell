@@ -60,7 +60,7 @@ showWord8 c | c >= 32 && c < 128 = w2c c
 showWord8 _ = '?'
 
 showMem::Int->[Word8]->String
-showMem p [] = "" 
+showMem _ [] = "" 
 showMem p (v1:v2:v3:v4:v5:v6:v7:v8:rest) = 
     padZeros 4 (showHex p "") ++ " " 
              ++ [showWord8 v1] ++ [showWord8 v2] ++ [showWord8 v3] ++ [showWord8 v4]

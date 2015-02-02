@@ -42,7 +42,7 @@ setNewMaxSize::VMState->Word256->IO VMState
 setNewMaxSize state newSize' = do
   --TODO- I should just store the number of words....  memory size can only be a multiple of words.
   --For now I will just use this hack to allocate to the nearest higher number of words.
-  let newSize = 32 * ceiling (fromIntegral newSize'/32)
+  let newSize = 32 * ceiling (fromIntegral newSize'/(32::Double))
   oldSize <- readIORef (mSize $ memory state)
   when (newSize > oldSize) $ do
     writeIORef (mSize $ memory state) newSize

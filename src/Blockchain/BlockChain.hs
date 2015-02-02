@@ -32,7 +32,6 @@ import Blockchain.Data.Transaction
 import Blockchain.DB.CodeDB
 import Blockchain.Database.MerklePatricia
 import Blockchain.DB.ModifyStateDB
-import qualified Blockchain.Colors as CL
 import Blockchain.Constants
 import Blockchain.ExtDBs
 import Blockchain.Format
@@ -40,8 +39,6 @@ import Blockchain.Data.GenesisBlock
 import Blockchain.SHA
 import Blockchain.VM
 import Blockchain.VM.Code
-import Blockchain.VM.Environment
-import Blockchain.VM.VMState
 
 --import Debug.Trace
 
