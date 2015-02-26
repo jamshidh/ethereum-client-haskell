@@ -12,6 +12,8 @@ module Blockchain.ExtDBs (
   stateDBGet,
   putKeyVal,
   getKeyVals,
+  keyExists,
+  deleteKey,
   deleteStorageKey,
   putStorageKeyVal,
   getStorageKeyVals
@@ -24,12 +26,14 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import qualified Database.LevelDB as DB
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Network.Haskoin.Internals
+--import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import qualified Data.NibbleString as N
-import Blockchain.SHA
 import Blockchain.Data.RLP
 import qualified Blockchain.Database.MerklePatricia as MP
+import Blockchain.SHA
+import Blockchain.Util
 
 import Blockchain.Context
 
@@ -99,6 +103,18 @@ getKeyVals key = do
   ctx <- get
   liftIO $ runResourceT $ MP.getKeyVals (stateDB ctx) key
 
+deleteKey::N.NibbleString->ContextM ()
+deleteKey key = do
+  ctx <- get
+  newStateDB <-
+    liftIO $ runResourceT $ MP.deleteKey (stateDB ctx) key
+  put ctx{stateDB=newStateDB}
+
+keyExists::N.NibbleString->ContextM Bool
+keyExists key = do
+  ctx <- get
+  liftIO $ runResourceT $ MP.keyExists (stateDB ctx) key
+
 deleteStorageKey::N.NibbleString->ContextM ()
 deleteStorageKey key = do
   ctx <- get
@@ -106,12 +122,17 @@ deleteStorageKey key = do
     liftIO $ runResourceT $ MP.deleteKey (storageDB ctx) key
   put ctx{storageDB=newStorageDB}
 
-putStorageKeyVal::N.NibbleString->RLPObject->ContextM ()
+putStorageKeyVal::Word256->Word256->ContextM ()
 putStorageKeyVal key val = do
   ctx <- get
   newStorageDB <-
-    liftIO $ runResourceT $ MP.putKeyVal (storageDB ctx) key val
-  liftIO $ putStrLn $ "storage state root is " ++ show (pretty $ MP.stateRoot newStorageDB)
+    liftIO $ runResourceT $
+         MP.putKeyVal (storageDB ctx)
+             (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes key)
+             (rlpEncode $ rlpSerialize $ rlpEncode $ toInteger val)
+
+    
+  --liftIO $ putStrLn $ "storage state root is " ++ show (pretty $ MP.stateRoot newStorageDB)
   put ctx{storageDB=newStorageDB}
 
 getStorageKeyVals::N.NibbleString->ContextM [(N.NibbleString, RLPObject)]

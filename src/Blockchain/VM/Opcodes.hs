@@ -8,6 +8,7 @@ import qualified Data.ByteString as B
 import Data.Functor
 import qualified Data.Map as M
 import Data.Maybe
+import Network.Haskoin.Internals
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Blockchain.Util
@@ -17,7 +18,7 @@ import Blockchain.Util
 data Operation = 
     STOP | ADD | MUL | SUB | DIV | SDIV | MOD | SMOD | ADDMOD | MULMOD | EXP | SIGNEXTEND | NEG | LT | GT | SLT | SGT | EQ | ISZERO | NOT | AND | OR | XOR | BYTE | SHA3 | 
     ADDRESS | BALANCE | ORIGIN | CALLER | CALLVALUE | CALLDATALOAD | CALLDATASIZE | CALLDATACOPY | CODESIZE | CODECOPY | GASPRICE | EXTCODESIZE | EXTCODECOPY |
-    PREVHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | POP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | 
+    BLOCKHASH | COINBASE | TIMESTAMP | NUMBER | DIFFICULTY | GASLIMIT | POP | MLOAD | MSTORE | MSTORE8 | SLOAD | SSTORE | 
     JUMP | JUMPI | PC | MSIZE | GAS | JUMPDEST | 
     PUSH [Word8] | 
     DUP1 | DUP2 | DUP3 | DUP4 |
@@ -91,7 +92,7 @@ opDatas =
     OPData 0x3b EXTCODESIZE 0 1 "Get size of an account's code.",
     OPData 0x3c EXTCODECOPY 0 4 "Copy an account’s code to memory",
 
-    OPData 0x40 PREVHASH 0 1 "Get hash of most recent complete block.",
+    OPData 0x40 BLOCKHASH 0 1 "Get hash of most recent complete block.",
     OPData 0x41 COINBASE 0 1 "Get the block’s coinbase address.",
     OPData 0x42 TIMESTAMP 0 1 "Get the block’s timestamp.",
     OPData 0x43 NUMBER 0 1 "Get the block’s number.",
@@ -181,12 +182,12 @@ opLen::Operation->Int
 opLen (PUSH x) = 1 + length x
 opLen _ = 1
 
-opCode2Op::B.ByteString->(Operation, Int)
+opCode2Op::B.ByteString->(Operation, Word256)
 opCode2Op rom | B.null rom = (STOP, 1) --according to the yellowpaper, should return STOP if outside of the code bytestring
 opCode2Op rom =
   let opcode = B.head rom in
   if opcode >= 0x60 && opcode <= 0x7f
-  then (PUSH $ B.unpack $ B.take (fromIntegral $ opcode-0x5F) $ B.tail rom, fromIntegral $ opcode - 0x5E)
+  then (PUSH $ B.unpack $ safeTake (fromIntegral $ opcode-0x5F) $ B.tail rom, fromIntegral $ opcode - 0x5E)
   else
 --    let op = fromMaybe (error $ "code is missing in code2OpMap: 0x" ++ showHex (B.head rom) "")
     let op = fromMaybe (MalformedOpcode opcode)

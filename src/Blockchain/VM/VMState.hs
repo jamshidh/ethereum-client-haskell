@@ -15,11 +15,13 @@ import Data.IORef
 import Data.Word
 
 
+import Blockchain.Data.Address
+import Blockchain.Data.Log
 import Blockchain.ExtWord
 import Blockchain.Format
 import Blockchain.VM.Code
 
-data VMException = OutOfGasException | StackTooSmallException | VMException String | MalformedOpcodeException deriving (Show)
+data VMException = OutOfGasException | StackTooSmallException | VMException String | MalformedOpcodeException | DivByZeroException | InsufficientFunds | InvalidJump deriving (Show)
 
 addErr::String->Code->VMState->IO VMState
 addErr message c state = do
@@ -43,15 +45,17 @@ newMemory = do
 data VMState =
   VMState {
     vmGasRemaining::Integer,
-    pc::Int,
+    pc::Word256,
     memory::Memory,
     stack::[Word256],
     callDepth::Int,
     refund::Integer,
     
-    markedForSuicide::Bool,
+    suicideList::[Address],
     done::Bool,
     returnVal::Maybe B.ByteString,
+
+    logs::[Log],
     
     vmException::Maybe VMException
     }
@@ -78,7 +82,8 @@ startingState = do
                memory=m, 
                callDepth=0,
                refund=0,
-               markedForSuicide=False 
+               logs=[],
+               suicideList=[]
              }
 
 {-

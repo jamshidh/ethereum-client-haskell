@@ -48,7 +48,7 @@ instance Format Transaction where
       "to: " ++ show (pretty to') ++ "\n" ++
       "value: " ++ show v ++ "\n" ++
       "tData: " ++ tab ("\n" ++ format d) ++ "\n")
-  format ContractCreationTX{tNonce=n, gasPrice=gp, tGasLimit=gl, value=v, tInit=Code init'} =
+  format ContractCreationTX{tNonce=n, gasPrice=gp, tGasLimit=gl, value=v, tInit=Code init' _} =
     CL.blue "Contract Creation Transaction" ++
     tab (
       "\n" ++
@@ -59,8 +59,7 @@ instance Format Transaction where
       "tInit: " ++ tab (format init') ++ "\n")
 
 instance RLPSerializable Transaction where
-  rlpDecode (RLPArray [n, gp, gl, RLPString "", val, i]) =
-  --rlpDecode (RLPArray [n, gp, gl, toAddr, val, i]) | rlpDecode toAddr == (0::Integer) && not (null $ (rlpDecode i::String)) =
+  rlpDecode (RLPArray [n, gp, gl, RLPString "", val, i]) = --Note- Address 0 /= Address 000000....  Only Address 0 yields a ContractCreationTX
     ContractCreationTX {
       tNonce = rlpDecode n,
       gasPrice = rlpDecode gp,
@@ -104,5 +103,5 @@ codeOrDataLength ContractCreationTX{tInit=d} = codeLength d
 
 zeroBytesLength::Transaction->Int
 zeroBytesLength MessageTX{tData=d} = length $ filter (==0) $ B.unpack d
-zeroBytesLength ContractCreationTX{tInit=Code d} = length $ filter (==0) $ B.unpack d
+zeroBytesLength ContractCreationTX{tInit=Code d _} = length $ filter (==0) $ B.unpack d
 

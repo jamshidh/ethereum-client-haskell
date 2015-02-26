@@ -5,7 +5,9 @@ module Blockchain.Data.AddressState (
   blankAddressState,
   getAddressState,
   getAllAddressStates,
-  putAddressState
+  putAddressState,
+  deleteAddressState,
+  addressStateExists
   ) where
 
 import Data.Binary
@@ -41,6 +43,7 @@ instance Format AddressState where
                  "\ncodeHash: " ++ show (pretty $ codeHash a))
   
 instance RLPSerializable AddressState where
+  --rlpEncode a | balance a < 0 = rlpEncode a{balance = - balance a}
   rlpEncode a | balance a < 0 = error $ "Error in cal to rlpEncode for AddressState: AddressState has negative balance: " ++ format a
   rlpEncode a = RLPArray [
     rlpEncode $ toInteger $ addressStateNonce a,
@@ -65,7 +68,9 @@ getAddressState::Address->ContextM AddressState
 getAddressState address = do
   states <- getKeyVals $ addressAsNibbleString address
   case states of
-    [] -> return blankAddressState
+    [] -> do
+      putAddressState address blankAddressState
+      return blankAddressState
     [state] -> return $ rlpDecode $ rlpDeserialize $ rlpDecode $ snd state
     _ -> error ("getAddressStates found multiple states for: " ++ show (pretty address) ++ "\n" ++ intercalate "\n" (show . pretty <$> states))
   
@@ -73,11 +78,19 @@ getAddressState address = do
 getAllAddressStates::ContextM [(N.NibbleString, AddressState)]
 getAllAddressStates = do
   states <- getKeyVals ""
-  return $ fmap rlpDecode <$> states
+  return $ fmap (rlpDecode . rlpDeserialize . rlpDecode) <$> states
 
   
 
 putAddressState::Address->AddressState->ContextM ()
 putAddressState address newState = 
   putKeyVal (addressAsNibbleString address) $ rlpEncode $ rlpSerialize $ rlpEncode newState
+
+deleteAddressState::Address->ContextM ()
+deleteAddressState address = 
+  deleteKey (addressAsNibbleString address)
+
+addressStateExists::Address->ContextM Bool
+addressStateExists address = 
+  keyExists (addressAsNibbleString address)
 

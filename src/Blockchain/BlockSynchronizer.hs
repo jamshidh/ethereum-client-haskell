@@ -14,6 +14,7 @@ import Data.Maybe
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Network.Simple.TCP
+import Network.Socket (Socket)
 
 import Blockchain.Data.Block
 import Blockchain.BlockChain

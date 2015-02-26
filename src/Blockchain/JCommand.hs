@@ -129,7 +129,7 @@ jCommand2Op (While cond code) = do
     before <- getUnique "before"
     compiledCode <- j code
     return $ [LABEL before] ++ pushBoolVal cond ++ [ISZERO, PUSHLABEL after, JUMPI] ++ compiledCode ++ [PUSHLABEL before, JUMP] ++ [LABEL after]
-jCommand2Op (ReturnCode (Code codeBytes)) = do
+jCommand2Op (ReturnCode (Code codeBytes _)) = do
   codeBegin <- getUnique "begin"
   codeEnd <- getUnique "end"
   return $ 

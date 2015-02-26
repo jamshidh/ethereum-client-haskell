@@ -8,7 +8,9 @@ module Blockchain.Util (
   word256ToBytes,
   padZeros,
   tab,
-  showMem
+  showMem,
+  safeDrop,
+  safeTake
   ) where
 
 import Data.Bits
@@ -69,3 +71,15 @@ showMem p (v1:v2:v3:v4:v5:v6:v7:v8:rest) =
              ++ padZeros 2 (showHex v5 "") ++ " " ++ padZeros 2 (showHex v6 "") ++ " " ++ padZeros 2 (showHex v7 "") ++ " " ++ padZeros 2 (showHex v8 "") ++ "\n"
              ++ showMem (p+8) rest
 showMem p x = padZeros 4 (showHex p "") ++ " " ++ (showWord8 <$> x) ++ " " ++ intercalate " " (padZeros 2 <$> flip showHex "" <$> x)
+
+
+safeTake::Word256->B.ByteString->B.ByteString
+safeTake i _ | i > 0x7fffffffffffffff = error "error in call to safeTake: string too long"
+safeTake i s | i > fromIntegral (B.length s) = s `B.append` B.replicate (fromIntegral i - B.length s) 0
+safeTake i s = B.take (fromIntegral i) s
+
+safeDrop::Word256->B.ByteString->B.ByteString
+safeDrop i s | i > fromIntegral (B.length s) = B.empty
+safeDrop i _ | i > 0x7fffffffffffffff = error "error in call to safeDrop: string too long"
+safeDrop i s = B.drop (fromIntegral i) s
+

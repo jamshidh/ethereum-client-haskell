@@ -10,17 +10,17 @@ import Control.Monad.Trans.Resource
 import Data.Bits
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
---import Data.Functor
+import Data.Functor
 import Data.Time.Clock
 import Data.Word
 import Network.Haskoin.Crypto hiding (Address)
-import Network.Socket (socketToHandle)
+import Network.Simple.TCP
+import Network.Socket (Socket, socketToHandle)
 --import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import System.Entropy
 import System.Environment
 import System.IO
 
-import Network.Simple.TCP
 
 import Blockchain.Data.RLP
 
@@ -30,16 +30,16 @@ import Blockchain.Communication
 import Blockchain.Constants
 import Blockchain.Context
 import Blockchain.Data.Address
---import Data.AddressState
+import Blockchain.Data.AddressState
 import Blockchain.Data.Block
---import Data.SignedTransaction
---import Data.Transaction
+import Blockchain.Data.SignedTransaction
+import Blockchain.Data.Transaction
 import Blockchain.Data.Wire
 import Blockchain.Database.MerklePatricia
 import Blockchain.Display
 import Blockchain.DB.ModifyStateDB
 import Blockchain.PeerUrls
---import SampleTransactions
+import Blockchain.SampleTransactions
 import Blockchain.SHA
 import Blockchain.Util
 
@@ -135,8 +135,10 @@ handlePayload socket payload = do
       addBlocks [block]
       ifBlockInDBSubmitNextBlock socket baseDifficulty block
 
-    Status{latestHash=lh} ->
-        handleNewBlockHashes socket [lh]
+    Status{latestHash=lh, genesisHash=gh} -> do
+      genesisBlockHash <- getGenesisBlockHash
+      when (gh /= genesisBlockHash) $ error "Wrong genesis block hash!!!!!!!!"
+      handleNewBlockHashes socket [lh]
     GetTransactions -> do
       sendMessage socket $ Transactions []
       --liftIO $ sendMessage socket GetTransactions
@@ -167,14 +169,13 @@ mkHello::IO Message
 mkHello = do
   peerId <- getEntropy 64
   return Hello {
-               version = fromIntegral shhVersion,
+               version = 3,
                clientId = "Ethereum(G)/v0.6.4//linux/Haskell",
                capability = [ETH ethVersion, SHH shhVersion],
                port = 30303,
                nodeId = fromIntegral $ byteString2Integer peerId
              }
 
-{-
 createTransaction::Transaction->ContextM SignedTransaction
 createTransaction t = do
     userNonce <- addressStateNonce <$> getAddressState (prvKey2Address prvKey)
@@ -185,7 +186,6 @@ createTransactions transactions = do
     userNonce <- addressStateNonce <$> getAddressState (prvKey2Address prvKey)
     forM (zip transactions [userNonce..]) $ \(t, n) -> do
       liftIO $ withSource devURandom $ signTransaction prvKey t{tNonce=n}
--}
 
 doit::Socket->ContextM ()
 doit socket = do
@@ -195,7 +195,7 @@ doit socket = do
   --signedTx <- createTransaction simpleTX
   --signedTx <- createTransaction outOfGasTX
   --signedTx <- createTransaction simpleStorageTX
-  --signedTx <- createTransaction createContractTX
+  signedTx <- createTransaction createContractTX
   --signedTx <- createTransaction sendMessageTX
 
   --signedTx <- createTransaction createContractTX
@@ -207,7 +207,7 @@ doit socket = do
   --liftIO $ print $ whoSignedThisTransaction signedTx
 
                 
-  --liftIO $ sendMessage socket $ Transactions [signedTx]
+  sendMessage socket $ Transactions [signedTx]
 
   --signedTxs <- createTransactions [createMysteryContract]
   --liftIO $ sendMessage socket $ Transactions signedTxs

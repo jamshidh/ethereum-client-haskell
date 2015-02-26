@@ -4,9 +4,11 @@ module Blockchain.BlockChain (
   nextDifficulty,
   addBlock,
   addBlocks,
+  addTransaction,
   getBestBlock,
   getBestBlockHash,
-  getGenesisBlockHash
+  getGenesisBlockHash,
+  runCodeForTransaction
   ) where
 
 import Control.Monad
@@ -29,8 +31,9 @@ import Blockchain.Data.Block
 import Blockchain.Data.RLP
 import Blockchain.Data.SignedTransaction
 import Blockchain.Data.Transaction
-import Blockchain.DB.CodeDB
 import Blockchain.Database.MerklePatricia
+import Blockchain.Debug
+import Blockchain.DB.CodeDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.Constants
 import Blockchain.ExtDBs
@@ -39,8 +42,9 @@ import Blockchain.Data.GenesisBlock
 import Blockchain.SHA
 import Blockchain.VM
 import Blockchain.VM.Code
+import Blockchain.VM.VMState
 
---import Debug.Trace
+import Debug.Trace
 
 {-
 initializeBlockChain::ContextM ()
@@ -78,14 +82,16 @@ verifyStateRootExists b = do
     Nothing -> return False
     Just _ -> return True
 
+fail' x = trace x $ error x
+
 checkParentChildValidity::(Monad m)=>Block->Block->m ()
 checkParentChildValidity Block{blockData=c} Block{blockData=p} = do
     unless (difficulty c == nextDifficulty (difficulty p) (timestamp p) ( timestamp c))
-             $ fail $ "Block difficulty is wrong: got '" ++ show (difficulty c) ++ "', expected '" ++ show (nextDifficulty (difficulty p) (timestamp p) ( timestamp c)) ++ "'"
+             $ fail' $ "Block difficulty is wrong: got '" ++ show (difficulty c) ++ "', expected '" ++ show (nextDifficulty (difficulty p) (timestamp p) ( timestamp c)) ++ "'"
     unless (number c == number p + 1) 
-             $ fail $ "Block number is wrong: got '" ++ show (number c) ++ ", expected '" ++ show (number p + 1) ++ "'"
+             $ fail' $ "Block number is wrong: got '" ++ show (number c) ++ ", expected '" ++ show (number p + 1) ++ "'"
     unless (gasLimit c == nextGasLimit (gasLimit p) (gasUsed p))
-             $ fail $ "Block gasLimit is wrong: got '" ++ show (gasLimit c) ++ "', expected '" ++ show (nextGasLimit (gasLimit p) (gasUsed p)) ++ "'"
+             $ fail' $ "Block gasLimit is wrong: got '" ++ show (gasLimit c) ++ "', expected '" ++ show (nextGasLimit (gasLimit p) (gasUsed p)) ++ "'"
     return ()
 
 checkValidity::Monad m=>Block->ContextM (m ())
@@ -94,12 +100,12 @@ checkValidity b = do
   case maybeParentBlock of
     Just parentBlock -> do
           checkParentChildValidity b parentBlock
-          unless (nonceIsValid b) $ fail $ "Block nonce is wrong: " ++ format b
-          unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"
+          unless (nonceIsValid b) $ fail' $ "Block nonce is wrong: " ++ format b
+          unless (checkUnclesHash b) $ fail' "Block unclesHash is wrong"
           stateRootExists <- verifyStateRootExists b
-          unless stateRootExists $ fail ("Block stateRoot does not exist: " ++ show (pretty $ bStateRoot $ blockData b))
+          unless stateRootExists $ fail' ("Block stateRoot does not exist: " ++ show (pretty $ bStateRoot $ blockData b))
           return $ return ()
-    Nothing -> fail ("Parent Block does not exist: " ++ show (pretty $ parentHash $ blockData b))
+    Nothing -> fail' ("Parent Block does not exist: " ++ show (pretty $ parentHash $ blockData b))
 
 
 {-
@@ -109,43 +115,58 @@ checkValidity b = do
 -}
 
 
-runCodeForTransaction::Block->Integer->SignedTransaction->ContextM ()
-runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@ContractCreationTX{}} = do
-  let tAddr = whoSignedThisTransaction t
-  liftIO $ putStrLn "runCodeForTransaction: ContractCreationTX"
-
-  let newAddress = getNewAddress tAddr $ tNonce $ unsignedTransaction t
+runCodeForTransaction::Block->Integer->Address->Transaction->ContextM VMState
+runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
+  when debug $ liftIO $ putStrLn "runCodeForTransaction: ContractCreationTX"
 
   --Create the new account
+  let newAddress = getNewAddress tAddr $ tNonce ut
   putAddressState newAddress blankAddressState
+  pay "transfer value1" tAddr newAddress (value ut)
 
-  pay "pre-VM fees" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
+  addressState <- getAddressState tAddr
 
-  resultRemainingGas <- create b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas newAddress (tInit ut)
+  if availableGas*gasPrice ut < balance addressState
+    then do
+    pay "pre-VM fees1" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
 
-  liftIO $ putStrLn $ "gasRemaining: " ++ show resultRemainingGas
-  pay "VM refund fees" tAddr (coinbase $ blockData b) (-resultRemainingGas * gasPrice ut)
+    newVMState <- create b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas newAddress (tInit ut)
 
-  return ()
+    qqqq <- getAddressState newAddress
+    liftIO $ putStrLn $ "qqqqqqqqqqqqlllllll " ++ format qqqq
+    
+-----------------
+    
+    return newVMState
+    else do
+    liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*gasPrice ut) ++ ", have " ++ show (balance addressState)
+    return VMState{vmException=Just InsufficientFunds, logs=[]}
+    
+runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
+  when debug $ liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ to ut)
+  
+  addressState <- getAddressState tAddr
+  
+  success <- pay "transfer value2" tAddr (to ut) (value ut)
 
+  if not success
+    then return VMState{vmException=Just InsufficientFunds, logs=[]}
+    else 
+    if availableGas*gasPrice ut <= balance addressState
+    then do
+      recipientAddressState <- getAddressState (to ut)
+      contractCode <- fromMaybe B.empty <$> getCode (codeHash recipientAddressState)
 
+      pay "pre-VM fees2" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
 
-runCodeForTransaction b availableGas t@SignedTransaction{unsignedTransaction=ut@MessageTX{}} = do
-  let tAddr = whoSignedThisTransaction t
-  liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ to ut)
+      newVMState <- runCodeForTransaction' b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas (to ut) (bytes2Code contractCode) (tData ut)
+-------------------------
 
-  recipientAddressState <- getAddressState (to ut)
-
-  contractCode <- fromMaybe B.empty <$> getCode (codeHash recipientAddressState)
-
-  pay "pre-VM fees" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
-
-  (_, resultRemainingGas) <- runCodeForTransaction' b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas (to ut) (Code contractCode) (tData ut)
-
-  liftIO $ putStrLn $ "gasRemaining: " ++ show resultRemainingGas
-  pay "VM refund fees" tAddr (coinbase $ blockData b) (-resultRemainingGas * gasPrice ut)
-
-  return ()
+      return newVMState
+    
+    else do
+      liftIO $ putStrLn "Insufficient funds to run the VM"
+      return VMState{vmException=Just InsufficientFunds, logs=[]}
 
 addBlocks::[Block]->ContextM ()
 addBlocks blocks = 
@@ -162,33 +183,76 @@ intrinsicGas t = zeroLen + 5 * (fromIntegral (codeOrDataLength t) - zeroLen) + 5
       zeroLen = fromIntegral $ zeroBytesLength t
 --intrinsicGas t@ContractCreationTX{} = 5 * (fromIntegral (codeOrDataLength t)) + 500
 
-addTransaction::Block->SignedTransaction->ContextM ()
-addTransaction b t@SignedTransaction{unsignedTransaction=ut} = do
-  liftIO $ putStrLn "adding to nonces"
+addTransaction::Block->Integer->SignedTransaction->ContextM (VMState, Integer)
+addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} = do
+  valid <- isTransactionValid t
+
   let signAddress = whoSignedThisTransaction t
-  incrementNonce signAddress
-  liftIO $ putStrLn "paying value to recipient"
 
   let intrinsicGas' = intrinsicGas ut
-  liftIO $ putStrLn $ "intrinsicGas: " ++ show (intrinsicGas')
-  --TODO- return here if not enough gas
-  --liftIO $ putStrLn $ "Paying " ++ show (intrinsicGas' * gasPrice ut) ++ " from " ++ show (pretty signAddress) ++ " to " ++ show (pretty $ coinbase $ blockData b)
-  pay "intrinsic gas payment" signAddress (coinbase $ blockData b) (intrinsicGas' * gasPrice ut)
+  when debug $
+    liftIO $ putStrLn $ "intrinsicGas: " ++ show (intrinsicGas')
 
-  liftIO $ putStrLn "running code"
-  runCodeForTransaction b (tGasLimit ut - intrinsicGas') t
+  addressState <- getAddressState signAddress
 
-addTransactions::Block->[SignedTransaction]->ContextM ()
-addTransactions _ [] = return ()
-addTransactions b (t:rest) = do
-  valid <- isTransactionValid t
+  if (tGasLimit ut * gasPrice ut + value ut <= balance addressState) &&
+     (intrinsicGas' <= tGasLimit ut) &&
+     (tGasLimit ut <= remainingBlockGas) &&
+     valid
+    then do
+    incrementNonce signAddress
+    pay "intrinsic gas payment" signAddress (coinbase $ blockData b) (intrinsicGas' * gasPrice ut)
+    when debug $ liftIO $ putStrLn "running code"
+
+    let tAddr = whoSignedThisTransaction t
+
+    newVMState <- runCodeForTransaction b (tGasLimit ut - intrinsicGas') tAddr ut
+
+    when debug $
+      liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining newVMState)
+
+    coinbaseAddressState <- getAddressState (coinbase $ blockData b)
+
+    let realRefund =
+          min (refund newVMState) ((tGasLimit ut - vmGasRemaining newVMState) `div` 2)
+
+    when debug $ liftIO $ do
+      putStrLn $ "full refund: " ++ show (refund newVMState)
+      putStrLn $ "half spent: " ++ show ((tGasLimit ut - vmGasRemaining newVMState) `div` 2)
+      putStrLn $ "realRefund: " ++ show realRefund
+
+    when (isNothing . vmException $ newVMState) $ do
+      success <- pay "VM refund fees" (coinbase $ blockData b) tAddr ((realRefund + vmGasRemaining newVMState) * gasPrice ut)
+      when (not success) $ error "coinbase doesn't have enough funds to refund the user"
+    return (newVMState, tGasLimit ut - realRefund - vmGasRemaining newVMState)
+    else do
+    return
+      (
+        VMState{
+           vmException=Just InsufficientFunds,
+           logs=[],
+           vmGasRemaining=error "undefined vmGasRemaining",
+           pc=error "undefined pc",
+           memory=error "undefined memory"
+           },
+        0
+      )
+
+    
+addTransactions::Block->Integer->[SignedTransaction]->ContextM ()
+addTransactions _ _ [] = return ()
+addTransactions b blockGas (t@SignedTransaction{unsignedTransaction=ut}:rest) = do
   liftIO $ putStrLn $ "Coinbase: " ++ show (pretty $ coinbase $ blockData b)
   liftIO $ putStrLn $ "Transaction signed by: " ++ show (pretty $ whoSignedThisTransaction t)
   addressState <- getAddressState $ whoSignedThisTransaction t
-  liftIO $ putStrLn $ "User balance: " ++ show (balance $ addressState)
-  liftIO $ putStrLn $ "Transaction is valid: " ++ show valid
-  when valid $ addTransaction b t
-  addTransactions b rest
+  liftIO $ do
+    putStrLn $ "User balance: " ++ show (balance $ addressState)
+    putStrLn $ "tGasLimit ut: " ++ show (tGasLimit ut)
+    putStrLn $ "blockGas: " ++ show blockGas
+  
+  (_, remainingBlockGas) <- addTransaction b blockGas t
+
+  addTransactions b remainingBlockGas rest
   
 addBlock::Block->ContextM ()
 addBlock b@Block{blockData=bd, blockUncles=uncles} = do
@@ -208,10 +272,13 @@ addBlock b@Block{blockData=bd, blockUncles=uncles} = do
                           addToBalance (coinbase uncle) (rewardBase*15 `quot` 16)
 
       let transactions = receiptTransactions b
-      addTransactions b transactions
+      addTransactions b (gasLimit $ blockData b) transactions
 
       ctx <- get
       liftIO $ putStrLn $ "newStateRoot: " ++ show (pretty $ stateRoot $ stateDB ctx)
+
+      when (bStateRoot (blockData b) /= stateRoot (stateDB ctx)) $ do
+        fail' $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ show (pretty $ bStateRoot $ blockData b)
 
       valid <- checkValidity b
       case valid of

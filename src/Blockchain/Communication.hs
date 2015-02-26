@@ -8,6 +8,7 @@ import Data.Binary.Put
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Network.Simple.TCP
+import Network.Socket (Socket)
 
 import Blockchain.Data.RLP
 

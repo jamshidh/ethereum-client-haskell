@@ -44,6 +44,7 @@ executable ethereumH
                  , network-simple
                  , nibblestring
                  , resourcet
+                 , SHA2
                  , time
                  , transformers
                  , vector
@@ -59,6 +60,7 @@ executable ethereumH
                    Blockchain.Data.Address
                    Blockchain.Data.AddressState
                    Blockchain.Data.Block
+                   Blockchain.Data.Log
                    Blockchain.Data.GenesisBlock
                    Blockchain.Data.Peer
                    Blockchain.Data.SignedTransaction
@@ -112,6 +114,7 @@ library
                  , network-simple
                  , nibblestring
                  , resourcet
+                 , SHA2
                  , time
                  , transformers
                  , vector
@@ -126,6 +129,7 @@ library
                    Blockchain.Data.Address
                    Blockchain.Data.AddressState
                    Blockchain.Data.Block
+                   Blockchain.Data.Log
                    Blockchain.Data.GenesisBlock
                    Blockchain.Data.Peer
                    Blockchain.Data.SignedTransaction
@@ -186,8 +190,6 @@ executable queryEth
     other-modules:
                    Block
                    Code
-                   Decompile1
-                   Decompile2
                    DumpLevelDB
                    Init
                    Raw
