@@ -132,8 +132,6 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
 
     newVMState <- create b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas newAddress (tInit ut)
 
-    qqqq <- getAddressState newAddress
-    liftIO $ putStrLn $ "qqqqqqqqqqqqlllllll " ++ format qqqq
     
 -----------------
     
@@ -223,7 +221,7 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
 
     when (isNothing . vmException $ newVMState) $ do
       success <- pay "VM refund fees" (coinbase $ blockData b) tAddr ((realRefund + vmGasRemaining newVMState) * gasPrice ut)
-      when (not success) $ error "coinbase doesn't have enough funds to refund the user"
+      when (not success) $ fail' "coinbase doesn't have enough funds to refund the user"
     return (newVMState, tGasLimit ut - realRefund - vmGasRemaining newVMState)
     else do
     return
@@ -231,9 +229,9 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
         VMState{
            vmException=Just InsufficientFunds,
            logs=[],
-           vmGasRemaining=error "undefined vmGasRemaining",
-           pc=error "undefined pc",
-           memory=error "undefined memory"
+           vmGasRemaining=fail' "undefined vmGasRemaining",
+           pc=fail' "undefined pc",
+           memory=fail' "undefined memory"
            },
         0
       )
@@ -283,7 +281,7 @@ addBlock b@Block{blockData=bd, blockUncles=uncles} = do
       valid <- checkValidity b
       case valid of
         Right () -> return ()
-        Left err -> error err
+        Left err -> fail' err
       let bytes = rlpSerialize $ rlpEncode b
       blockDBPut (BL.toStrict $ encode $ blockHash b) bytes
       replaceBestIfBetter b
@@ -306,7 +304,7 @@ getBestBlock::ContextM Block
 getBestBlock = do
   bestBlockHash <- getBestBlockHash
   bestBlock <- getBlock bestBlockHash
-  return $ fromMaybe (error $ "Missing block in database: " ++ show (pretty bestBlockHash)) bestBlock
+  return $ fromMaybe (fail' $ "Missing block in database: " ++ show (pretty bestBlockHash)) bestBlock
       
 
 replaceBestIfBetter::Block->ContextM ()
