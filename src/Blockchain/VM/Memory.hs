@@ -37,7 +37,7 @@ safeRead mem x = do
 
 --Word256 is too big to use for [first..first+size-1], so use safeRange instead
 safeRange::Word256->Word256->[Word256]
-safeRange first 0 = []
+safeRange _ 0 = []
 safeRange first size = first:safeRange (first+1) (size-1)
 
 hasException::VMState->Bool
@@ -108,7 +108,7 @@ mLoad8 state p = do
   safeRead (mVector $ memory state) (fromIntegral p)
 
 mLoadByteString::VMState->Word256->Word256->IO (VMState, B.ByteString)
-mLoadByteString state p 0 = return (state, B.empty) --no need to charge for mem change if nothing returned
+mLoadByteString state _ 0 = return (state, B.empty) --no need to charge for mem change if nothing returned
 mLoadByteString state p size = do
   state' <- setNewMaxSize state (fromIntegral p+fromIntegral size)
   if not . hasException $ state'
