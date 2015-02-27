@@ -462,7 +462,6 @@ runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffse
     (False, _) -> return state'{stack=0:rest}
     (_, True) -> return state{stack=0:rest, vmException=Just InsufficientFunds}
     _ -> do
-      liftIO $ putStrLn "qqqqqqqqqqqqqqqqqqqqqqqqqqqq"
       (state'', retValue) <- nestedRun env state'{stack=rest} gas (Address $ fromIntegral to) (envOwner env) value inputData
 
       state''' <-
@@ -686,9 +685,6 @@ runCodeFromStart callDepth' gasLimit' env = do
 
   -- coinbaseState <- getAddressState (coinbase $ blockData $ envBlock env)
 
-  --liftIO $ putStrLn $ "1qqqqqqqqqqqqqqqqqqqqqqq: " ++ show (balance coinbaseState)
-  --liftIO $ putStrLn $ "1qqqqqqqqqqqqqqqqqqqqqqq: " ++ show (refund state')
-
   --when (balance coinbaseState >= refund state') $
   when (isNothing $ vmException state') $
     putAddressState (envOwner env) addressState{contractRoot=newStorageStateRoot}
@@ -766,11 +762,9 @@ create b callDepth' sender origin value' gasPrice' availableGas newAddress init'
     Just result -> do
       if 5*toInteger (B.length result) < vmGasRemaining vmState
         then do 
-        liftIO $ putStrLn $ " qqqqqqqqqqqq adding code: " ++ show result
         addCode result
         newAddressExists <- addressStateExists newAddress
         when newAddressExists $ do
-          liftIO $ putStrLn $ " qqqqqqqqqqqq adding code hash: " ++ show (hash result)
           addressState <- getAddressState newAddress
           putAddressState newAddress addressState{codeHash=hash result}
         --pay "fee for size of new contract" origin (coinbase $ blockData b) (5*toInteger (B.length result))
@@ -834,7 +828,6 @@ nestedRun env state gas address sender value inputData = do
 
   if theBalance < fromIntegral value
     then do
-    liftIO $ putStrLn "qqqqqqqqqqqqfail"
     return (state{stack=0:stack state}, Nothing)
     else do
       pay "nestedRun fees" (envOwner env) address (fromIntegral value)
