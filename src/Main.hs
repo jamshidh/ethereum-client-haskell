@@ -36,6 +36,7 @@ import Blockchain.Data.SignedTransaction
 import Blockchain.Data.Transaction
 import Blockchain.Data.Wire
 import Blockchain.Database.MerklePatricia
+import Blockchain.DB.CodeDB
 import Blockchain.Display
 import Blockchain.DB.ModifyStateDB
 import Blockchain.PeerUrls
@@ -189,13 +190,14 @@ createTransactions transactions = do
 
 doit::Socket->ContextM ()
 doit socket = do
+  addCode B.empty --This is probably a bad place to do this, but I can't think of a more natural place to do it....  Empty code is used all over the place, and it needs to be in the database.
   sendMessage socket =<< (liftIO mkHello)
   (setStateRoot . bStateRoot . blockData) =<< getBestBlock
 
   --signedTx <- createTransaction simpleTX
   --signedTx <- createTransaction outOfGasTX
   --signedTx <- createTransaction simpleStorageTX
-  signedTx <- createTransaction createContractTX
+  --signedTx <- createTransaction createContractTX
   --signedTx <- createTransaction sendMessageTX
 
   --signedTx <- createTransaction createContractTX
@@ -207,7 +209,7 @@ doit socket = do
   --liftIO $ print $ whoSignedThisTransaction signedTx
 
                 
-  sendMessage socket $ Transactions [signedTx]
+  --sendMessage socket $ Transactions [signedTx]
 
   --signedTxs <- createTransactions [createMysteryContract]
   --liftIO $ sendMessage socket $ Transactions signedTxs
