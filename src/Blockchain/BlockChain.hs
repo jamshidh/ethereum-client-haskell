@@ -24,6 +24,7 @@ import Data.Time
 import Data.Time.Clock.POSIX
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
+import qualified Blockchain.Colors as C
 import Blockchain.Context
 import Blockchain.Data.Address
 import Blockchain.Data.AddressState
@@ -222,8 +223,9 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
     when (isNothing . vmException $ newVMState) $ do
       success <- pay "VM refund fees" (coinbase $ blockData b) tAddr ((realRefund + vmGasRemaining newVMState) * gasPrice ut)
       when (not success) $ fail' "coinbase doesn't have enough funds to refund the user"
-    return (newVMState, tGasLimit ut - realRefund - vmGasRemaining newVMState)
+    return (newVMState, remainingBlockGas - (tGasLimit ut - realRefund - vmGasRemaining newVMState))
     else do
+    liftIO $ putStrLn $ C.red "Insertion of transaction failed!"
     return
       (
         VMState{
@@ -240,6 +242,7 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
 addTransactions::Block->Integer->[SignedTransaction]->ContextM ()
 addTransactions _ _ [] = return ()
 addTransactions b blockGas (t@SignedTransaction{unsignedTransaction=ut}:rest) = do
+  liftIO $ putStrLn "=========================================="
   liftIO $ putStrLn $ "Coinbase: " ++ show (pretty $ coinbase $ blockData b)
   liftIO $ putStrLn $ "Transaction signed by: " ++ show (pretty $ whoSignedThisTransaction t)
   addressState <- getAddressState $ whoSignedThisTransaction t
@@ -249,6 +252,8 @@ addTransactions b blockGas (t@SignedTransaction{unsignedTransaction=ut}:rest) = 
     putStrLn $ "blockGas: " ++ show blockGas
   
   (_, remainingBlockGas) <- addTransaction b blockGas t
+
+  liftIO $ putStrLn $ "remainingBlockGas: " ++ show remainingBlockGas
 
   addTransactions b remainingBlockGas rest
   
