@@ -583,11 +583,10 @@ opGasPrice VMState{ stack=p:val:_ } SSTORE = do
             [] -> 0::Word256
             [x] -> fromInteger $ rlpDecode $ snd x
             _ -> error "multiple values in storage"
-  return $
-    case (oldVal, val) of
-      (0, x) | x /= 0 -> (300, 0)
-      (x, 0) | x /= 0 -> (0, 100)
-      _ -> (100, 0)
+  case (oldVal, val) of
+      (0, x) | x /= 0 -> return (300, 0)
+      (x, 0) | x /= 0 -> return (0, 100)
+      _ -> return (100, 0)
 opGasPrice _ _ = return (1, 0)
 
 --missing stuff
@@ -869,6 +868,15 @@ nestedRun env state gas address sender value inputData = do
                 Nothing -> 1
                 _ -> 0
 
-      return (state{logs=logs nestedState ++ logs state, stack=success:stack state, vmGasRemaining = vmGasRemaining state - usedGas}, Just retVal)
+      return
+        (
+          state{
+             logs=logs nestedState ++ logs state,
+             stack=success:stack state,
+             vmGasRemaining = vmGasRemaining state - usedGas,
+             refund= refund state + refund nestedState
+             },
+          Just retVal
+        )
 
 
