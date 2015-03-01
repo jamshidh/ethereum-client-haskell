@@ -8,7 +8,7 @@ import Data.Binary.Put
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Network.Simple.TCP
-import Network.Socket (Socket)
+import System.IO
 
 import Blockchain.Data.RLP
 
@@ -24,12 +24,12 @@ ethereumHeader payload = do
 
     
 
-sendCommand::Socket->B.ByteString->IO ()
-sendCommand socket payload = do
+sendCommand::Handle->B.ByteString->IO ()
+sendCommand handle payload = do
   let theData2 = runPut $ ethereumHeader payload
-  send socket $ B.concat $ BL.toChunks theData2
+  BL.hPut handle theData2
 
-sendMessage::Socket->Message->ContextM ()
-sendMessage socket msg = do
+sendMessage::Handle->Message->ContextM ()
+sendMessage handle msg = do
   displayMessage True msg
-  liftIO $ sendCommand socket $ rlpSerialize $ wireMessage2Obj msg
+  liftIO $ sendCommand handle $ rlpSerialize $ wireMessage2Obj msg

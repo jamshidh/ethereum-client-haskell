@@ -89,28 +89,28 @@ getNextBlock b ts = do
     bd = blockData b
 
 
-submitNextBlock::Socket->Integer->Block->ContextM ()
-submitNextBlock socket baseDifficulty b = do
+submitNextBlock::Handle->Integer->Block->ContextM ()
+submitNextBlock handle baseDifficulty b = do
         ts <- liftIO getCurrentTime
         newBlock <- getNextBlock b ts
         n <- liftIO $ fastFindNonce newBlock
 
         --let theBytes = headerHashWithoutNonce newBlock `B.append` B.pack (integer2Bytes n)
         let theNewBlock = addNonceToBlock newBlock n
-        sendMessage socket $ NewBlockPacket theNewBlock (baseDifficulty + difficulty (blockData theNewBlock))
+        sendMessage handle $ NewBlockPacket theNewBlock (baseDifficulty + difficulty (blockData theNewBlock))
         addBlocks [theNewBlock]
 
-ifBlockInDBSubmitNextBlock::Socket->Integer->Block->ContextM ()
-ifBlockInDBSubmitNextBlock socket baseDifficulty b = do
+ifBlockInDBSubmitNextBlock::Handle->Integer->Block->ContextM ()
+ifBlockInDBSubmitNextBlock handle baseDifficulty b = do
   maybeBlock <- getBlock (blockHash b)
   case maybeBlock of
     Nothing -> return ()
-    _ -> submitNextBlock socket baseDifficulty b
+    _ -> submitNextBlock handle baseDifficulty b
 
 
 
-handlePayload::Socket->B.ByteString->ContextM ()
-handlePayload socket payload = do
+handlePayload::Handle->B.ByteString->ContextM ()
+handlePayload handle payload = do
   --liftIO $ print $ payload
   --liftIO $ putStrLn $ show $ pretty $ rlpDeserialize payload
   let rlpObject = rlpDeserialize payload
@@ -120,29 +120,29 @@ handlePayload socket payload = do
     Hello{} -> do
              bestBlock <- getBestBlock
              genesisBlockHash <- getGenesisBlockHash
-             sendMessage socket Status{protocolVersion=fromIntegral ethVersion, networkID="", totalDifficulty=0, latestHash=blockHash bestBlock, genesisHash=genesisBlockHash}
+             sendMessage handle Status{protocolVersion=fromIntegral ethVersion, networkID="", totalDifficulty=0, latestHash=blockHash bestBlock, genesisHash=genesisBlockHash}
     Ping -> do
       addPingCount
-      sendMessage socket Pong
+      sendMessage handle Pong
     GetPeers -> do
-      sendMessage socket $ Peers []
-      sendMessage socket GetPeers
+      sendMessage handle $ Peers []
+      sendMessage handle GetPeers
     (Peers thePeers) -> do
       setPeers thePeers
-    BlockHashes blockHashes -> handleNewBlockHashes socket blockHashes
+    BlockHashes blockHashes -> handleNewBlockHashes handle blockHashes
     Blocks blocks -> do
-      handleNewBlocks socket blocks
+      handleNewBlocks handle blocks
     NewBlockPacket block baseDifficulty -> do
       addBlocks [block]
-      ifBlockInDBSubmitNextBlock socket baseDifficulty block
+      ifBlockInDBSubmitNextBlock handle baseDifficulty block
 
     Status{latestHash=lh, genesisHash=gh} -> do
       genesisBlockHash <- getGenesisBlockHash
       when (gh /= genesisBlockHash) $ error "Wrong genesis block hash!!!!!!!!"
-      handleNewBlockHashes socket [lh]
+      handleNewBlockHashes handle [lh]
     GetTransactions -> do
-      sendMessage socket $ Transactions []
-      --liftIO $ sendMessage socket GetTransactions
+      sendMessage handle $ Transactions []
+      --liftIO $ sendMessage handle GetTransactions
       return ()
       
     _-> return ()
@@ -155,16 +155,15 @@ getPayloads (0x22:0x40:0x08:0x91:s1:s2:s3:s4:remainder) =
     payloadLength = shift (fromIntegral s1) 24 + shift (fromIntegral s2) 16 + shift (fromIntegral s3) 8 + fromIntegral s4
 getPayloads _ = error "Malformed data sent to getPayloads"
 
-readAndOutput::Socket->ContextM ()
-readAndOutput socket = do
-  h <- liftIO $ socketToHandle socket ReadWriteMode
+readAndOutput::Handle->ContextM ()
+readAndOutput h = do
   payloads <- liftIO $ BL.hGetContents h
-  handleAllPayloads $ getPayloads $ BL.unpack payloads
+  handleAllPayloads h $ getPayloads $ BL.unpack payloads
   where
-    handleAllPayloads [] = error "Server has closed the connection"
-    handleAllPayloads (pl:rest) = do
-      handlePayload socket $ B.pack pl
-      handleAllPayloads rest
+    handleAllPayloads _ [] = error "Server has closed the connection"
+    handleAllPayloads h (pl:rest) = do
+      handlePayload h $ B.pack pl
+      handleAllPayloads h rest
 
 mkHello::IO Message
 mkHello = do
@@ -190,8 +189,9 @@ createTransactions transactions = do
 
 doit::Socket->ContextM ()
 doit socket = do
+  h <- liftIO $ socketToHandle socket ReadWriteMode
   addCode B.empty --This is probably a bad place to do this, but I can't think of a more natural place to do it....  Empty code is used all over the place, and it needs to be in the database.
-  sendMessage socket =<< (liftIO mkHello)
+  sendMessage h =<< (liftIO mkHello)
   (setStateRoot . bStateRoot . blockData) =<< getBestBlock
 
   --signedTx <- createTransaction simpleTX
@@ -215,7 +215,7 @@ doit socket = do
   --liftIO $ sendMessage socket $ Transactions signedTxs
 
 
-  readAndOutput socket
+  readAndOutput h
 
 main::IO ()    
 main = do

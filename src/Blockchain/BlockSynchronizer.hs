@@ -11,10 +11,8 @@ import qualified Data.ByteString.Lazy as BL
 import Data.Function
 import Data.List
 import Data.Maybe
+import System.IO
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
-
-import Network.Simple.TCP
-import Network.Socket (Socket)
 
 import Blockchain.Data.Block
 import Blockchain.BlockChain
@@ -37,38 +35,38 @@ findFirstHashAlreadyInDB hashes = do
     safeHead [] = Nothing
     safeHead (x:_) = Just x
 
-handleNewBlockHashes::Socket->[SHA]->ContextM ()
+handleNewBlockHashes::Handle->[SHA]->ContextM ()
 --handleNewBlockHashes _ list | trace ("########### handleNewBlockHashes: " ++ show list) $ False = undefined
 handleNewBlockHashes _ [] = error "handleNewBlockHashes called with empty list"
-handleNewBlockHashes socket blockHashes = do
+handleNewBlockHashes handle blockHashes = do
   result <- findFirstHashAlreadyInDB blockHashes
   case result of
     Nothing -> do
                 --liftIO $ putStrLn "Requesting more block hashes"
                 cxt <- get 
                 put cxt{neededBlockHashes=reverse blockHashes ++ neededBlockHashes cxt}
-                sendMessage socket $ GetBlockHashes [last blockHashes] 0x500
+                sendMessage handle $ GetBlockHashes [last blockHashes] 0x500
     Just hashInDB -> do
                 liftIO $ putStrLn $ "Found a serverblock already in our database: " ++ show (pretty hashInDB)
                 cxt <- get
                 --liftIO $ putStrLn $ show (pretty blockHashes)
                 put cxt{neededBlockHashes=reverse (takeWhile (/= hashInDB) blockHashes) ++ neededBlockHashes cxt}
-                askForSomeBlocks socket
+                askForSomeBlocks handle
   
-askForSomeBlocks::Socket->ContextM ()
-askForSomeBlocks socket = do
+askForSomeBlocks::Handle->ContextM ()
+askForSomeBlocks handle = do
   cxt <- get
   if null (neededBlockHashes cxt)
     then return ()
     else do
       let (firstBlocks, lastBlocks) = splitAt 0x20 (neededBlockHashes cxt)
       put cxt{neededBlockHashes=lastBlocks}
-      sendMessage socket $ GetBlocks firstBlocks
+      sendMessage handle $ GetBlocks firstBlocks
 
 
-handleNewBlocks::Socket->[Block]->ContextM ()
-handleNewBlocks socket blocks = do
+handleNewBlocks::Handle->[Block]->ContextM ()
+handleNewBlocks handle blocks = do
   liftIO $ putStrLn "Submitting new blocks"
   addBlocks $ sortBy (compare `on` number . blockData) blocks
   liftIO $ putStrLn $ show (length blocks) ++ " blocks have been submitted"
-  askForSomeBlocks socket
+  askForSomeBlocks handle
