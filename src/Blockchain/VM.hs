@@ -464,6 +464,11 @@ runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffse
     _ -> do
       (state'', retValue) <- nestedRun env state'{stack=rest} gas (Address $ fromIntegral to) (envOwner env) value inputData
 
+      --Need to load newest stateroot in case it changed recursively within the nestedRun
+      --TODO- think this one out....  There should be a cleaner way to do this.  Also, I am not sure that I am passing in storage changes to the nested calls to begin with.
+      addressState <- getAddressState (envOwner env)
+      setStorageStateRoot (contractRoot addressState)
+
       state''' <-
         case retValue of
           Just bytes -> liftIO $ mStoreByteString state'' outOffset bytes
