@@ -187,11 +187,10 @@ createTransactions transactions = do
     forM (zip transactions [userNonce..]) $ \(t, n) -> do
       liftIO $ withSource devURandom $ signTransaction prvKey t{tNonce=n}
 
-doit::Socket->ContextM ()
-doit socket = do
-  h <- liftIO $ socketToHandle socket ReadWriteMode
+doit::Handle->ContextM ()
+doit handle = do
   addCode B.empty --This is probably a bad place to do this, but I can't think of a more natural place to do it....  Empty code is used all over the place, and it needs to be in the database.
-  sendMessage h =<< (liftIO mkHello)
+  sendMessage handle =<< (liftIO mkHello)
   (setStateRoot . bStateRoot . blockData) =<< getBestBlock
 
   --signedTx <- createTransaction simpleTX
@@ -215,7 +214,7 @@ doit socket = do
   --liftIO $ sendMessage socket $ Transactions signedTxs
 
 
-  readAndOutput h
+  readAndOutput handle
 
 main::IO ()    
 main = do
@@ -231,8 +230,10 @@ main = do
 
   connect ipAddress port' $ \(socket, _) -> do
          putStrLn "Connected"
-                  
+
+         handle <- liftIO $ socketToHandle socket ReadWriteMode
+
          runResourceT $ do
            cxt <- openDBs "h"
-           _ <- liftIO $ runStateT (doit socket) cxt
+           _ <- liftIO $ runStateT (doit handle) cxt
            return ()
