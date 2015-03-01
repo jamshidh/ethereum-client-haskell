@@ -13,10 +13,8 @@ import qualified Data.ByteString.Lazy as BL
 import Data.Functor
 import Data.Time.Clock
 import Data.Word
+import Network
 import Network.Haskoin.Crypto hiding (Address)
-import Network.Simple.TCP
-import Network.Socket (Socket, socketToHandle)
---import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import System.Entropy
 import System.Environment
 import System.IO
@@ -222,18 +220,17 @@ main = do
   args <- getArgs
 
   let ipNum =
-          case args of
-            (arg:_) -> arg
-            [] -> "119" --Just default to the one I know works right now....  Yup, this is kind of dumb.
+        case args of
+          (arg:_) -> arg
+          [] -> "1" --Just default to poc-8.ethdev.com
 
-  let (ipAddress, port') = ipAddresses !! read ipNum
+  let (ipAddress, port) = ipAddresses !! read ipNum
 
-  connect ipAddress port' $ \(socket, _) -> do
-         putStrLn "Connected"
+  handle <- connectTo ipAddress (PortNumber port)
 
-         handle <- liftIO $ socketToHandle socket ReadWriteMode
+  putStrLn "Connected"
 
-         runResourceT $ do
-           cxt <- openDBs "h"
-           _ <- liftIO $ runStateT (doit handle) cxt
-           return ()
+  runResourceT $ do
+    cxt <- openDBs "h"
+    _ <- liftIO $ runStateT (doit handle) cxt
+    return ()

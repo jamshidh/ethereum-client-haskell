@@ -7,7 +7,6 @@ import Control.Monad.IO.Class
 import Data.Binary.Put
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
-import Network.Simple.TCP
 import System.IO
 
 import Blockchain.Data.RLP
