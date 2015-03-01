@@ -83,16 +83,14 @@ verifyStateRootExists b = do
     Nothing -> return False
     Just _ -> return True
 
-fail' x = trace x $ error x
-
 checkParentChildValidity::(Monad m)=>Block->Block->m ()
 checkParentChildValidity Block{blockData=c} Block{blockData=p} = do
     unless (difficulty c == nextDifficulty (difficulty p) (timestamp p) ( timestamp c))
-             $ fail' $ "Block difficulty is wrong: got '" ++ show (difficulty c) ++ "', expected '" ++ show (nextDifficulty (difficulty p) (timestamp p) ( timestamp c)) ++ "'"
+             $ fail $ "Block difficulty is wrong: got '" ++ show (difficulty c) ++ "', expected '" ++ show (nextDifficulty (difficulty p) (timestamp p) ( timestamp c)) ++ "'"
     unless (number c == number p + 1) 
-             $ fail' $ "Block number is wrong: got '" ++ show (number c) ++ ", expected '" ++ show (number p + 1) ++ "'"
+             $ fail $ "Block number is wrong: got '" ++ show (number c) ++ ", expected '" ++ show (number p + 1) ++ "'"
     unless (gasLimit c == nextGasLimit (gasLimit p) (gasUsed p))
-             $ fail' $ "Block gasLimit is wrong: got '" ++ show (gasLimit c) ++ "', expected '" ++ show (nextGasLimit (gasLimit p) (gasUsed p)) ++ "'"
+             $ fail $ "Block gasLimit is wrong: got '" ++ show (gasLimit c) ++ "', expected '" ++ show (nextGasLimit (gasLimit p) (gasUsed p)) ++ "'"
     return ()
 
 checkValidity::Monad m=>Block->ContextM (m ())
@@ -101,12 +99,12 @@ checkValidity b = do
   case maybeParentBlock of
     Just parentBlock -> do
           checkParentChildValidity b parentBlock
-          unless (nonceIsValid b) $ fail' $ "Block nonce is wrong: " ++ format b
-          unless (checkUnclesHash b) $ fail' "Block unclesHash is wrong"
+          unless (nonceIsValid b) $ fail $ "Block nonce is wrong: " ++ format b
+          unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"
           stateRootExists <- verifyStateRootExists b
-          unless stateRootExists $ fail' ("Block stateRoot does not exist: " ++ show (pretty $ bStateRoot $ blockData b))
+          unless stateRootExists $ fail ("Block stateRoot does not exist: " ++ show (pretty $ bStateRoot $ blockData b))
           return $ return ()
-    Nothing -> fail' ("Parent Block does not exist: " ++ show (pretty $ parentHash $ blockData b))
+    Nothing -> fail ("Parent Block does not exist: " ++ show (pretty $ parentHash $ blockData b))
 
 
 {-
@@ -222,7 +220,7 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
 
     when (isNothing . vmException $ newVMState) $ do
       success <- pay "VM refund fees" (coinbase $ blockData b) tAddr ((realRefund + vmGasRemaining newVMState) * gasPrice ut)
-      when (not success) $ fail' "coinbase doesn't have enough funds to refund the user"
+      when (not success) $ fail "coinbase doesn't have enough funds to refund the user"
     return (newVMState, remainingBlockGas - (tGasLimit ut - realRefund - vmGasRemaining newVMState))
     else do
     liftIO $ putStrLn $ C.red "Insertion of transaction failed!"
@@ -231,9 +229,9 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
         VMState{
            vmException=Just InsufficientFunds,
            logs=[],
-           vmGasRemaining=fail' "undefined vmGasRemaining",
-           pc=fail' "undefined pc",
-           memory=fail' "undefined memory"
+           vmGasRemaining=error "undefined vmGasRemaining",
+           pc=error "undefined pc",
+           memory=error "undefined memory"
            },
         0
       )
@@ -281,12 +279,12 @@ addBlock b@Block{blockData=bd, blockUncles=uncles} = do
       liftIO $ putStrLn $ "newStateRoot: " ++ show (pretty $ stateRoot $ stateDB ctx)
 
       when (bStateRoot (blockData b) /= stateRoot (stateDB ctx)) $ do
-        fail' $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ show (pretty $ bStateRoot $ blockData b)
+        error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ show (pretty $ bStateRoot $ blockData b)
 
       valid <- checkValidity b
       case valid of
         Right () -> return ()
-        Left err -> fail' err
+        Left err -> error err
       let bytes = rlpSerialize $ rlpEncode b
       blockDBPut (BL.toStrict $ encode $ blockHash b) bytes
       replaceBestIfBetter b
@@ -309,7 +307,7 @@ getBestBlock::ContextM Block
 getBestBlock = do
   bestBlockHash <- getBestBlockHash
   bestBlock <- getBlock bestBlockHash
-  return $ fromMaybe (fail' $ "Missing block in database: " ++ show (pretty bestBlockHash)) bestBlock
+  return $ fromMaybe (error $ "Missing block in database: " ++ show (pretty bestBlockHash)) bestBlock
       
 
 replaceBestIfBetter::Block->ContextM ()

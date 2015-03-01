@@ -25,12 +25,10 @@ import Debug.Trace
 
 data Capability = ETH Integer | SHH Integer deriving (Show)
 
-fail' x = trace x $ error x
-
 name2Cap::Integer->String->Capability
 name2Cap qqqq "eth" = ETH qqqq
 name2Cap qqqq "shh" = SHH qqqq
-name2Cap _ x = fail' $ "Unknown capability string: " ++ x
+name2Cap _ x = error $ "Unknown capability string: " ++ x
 
 {-capValue::Capability->String
 capValue ETH = "eth"
@@ -41,7 +39,7 @@ instance RLPSerializable Capability where
     rlpEncode (SHH qqqq) = RLPArray [rlpEncode "shh", rlpEncode qqqq]
 
     rlpDecode (RLPArray [name, qqqq]) = name2Cap (rlpDecode qqqq) $ rlpDecode name
-    rlpDecode x = fail' $ "wrong format given to rlpDecode for Capability: " ++ show (pretty x)
+    rlpDecode x = error $ "wrong format given to rlpDecode for Capability: " ++ show (pretty x)
 
 data TerminationReason =
   DisconnectRequested
@@ -73,7 +71,7 @@ numberToTerminationReason 0x09 = UnexpectedIdentity
 numberToTerminationReason 0x0a = ConnectedToSelf
 numberToTerminationReason 0x0b = PingTimeout
 numberToTerminationReason 0x0c = OtherSubprotocolReason
-numberToTerminationReason _ = fail' "numberToTerminationReasion called with unsupported number"
+numberToTerminationReason _ = error "numberToTerminationReasion called with unsupported number"
 
 
 terminationReasonToNumber::TerminationReason->Integer
@@ -208,7 +206,7 @@ obj2WireMessage (RLPArray [RLPScalar 0x19]) =
 obj2WireMessage (RLPArray [RLPScalar 0x20, ver]) =
   WhisperProtocolVersion $ fromInteger $ rlpDecode ver
 
-obj2WireMessage x = fail' ("Missing case in obj2WireMessage: " ++ show (pretty x))
+obj2WireMessage x = error ("Missing case in obj2WireMessage: " ++ show (pretty x))
 
 
 
