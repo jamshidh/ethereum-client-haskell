@@ -223,7 +223,12 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
       when (not success) $ fail "coinbase doesn't have enough funds to refund the user"
     return (newVMState, remainingBlockGas - (tGasLimit ut - realRefund - vmGasRemaining newVMState))
     else do
-    liftIO $ putStrLn $ C.red "Insertion of transaction failed!"
+    liftIO $ do
+      putStrLn $ C.red "Insertion of transaction failed!"
+      when (not $ tGasLimit ut * gasPrice ut + value ut <= balance addressState) $ putStrLn "sender doesn't have high enough balance"
+      when (not $ intrinsicGas' <= tGasLimit ut) $ putStrLn "intrinsic gas higher than transaction gas limit"
+      when (not $ tGasLimit ut <= remainingBlockGas) $ putStrLn "block gas has run out"
+      when (not valid) $ putStrLn "nonce incorrect"
     return
       (
         VMState{
@@ -233,7 +238,7 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
            pc=error "undefined pc",
            memory=error "undefined memory"
            },
-        0
+        remainingBlockGas
       )
 
     
