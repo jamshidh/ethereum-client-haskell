@@ -456,71 +456,92 @@ runOperation CREATE env state@VMState{stack=value:input:size:rest} = do
       return state'{stack=fromIntegral result:rest, vmGasRemaining=vmGasRemaining newVMState}
 
 runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffset:_:rest)} = do
-  (state', inputData) <- liftIO $ mLoadByteString state inOffset inSize
 
-  case (isNothing . vmException $ state', fromIntegral gas > vmGasRemaining state) of
-    (False, _) -> return state'{stack=0:rest}
-    (_, True) -> return state{stack=0:rest, vmException=Just InsufficientFunds}
-    _ -> do
-      (state'', retValue) <- nestedRun env state'{stack=rest} gas (Address $ fromIntegral to) (envOwner env) value inputData
+  theAddressExists <- addressStateExists (Address $ fromIntegral to)
 
-      --Need to load newest stateroot in case it changed recursively within the nestedRun
-      --TODO- think this one out....  There should be a cleaner way to do this.  Also, I am not sure that I am passing in storage changes to the nested calls to begin with.
-      addressState <- getAddressState (envOwner env)
-      setStorageStateRoot (contractRoot addressState)
+  if theAddressExists || to < 5
+    then do
 
-      state''' <-
-        case retValue of
-          Just bytes -> liftIO $ mStoreByteString state'' outOffset bytes
-          _ -> return state''
+    (state', inputData) <- liftIO $ mLoadByteString state inOffset inSize
 
-      return state'''
+    case (isNothing . vmException $ state', fromIntegral gas > vmGasRemaining state) of
+      (False, _) -> return state'{stack=0:rest}
+      (_, True) -> return state{stack=0:rest, vmException=Just InsufficientFunds}
+      _ -> do
+
+        storageStateRoot <- getStorageStateRoot
+        addressState <- getAddressState (envOwner env)
+        putAddressState (envOwner env) addressState{contractRoot=storageStateRoot}
+
+        (state'', retValue) <- nestedRun env state'{stack=rest} gas (Address $ fromIntegral to) (envOwner env) value inputData
+
+        --Need to load newest stateroot in case it changed recursively within the nestedRun
+        --TODO- think this one out....  There should be a cleaner way to do this.  Also, I am not sure that I am passing in storage changes to the nested calls to begin with.
+        addressState <- getAddressState (envOwner env)
+        setStorageStateRoot (contractRoot addressState)
+
+        state''' <-
+          case retValue of
+            Just bytes -> liftIO $ mStoreByteString state'' outOffset bytes
+            _ -> return state''
+
+        return state'''
+
+    else do
+    addToBalance (envOwner env) (-fromIntegral value)
+    return state{stack=1:rest}
 
 runOperation CALL _ state =
   return $ state { vmException=Just StackTooSmallException } 
 
-runOperation CALLCODE env state@VMState{stack=gas:to:value:inOffset:inSize:outOffset:_:rest} = do
+runOperation CALLCODE env state@VMState{stack=gas:to:value:inOffset:inSize:outOffset:outSize:rest} = do
   (state', inputData) <- liftIO $ mLoadByteString state inOffset inSize
   let address = Address $ fromIntegral to
 
   theAddressExists <- addressStateExists address
 
-  if theAddressExists
-    then do
-    addressState <- getAddressState address
-    code <- fromMaybe B.empty <$> getCode (codeHash addressState)
+  ownerBalance <- balance <$> getAddressState (envOwner env)
 
-    nestedState <-
-      runCodeFromStart (callDepth state' + 1)
-      (fromIntegral gas)
-      Environment {
-        envOwner = envOwner env,
-        envOrigin = envOrigin env,
-        envGasPrice = envGasPrice env,
-        envInputData = inputData,
-        envSender = envOwner env,
-        envValue = fromIntegral value,
-        envCode = bytes2Code code,
-        envBlock = envBlock env
-        }
+  case (ownerBalance < fromIntegral value, theAddressExists) of
+    (True, _) -> return state'{stack=0:rest}
+    (_, False) -> do
+      state'' <- liftIO $ mStoreByteString state' outOffset (B.replicate (fromIntegral outSize) 0)
+      return state''{stack=1:rest}
+    _ -> do
+      addressState <- getAddressState address
+      code <- fromMaybe B.empty <$> getCode (codeHash addressState)
 
-    let retVal = fromMaybe B.empty $ returnVal nestedState
+      nestedState <-
+        runCodeFromStart (callDepth state' + 1)
+        (fromIntegral gas)
+        Environment {
+          envOwner = envOwner env,
+          envOrigin = envOrigin env,
+          envGasPrice = envGasPrice env,
+          envInputData = inputData,
+          envSender = envOwner env,
+          envValue = fromIntegral value,
+          envCode = bytes2Code code,
+          envBlock = envBlock env
+          }
+
+      let retVal = fromMaybe B.empty $ returnVal nestedState
  
-    let usedGas = fromIntegral gas - vmGasRemaining nestedState
+      let usedGas = fromIntegral gas - vmGasRemaining nestedState
 
-    state'' <- liftIO $ mStoreByteString state' outOffset retVal
+      state'' <- liftIO $ mStoreByteString state' outOffset retVal
 
-    let success = 1
+      let success = 1
 
-    addressState' <- getAddressState address
+      addressState' <- getAddressState address
 
-    paid <- pay "CALLCODE fees" (envOwner env) address (fromIntegral value)
+      paid <- pay "CALLCODE fees" (envOwner env) address (fromIntegral value)
 
-    if paid
-      then return state''{stack=success:rest, vmGasRemaining = vmGasRemaining state' - usedGas}
-      else return state''{ vmException=Just InsufficientFunds } 
+      if paid
+        then return state''{stack=success:rest, vmGasRemaining = vmGasRemaining state' - usedGas}
+        else return state''{ vmException=Just InsufficientFunds } 
 
-    else return state{stack=1:rest}
+
     
 
 runOperation CALLCODE _ state =
@@ -564,7 +585,8 @@ opGasPrice _ SUICIDE = return (0, 0)
 opGasPrice _ BALANCE = return (20, 0)
 opGasPrice _ SLOAD = return (20, 0)
 opGasPrice _ CALL = return (20, 0)
-opGasPrice VMState{stack=value:_} CALLCODE = return (20+fromIntegral value, 0)
+--opGasPrice VMState{stack=value:_} CALLCODE = return (20+fromIntegral value, 0)
+opGasPrice VMState{stack=value:_} CALLCODE = return (20, 0)
 
 opGasPrice VMState{stack=_:size:_} LOG0 = return (32+fromIntegral size, 0)
 opGasPrice VMState{stack=_:size:_} LOG1 = return (64+fromIntegral size, 0)
@@ -881,7 +903,7 @@ nestedRun env state gas address sender value inputData = do
              logs=logs nestedState ++ logs state,
              stack=success:stack state,
              vmGasRemaining = vmGasRemaining state - usedGas,
-             refund= refund state + refund nestedState
+             refund= refund state + if isNothing (vmException nestedState) then refund nestedState else 0
              },
           Just retVal
         )
