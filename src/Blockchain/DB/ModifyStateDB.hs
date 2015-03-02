@@ -46,13 +46,16 @@ pay description fromAddr toAddr val = do
     when (balance fromAddressState < val) $
        liftIO $ putStrLn "insufficient funds"
 
-  fromAddressState <- getAddressState fromAddr
-  if balance fromAddressState < val
-    then return False
+  if val == 0
+    then return True
     else do
-    addToBalance fromAddr (-val)
-    addToBalance toAddr val
-    return True
+    fromAddressState <- getAddressState fromAddr
+    if balance fromAddressState < val
+      then return False
+      else do
+      addToBalance fromAddr (-val)
+      addToBalance toAddr val
+      return True
 
 
 
