@@ -506,7 +506,17 @@ runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffse
 
     else do
     addToBalance (envOwner env) (-fromIntegral value)
-    return state{stack=1:rest}
+    let newAccount =
+            (Just $ Address $ fromIntegral to,
+             fromIntegral gas,
+             AddressState {
+               addressStateNonce=0,
+               balance = fromIntegral value,
+               contractRoot = emptyTriePtr,
+               codeHash = hash B.empty
+               })
+
+    return state{stack=1:rest, newAccounts=newAccount:newAccounts state}
 
 runOperation CALL _ state =
   return $ state { vmException=Just StackTooSmallException } 
@@ -818,9 +828,9 @@ create b callDepth' sender origin value' gasPrice' availableGas newAddress init'
         then do 
         addCode result
         newAddressExists <- addressStateExists newAddress
-        when newAddressExists $ do
+        {-when newAddressExists $ do
           addressState <- getAddressState newAddress
-          putAddressState newAddress addressState{codeHash=hash result}
+          putAddressState newAddress addressState{codeHash=hash result}-}
         --pay "fee for size of new contract" origin (coinbase $ blockData b) (5*toInteger (B.length result))
         --return vmState
         return vmState{vmGasRemaining=vmGasRemaining vmState - 5 * toInteger (B.length result)}
