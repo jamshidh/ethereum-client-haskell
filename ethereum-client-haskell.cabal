@@ -41,7 +41,6 @@ executable ethereumH
                  , leveldb-haskell
                  , mtl
                  , network
-                 , network-simple
                  , nibblestring
                  , resourcet
                  , SHA2
@@ -49,43 +48,8 @@ executable ethereumH
                  , transformers
                  , vector
                  , ansi-wl-pprint
+                 , ethereum-client-haskell
     main-is: Main.hs
-    other-modules: 
-                   Blockchain.BlockChain
-                   Blockchain.BlockSynchronizer
-                   Blockchain.Colors
-                   Blockchain.Communication
-                   Blockchain.Constants
-                   Blockchain.Context
-                   Blockchain.Data.Address
-                   Blockchain.Data.AddressState
-                   Blockchain.Data.Block
-                   Blockchain.Data.Log
-                   Blockchain.Data.GenesisBlock
-                   Blockchain.Data.Peer
-                   Blockchain.Data.SignedTransaction
-                   Blockchain.Data.Transaction
-                   Blockchain.Data.TransactionReceipt
-                   Blockchain.Data.Wire
-                   Blockchain.DB.CodeDB
-                   Blockchain.DB.ModifyStateDB
-                   Blockchain.Display
-                   Blockchain.ExtDBs
-                   Blockchain.ExtendedECDSA
-                   Blockchain.ExtWord
-                   Blockchain.Format
-                   Blockchain.JCommand
-                   Blockchain.PeerUrls
-                   Blockchain.SampleTransactions
-                   Blockchain.SHA
-                   Blockchain.Util
-                   Blockchain.VM.Code
-                   Blockchain.VM.Environment
-                   Blockchain.VM.Labels
-                   Blockchain.VM.Memory
-                   Blockchain.VM.Opcodes
-                   Blockchain.VM.VMState
-                   Blockchain.VM
     C-sources: fastNonceFinder/nonceFinder.c
     ghc-options: -Wall
     buildable: True
@@ -111,7 +75,6 @@ library
                  , leveldb-haskell
                  , mtl
                  , network
-                 , network-simple
                  , nibblestring
                  , resourcet
                  , SHA2
@@ -159,45 +122,6 @@ library
     ghc-options: -Wall
     buildable: True
     hs-source-dirs: src
-
-executable queryEth
-    default-language: Haskell98
-    build-depends: 
-                   base >= 4 && < 5
-                 , ansi-wl-pprint
-                 , cmdargs
-                 , cryptohash
-                 , binary
-                 , bytestring
-                 , containers
-                 , ethereum-rlp
-                 , ethereum-merkle-patricia-db
-                 , filepath
-                 , time
-                 , network-simple
-                 , nibblestring
-                 , haskoin
-                 , base16-bytestring
-                 , mtl
-                 , network
-                 , transformers
-                 , resourcet
-                 , data-default
-                 , leveldb-haskell
-                 , array
-                 , directory
-    main-is: Main.hs
-    other-modules:
-                   Block
-                   Code
-                   DumpLevelDB
-                   Init
-                   Raw
-                   RLP
-                   State
-    C-sources: fastNonceFinder/nonceFinder.c
-    buildable: True
-    hs-source-dirs: queryEth_src, src
 
 Test-Suite test-ethereumH
     default-language: Haskell98
