@@ -437,11 +437,28 @@ runOperation CREATE env state@VMState{stack=value:input:size:rest} = do
     (False, _) -> return state'
     (_, True) -> return state{stack=0:rest}
     _ -> do
-      pay "transfer value" (envOwner env) newAddress (fromIntegral value)
+      when debug $ liftIO $ putStrLn "transfer value"
+      addToBalance (envOwner env) (-fromIntegral value)
 
       let initCode = bytes2Code initCodeBytes
       
       newVMState <- create (envBlock env) (callDepth state' + 1) (envOwner env) (envOrigin env) (toInteger value) (envGasPrice env) (vmGasRemaining state') newAddress initCode
+
+      let codeBytes = fromMaybe B.empty $ returnVal newVMState
+
+      addCode initCodeBytes
+
+      let newAccount =
+            (if B.null codeBytes then Nothing else Just newAddress,
+             vmGasRemaining newVMState,
+             AddressState {
+               addressStateNonce=0,
+               balance = fromIntegral value,
+               contractRoot = emptyTriePtr,
+               codeHash = hash initCodeBytes
+               })
+
+
 
       newAddressExists <- addressStateExists newAddress
       when newAddressExists $ incrementNonce (envOwner env)
@@ -453,7 +470,7 @@ runOperation CREATE env state@VMState{stack=value:input:size:rest} = do
                 in result
               Just _ -> 0
 
-      return state'{stack=fromIntegral result:rest, vmGasRemaining=vmGasRemaining newVMState}
+      return state'{stack=fromIntegral result:rest, vmGasRemaining=vmGasRemaining newVMState, newAccounts=newAccount:newAccounts state'}
 
 runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffset:_:rest)} = do
 
@@ -698,27 +715,26 @@ runCodeFromStart::Int->Integer->Environment->ContextM VMState
 runCodeFromStart callDepth' gasLimit' env = do
   when debug $ liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty $ envCode env)))
 
-  addressState <- getAddressState (envOwner env)
-  oldStateRoot <- getStorageStateRoot
+  addressAlreadyExists <- addressStateExists (envOwner env)
 
-  setStorageStateRoot (contractRoot addressState)
+  storageRoot <-
+    if addressAlreadyExists
+    then do
+      addressState <- getAddressState (envOwner env)
+      return $ contractRoot addressState
+    else return emptyTriePtr
+
+  oldStateRoot <- getStorageStateRoot
+  setStorageStateRoot storageRoot
 
   vmState <- liftIO startingState
   state' <- runCode env vmState{callDepth=callDepth', vmGasRemaining=gasLimit'} 0
 
   newStorageStateRoot <- getStorageStateRoot
 
-  setStorageStateRoot oldStateRoot
+  --setStorageStateRoot oldStateRoot
 
   when debug $ liftIO $ putStrLn "VM has finished running"
-
-  addressState <- getAddressState (envOwner env)
-
-  -- coinbaseState <- getAddressState (coinbase $ blockData $ envBlock env)
-
-  --when (balance coinbaseState >= refund state') $
-  when (isNothing $ vmException state') $
-    putAddressState (envOwner env) addressState{contractRoot=newStorageStateRoot}
 
   when debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList state')
   forM (suicideList state') $ \address -> do
@@ -753,6 +769,11 @@ runCodeForTransaction' b callDepth' sender origin value' gasPrice' availableGas 
             envValue = value',
             envCode = code
             }
+
+  newStorageStateRoot <- getStorageStateRoot
+  ownerAddressState <- getAddressState owner
+  when (isNothing $ vmException vmState) $
+    putAddressState owner ownerAddressState{contractRoot=newStorageStateRoot}
 
   case vmException vmState of
         Just e -> do

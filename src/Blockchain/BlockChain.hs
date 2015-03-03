@@ -220,7 +220,9 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
 
     when (isNothing . vmException $ newVMState) $ do
       success <- pay "VM refund fees" (coinbase $ blockData b) tAddr ((realRefund + vmGasRemaining newVMState) * gasPrice ut)
-      when (not success) $ fail "coinbase doesn't have enough funds to refund the user"
+      when (not success) $ do
+        --fail "coinbase doesn't have enough funds to refund the user"
+        return ()
     return (newVMState, remainingBlockGas - (tGasLimit ut - realRefund - vmGasRemaining newVMState))
     else do
     when debug $ liftIO $ do
@@ -234,6 +236,7 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
         VMState{
            vmException=Just InsufficientFunds,
            logs=[],
+           newAccounts=[],
            vmGasRemaining=error "undefined vmGasRemaining",
            pc=error "undefined pc",
            memory=error "undefined memory"

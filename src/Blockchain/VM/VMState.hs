@@ -16,6 +16,7 @@ import Data.Word
 
 
 import Blockchain.Data.Address
+import Blockchain.Data.AddressState
 import Blockchain.Data.Log
 import Blockchain.ExtWord
 import Blockchain.Format
@@ -54,7 +55,8 @@ data VMState =
     suicideList::[Address],
     done::Bool,
     returnVal::Maybe B.ByteString,
-
+    newAccounts::[(Maybe Address, Integer, AddressState)],
+    
     logs::[Log],
     
     vmException::Maybe VMException
@@ -83,6 +85,7 @@ startingState = do
                callDepth=0,
                refund=0,
                logs=[],
+               newAccounts=[],
                suicideList=[]
              }
 
