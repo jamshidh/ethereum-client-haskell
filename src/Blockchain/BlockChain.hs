@@ -19,6 +19,7 @@ import Data.Bits
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.Functor
+import Data.List
 import Data.Maybe
 import Data.Time
 import Data.Time.Clock.POSIX
@@ -133,7 +134,11 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
 
     
 -----------------
-    
+
+    when debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList newVMState)
+    forM (suicideList newVMState) $ \address -> do
+      deleteAddressState address
+
     return newVMState
     else do
     liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*gasPrice ut) ++ ", have " ++ show (balance addressState)
@@ -158,6 +163,10 @@ runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
 
       newVMState <- runCodeForTransaction' b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas (to ut) (bytes2Code contractCode) (tData ut)
 -------------------------
+
+      when debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList newVMState)
+      forM (suicideList newVMState) $ \address -> do
+        deleteAddressState address
 
       return newVMState
     

@@ -865,12 +865,6 @@ runCodeForTransaction' b callDepth' sender origin value' gasPrice' availableGas 
     putAddressState owner ownerAddressState{contractRoot=newStorageStateRoot}
 {- -}
 
-  when debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList vmState)
-  forM (suicideList vmState) $ \address -> do
-    deleteAddressState address
-
-
-
   case vmException vmState of
         Just e -> do
           when debug $ liftIO $ putStrLn $ CL.red $ show e
