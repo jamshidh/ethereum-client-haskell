@@ -17,6 +17,7 @@ import Data.Word
 
 import Blockchain.Data.Address
 import Blockchain.Data.AddressState
+import Blockchain.Data.Code
 import Blockchain.Data.Log
 import Blockchain.ExtWord
 import Blockchain.Format

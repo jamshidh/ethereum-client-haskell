@@ -12,6 +12,7 @@ import Prelude hiding (LT, GT, EQ)
 import Control.Applicative
 import Control.Monad
 
+import Blockchain.Data.Code
 import Blockchain.Util
 import Blockchain.VM.Opcodes
 import Blockchain.VM.Code
@@ -129,7 +130,7 @@ jCommand2Op (While cond code) = do
     before <- getUnique "before"
     compiledCode <- j code
     return $ [LABEL before] ++ pushBoolVal cond ++ [ISZERO, PUSHLABEL after, JUMPI] ++ compiledCode ++ [PUSHLABEL before, JUMP] ++ [LABEL after]
-jCommand2Op (ReturnCode (Code codeBytes _)) = do
+jCommand2Op (ReturnCode (Code codeBytes)) = do
   codeBegin <- getUnique "begin"
   codeEnd <- getUnique "end"
   return $ 

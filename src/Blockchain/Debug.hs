@@ -2,5 +2,5 @@
 module Blockchain.Debug where
 
 debug::Bool
-debug = True
---debug = False
+--debug = True
+debug = False

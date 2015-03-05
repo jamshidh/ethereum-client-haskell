@@ -13,6 +13,7 @@ module Blockchain.BlockChain (
 
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.Trans
 import Control.Monad.State hiding (state)
 import Data.Binary hiding (get)
 import Data.Bits
@@ -30,6 +31,7 @@ import Blockchain.Context
 import Blockchain.Data.Address
 import Blockchain.Data.AddressState
 import Blockchain.Data.Block
+import Blockchain.Data.Code
 import Blockchain.Data.RLP
 import Blockchain.Data.SignedTransaction
 import Blockchain.Data.Transaction
@@ -37,11 +39,13 @@ import Blockchain.Database.MerklePatricia
 import Blockchain.Debug
 import Blockchain.DB.CodeDB
 import Blockchain.DB.ModifyStateDB
+import Blockchain.DBM
 import Blockchain.Constants
 import Blockchain.ExtDBs
 import Blockchain.Format
 import Blockchain.Data.GenesisBlock
 import Blockchain.SHA
+import Blockchain.SigningTools
 import Blockchain.VM
 import Blockchain.VM.Code
 import Blockchain.VM.VMState
@@ -79,7 +83,7 @@ instance Format BlockValidityError where
 
 verifyStateRootExists::Block->ContextM Bool
 verifyStateRootExists b = do
-  val <- stateDBGet (BL.toStrict $ encode $ bStateRoot $ blockData b)
+  val <- lift $ stateDBGet (BL.toStrict $ encode $ bStateRoot $ blockData b)
   case val of
     Nothing -> return False
     Just _ -> return True
@@ -96,7 +100,7 @@ checkParentChildValidity Block{blockData=c} Block{blockData=p} = do
 
 checkValidity::Monad m=>Block->ContextM (m ())
 checkValidity b = do
-  maybeParentBlock <- getBlock (parentHash $ blockData b)
+  maybeParentBlock <- lift $ getBlock (parentHash $ blockData b)
   case maybeParentBlock of
     Just parentBlock -> do
           checkParentChildValidity b parentBlock
@@ -121,10 +125,10 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
 
   --Create the new account
   let newAddress = getNewAddress tAddr $ tNonce ut
-  putAddressState newAddress blankAddressState
+  lift $ putAddressState newAddress blankAddressState
   pay "transfer value1" tAddr newAddress (value ut)
 
-  addressState <- getAddressState tAddr
+  addressState <- lift $ getAddressState tAddr
 
   if availableGas*gasPrice ut < balance addressState
     then do
@@ -137,7 +141,7 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
 
     when debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList newVMState)
     forM (suicideList newVMState) $ \address -> do
-      deleteAddressState address
+      lift $ deleteAddressState address
 
     return newVMState
     else do
@@ -147,7 +151,7 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
 runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
   when debug $ liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ to ut)
   
-  addressState <- getAddressState tAddr
+  addressState <- lift $ getAddressState tAddr
   
   success <- pay "transfer value2" tAddr (to ut) (value ut)
 
@@ -156,17 +160,17 @@ runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
     else 
     if availableGas*gasPrice ut <= balance addressState
     then do
-      recipientAddressState <- getAddressState (to ut)
-      contractCode <- fromMaybe B.empty <$> getCode (codeHash recipientAddressState)
+      recipientAddressState <- lift $ getAddressState (to ut)
+      contractCode <- lift $ fromMaybe B.empty <$> getCode (codeHash recipientAddressState)
 
       pay "pre-VM fees2" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
 
-      newVMState <- runCodeForTransaction' b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas (to ut) (bytes2Code contractCode) (tData ut)
+      newVMState <- runCodeForTransaction' b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas (to ut) (Code contractCode) (tData ut)
 -------------------------
 
       when debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList newVMState)
       forM (suicideList newVMState) $ \address -> do
-        deleteAddressState address
+        lift $ deleteAddressState address
 
       return newVMState
     
@@ -180,8 +184,16 @@ addBlocks blocks =
 
 isTransactionValid::SignedTransaction->ContextM Bool
 isTransactionValid t = do
-  addressState <- getAddressState $ whoSignedThisTransaction t
+  addressState <- lift $ getAddressState $ whoSignedThisTransaction t
   return (addressStateNonce addressState == tNonce (unsignedTransaction t))
+
+codeOrDataLength::Transaction->Int
+codeOrDataLength MessageTX{tData=d} = B.length d
+codeOrDataLength ContractCreationTX{tInit=d} = codeLength d
+
+zeroBytesLength::Transaction->Int
+zeroBytesLength MessageTX{tData=d} = length $ filter (==0) $ B.unpack d
+zeroBytesLength ContractCreationTX{tInit=Code d} = length $ filter (==0) $ B.unpack d
 
 intrinsicGas::Transaction->Integer
 intrinsicGas t = zeroLen + 5 * (fromIntegral (codeOrDataLength t) - zeroLen) + 500
@@ -199,7 +211,7 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
   when debug $
     liftIO $ putStrLn $ "intrinsicGas: " ++ show (intrinsicGas')
 
-  addressState <- getAddressState signAddress
+  addressState <- lift $ getAddressState signAddress
 
   if (tGasLimit ut * gasPrice ut + value ut <= balance addressState) &&
      (intrinsicGas' <= tGasLimit ut) &&
@@ -217,7 +229,7 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
     when debug $
       liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining newVMState)
 
-    coinbaseAddressState <- getAddressState (coinbase $ blockData b)
+    coinbaseAddressState <- lift $ getAddressState (coinbase $ blockData b)
 
     let realRefund =
           min (refund newVMState) ((tGasLimit ut - vmGasRemaining newVMState) `div` 2)
@@ -260,7 +272,7 @@ addTransactions b blockGas (t@SignedTransaction{unsignedTransaction=ut}:rest) = 
   liftIO $ putStrLn "=========================================="
   liftIO $ putStrLn $ "Coinbase: " ++ show (pretty $ coinbase $ blockData b)
   liftIO $ putStrLn $ "Transaction signed by: " ++ show (pretty $ whoSignedThisTransaction t)
-  addressState <- getAddressState $ whoSignedThisTransaction t
+  addressState <- lift $ getAddressState $ whoSignedThisTransaction t
   liftIO $ do
     putStrLn $ "User balance: " ++ show (balance $ addressState)
     putStrLn $ "tGasLimit ut: " ++ show (tGasLimit ut)
@@ -275,13 +287,13 @@ addTransactions b blockGas (t@SignedTransaction{unsignedTransaction=ut}:rest) = 
 addBlock::Block->ContextM ()
 addBlock b@Block{blockData=bd, blockUncles=uncles} = do
   liftIO $ putStrLn $ "Attempting to insert block #" ++ show (number bd) ++ " (" ++ show (pretty $ blockHash b) ++ ")."
-  maybeParent <- getBlock $ parentHash bd
+  maybeParent <- lift $ getBlock $ parentHash bd
   case maybeParent of
     Nothing ->
       liftIO $ putStrLn $ "Missing parent block in addBlock: " ++ show (pretty $ parentHash bd) ++ "\n" ++
       "Block will not be added now, but will be requested and added later"
     Just parentBlock -> do
-      setStateRoot $ bStateRoot $ blockData parentBlock
+      lift $ setStateRoot $ bStateRoot $ blockData parentBlock
       let rewardBase = 1500 * finney
       addToBalance (coinbase bd) rewardBase
 
@@ -292,10 +304,10 @@ addBlock b@Block{blockData=bd, blockUncles=uncles} = do
       let transactions = receiptTransactions b
       addTransactions b (gasLimit $ blockData b) transactions
 
-      ctx <- get
-      liftIO $ putStrLn $ "newStateRoot: " ++ show (pretty $ stateRoot $ stateDB ctx)
+      dbs <- lift get
+      liftIO $ putStrLn $ "newStateRoot: " ++ show (pretty $ stateRoot $ stateDB dbs)
 
-      when (bStateRoot (blockData b) /= stateRoot (stateDB ctx)) $ do
+      when (bStateRoot (blockData b) /= stateRoot (stateDB dbs)) $ do
         error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ show (pretty $ bStateRoot $ blockData b)
 
       valid <- checkValidity b
@@ -303,19 +315,19 @@ addBlock b@Block{blockData=bd, blockUncles=uncles} = do
         Right () -> return ()
         Left err -> error err
       let bytes = rlpSerialize $ rlpEncode b
-      blockDBPut (BL.toStrict $ encode $ blockHash b) bytes
+      lift $ blockDBPut (BL.toStrict $ encode $ blockHash b) bytes
       replaceBestIfBetter b
 
 getBestBlockHash::ContextM SHA
 getBestBlockHash = do
-  maybeBestHash <- detailsDBGet "best"
+  maybeBestHash <- lift $ detailsDBGet "best"
   case maybeBestHash of
     Nothing -> blockHash <$> initializeGenesisBlock
     Just bestHash -> return $ decode $ BL.fromStrict $ bestHash
 
 getGenesisBlockHash::ContextM SHA
 getGenesisBlockHash = do
-  maybeGenesisHash <- detailsDBGet "genesis"
+  maybeGenesisHash <- lift $ detailsDBGet "genesis"
   case maybeGenesisHash of
     Nothing -> blockHash <$> initializeGenesisBlock
     Just bestHash -> return $ decode $ BL.fromStrict $ bestHash
@@ -323,7 +335,7 @@ getGenesisBlockHash = do
 getBestBlock::ContextM Block
 getBestBlock = do
   bestBlockHash <- getBestBlockHash
-  bestBlock <- getBlock bestBlockHash
+  bestBlock <- lift $ getBlock bestBlockHash
   return $ fromMaybe (error $ "Missing block in database: " ++ show (pretty bestBlockHash)) bestBlock
       
 
@@ -332,5 +344,5 @@ replaceBestIfBetter b = do
   best <- getBestBlock
   if number (blockData best) >= number (blockData b) 
        then return ()
-       else detailsDBPut "best" (BL.toStrict $ encode $ blockHash b)
+       else lift $ detailsDBPut "best" (BL.toStrict $ encode $ blockHash b)
 

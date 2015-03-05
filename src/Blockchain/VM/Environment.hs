@@ -5,7 +5,8 @@ import qualified Data.ByteString as B
 
 import Blockchain.Data.Address
 import Blockchain.Data.Block
-import Blockchain.VM.Code
+import Blockchain.Data.Code
+import Blockchain.ExtWord
 
 data Environment =
     Environment {
@@ -16,6 +17,7 @@ data Environment =
       envSender::Address,
       envValue::Integer,
       envCode::Code,
+      envJumpDests::[Word256],
       envBlock::Block
     }
 

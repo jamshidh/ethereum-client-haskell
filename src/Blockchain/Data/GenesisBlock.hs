@@ -7,6 +7,7 @@ module Blockchain.Data.GenesisBlock (
 
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.Trans
 import Control.Monad.Trans.Resource
 import Control.Monad.Trans.State
 import qualified Data.ByteString as B
@@ -21,6 +22,7 @@ import Blockchain.Context
 import Blockchain.Data.Address
 import Blockchain.Data.AddressState
 import Blockchain.DB.ModifyStateDB
+import Blockchain.DBM
 import Blockchain.SHA
 
 --import Debug.Trace
@@ -31,10 +33,10 @@ import Blockchain.SHA
 
 initializeBlankStateDB::ContextM ()
 initializeBlankStateDB = do
-  cxt <- get
+  dbs <- lift get
   liftIO $ runResourceT $
-         initializeBlank (stateDB cxt)
-  put cxt{stateDB=(stateDB cxt){stateRoot=emptyTriePtr}}
+         initializeBlank (stateDB dbs)
+  lift $ put dbs{stateDB=(stateDB dbs){stateRoot=emptyTriePtr}}
 
 initializeStateDB::ContextM ()
 initializeStateDB = do
@@ -58,19 +60,19 @@ initializeStateDB = do
         ]
 
   forM_ addressInfo $ \(address, balance) -> 
-    putAddressState (Address address) blankAddressState{balance=balance}
+    lift $ putAddressState (Address address) blankAddressState{balance=balance}
 
 initializeGenesisBlock::ContextM Block
 initializeGenesisBlock = do
   initializeStateDB
-  cxt <- get
+  dbs <- lift get
   let genesisBlock = Block {
                blockData = 
                    BlockData {
                        parentHash = SHA 0,
                        unclesHash = hash (B.pack [0xc0]), 
                        coinbase = Address 0,
-                       bStateRoot = stateRoot $ stateDB cxt,
+                       bStateRoot = stateRoot $ stateDB dbs,
                        transactionsRoot = emptyTriePtr,
                        receiptsRoot = emptyTriePtr,
                        logBloom = B.pack [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],         
@@ -85,7 +87,7 @@ initializeGenesisBlock = do
                receiptTransactions=[],
                blockUncles=[]
              }
-  putBlock genesisBlock
+  lift $ putBlock genesisBlock
   return genesisBlock
 
 

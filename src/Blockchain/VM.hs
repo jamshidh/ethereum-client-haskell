@@ -11,6 +11,7 @@ import Prelude hiding (LT, GT, EQ)
 import qualified Codec.Digest.SHA as SHA2
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.Trans
 import qualified Crypto.Hash.RIPEMD160 as RIPEMD
 import Data.Binary
 import Data.Bits
@@ -33,11 +34,13 @@ import Blockchain.Context
 import Blockchain.Data.Address
 import Blockchain.Data.AddressState
 import Blockchain.Data.Block
+import Blockchain.Data.Code
 import Blockchain.Data.Log
 import Blockchain.Data.RLP
 import Blockchain.Database.MerklePatricia
 import Blockchain.DB.CodeDB
 import Blockchain.DB.ModifyStateDB
+import Blockchain.DBM
 import Blockchain.ExtDBs
 import Blockchain.ExtendedECDSA
 import Blockchain.Format
@@ -172,7 +175,7 @@ runOperation SHA3 _ state@VMState{stack=(p:size:rest)} = do
 runOperation ADDRESS Environment{envOwner=Address a} state = return state{stack=fromIntegral a:stack state}
 
 runOperation BALANCE _ state@VMState{stack=(x:rest)} = do
-  addressState <- getAddressState (Address $ fromIntegral x)
+  addressState <- lift $ getAddressState (Address $ fromIntegral x)
   return state{stack=fromIntegral (balance addressState):rest}
 runOperation BALANCE env state = liftIO $ addErr "stack did not contain enough elements" (envCode env) state
 
@@ -208,7 +211,7 @@ runOperation CALLDATACOPY Environment{envInputData=d} state@VMState{stack=memP:c
 
 runOperation CODESIZE Environment{envCode=c} state = return state{stack=fromIntegral (codeLength c):stack state}
 
-runOperation CODECOPY Environment{envCode=Code c _} state@VMState{stack=memP:codeP:size:rest} = do
+runOperation CODECOPY Environment{envCode=Code c} state@VMState{stack=memP:codeP:size:rest} = do
   state' <- liftIO $ mStoreByteString state memP $ safeTake size $ safeDrop codeP $ c
   return state'{stack=rest}
 
@@ -216,10 +219,8 @@ runOperation GASPRICE Environment{envGasPrice=gp} state = return state{stack=fro
 
 runOperation EXTCODESIZE env state@VMState{stack=addressWord:rest} = do
   let address = Address $ fromIntegral (addressWord `mod` (2^160))
-  addressState <- getAddressState address
-  code <- 
-      fromMaybe B.empty <$>
-                getCode (codeHash addressState)
+  addressState <- lift $ getAddressState address
+  code <- lift $ fromMaybe B.empty <$> getCode (codeHash addressState)
   return state{stack=fromIntegral (B.length code):rest}
 
 runOperation EXTCODESIZE _ state = 
@@ -227,10 +228,8 @@ runOperation EXTCODESIZE _ state =
 
 runOperation EXTCODECOPY env state@VMState{stack=addressWord:memOffset:codeOffset:size:rest} = do
   let address = Address $ fromIntegral (addressWord `mod` (2^160))
-  addressState <- getAddressState address
-  code <- 
-      fromMaybe B.empty <$>
-                getCode (codeHash addressState)
+  addressState <- lift $ getAddressState address
+  code <- lift $ fromMaybe B.empty <$> getCode (codeHash addressState)
   state' <- liftIO $ mStoreByteString state memOffset (safeTake size $ safeDrop codeOffset $ code)
 --  state' <- liftIO $ mStoreByteString state memOffset (B.take (fromIntegral size) $ B.drop (fromIntegral codeOffset) code)
   return state'{stack=fromIntegral (B.length code):rest}
@@ -316,7 +315,7 @@ runOperation MSTORE8 _ state@VMState{stack=(p:val:rest)} = do
   return state'{stack=rest}
 
 runOperation SLOAD _ state@VMState{stack=(p:rest)} = do
-  vals <- getStorageKeyVals (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
+  vals <- lift $ getStorageKeyVals (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
   let val = case vals of
               [] -> 0
               [x] -> fromInteger $ rlpDecode $ rlpDeserialize $ rlpDecode $ snd x
@@ -328,8 +327,8 @@ runOperation SLOAD _ state =
   
 runOperation SSTORE _ state@VMState{stack=(p:val:rest)} = do
   if val == 0
-    then deleteStorageKey (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
-    else putStorageKeyVal p val
+    then lift $ deleteStorageKey (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
+    else lift $ putStorageKeyVal p val
           
   return $ state { stack=rest }
 runOperation SSTORE _ state =
@@ -338,14 +337,14 @@ runOperation SSTORE _ state =
 --TODO- refactor so that I don't have to use this -1 hack
 runOperation JUMP env state@VMState{stack=(p:rest)} = do
   let (destOpcode, _) = getOperationAt (envCode env) p
-  if p `elem` validJumpDests (envCode env)
+  if p `elem` envJumpDests env
     then return $ state { stack=rest, pc=fromIntegral p - 1} -- Subtracting 1 to compensate for the pc-increment that occurs every step.
     else return $ state { vmException=Just InvalidJump } 
 runOperation JUMP _ state = return state{ vmException=Just StackTooSmallException } 
 
 runOperation JUMPI env state@VMState{stack=(p:cond:rest)} = do
   let (destOpcode, _) = getOperationAt (envCode env) p
-  case (p `elem` validJumpDests (envCode env), 0 /= cond) of
+  case (p `elem` envJumpDests env, 0 /= cond) of
     (_, False) -> return state{ stack=rest }
     (True, _) -> return state{ stack=rest, pc=fromIntegral p - 1 }
     _ -> return state{ vmException=Just InvalidJump } 
@@ -428,7 +427,7 @@ runOperation SWAP16 _ state = swapn 16 state
 
 
 runOperation CREATE env state@VMState{stack=value:input:size:rest} = do
-  addressState <- getAddressState $ envOwner env
+  addressState <- lift $ getAddressState $ envOwner env
   let newAddress = getNewAddress (envOwner env) (addressStateNonce addressState)
 
   (state', initCodeBytes) <- liftIO $ mLoadByteString state input size
@@ -440,13 +439,13 @@ runOperation CREATE env state@VMState{stack=value:input:size:rest} = do
       when debug $ liftIO $ putStrLn "transfer value"
       addToBalance (envOwner env) (-fromIntegral value)
 
-      let initCode = bytes2Code initCodeBytes
+      let initCode = Code initCodeBytes
       
       newVMState <- create (envBlock env) (callDepth state' + 1) (envOwner env) (envOrigin env) (toInteger value) (envGasPrice env) (vmGasRemaining state') newAddress initCode
 
       let codeBytes = fromMaybe B.empty $ returnVal newVMState
 
-      addCode initCodeBytes
+      lift $ addCode initCodeBytes
 
       let newAccount =
             (if B.null codeBytes then Nothing else Just newAddress,
@@ -460,7 +459,7 @@ runOperation CREATE env state@VMState{stack=value:input:size:rest} = do
 
 
 
-      newAddressExists <- addressStateExists newAddress
+      newAddressExists <- lift $ addressStateExists newAddress
       when newAddressExists $ incrementNonce (envOwner env)
 
       let result =
@@ -474,7 +473,7 @@ runOperation CREATE env state@VMState{stack=value:input:size:rest} = do
 
 runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffset:_:rest)} = do
 
-  theAddressExists <- addressStateExists (Address $ fromIntegral to)
+  theAddressExists <- lift $ addressStateExists (Address $ fromIntegral to)
 
   if theAddressExists || to < 5
     then do
@@ -486,16 +485,16 @@ runOperation CALL env state@VMState{stack=(gas:to:value:inOffset:inSize:outOffse
       (_, True) -> return state{stack=0:rest, vmException=Just InsufficientFunds}
       _ -> do
 
-        storageStateRoot <- getStorageStateRoot
-        addressState <- getAddressState (envOwner env)
-        putAddressState (envOwner env) addressState{contractRoot=storageStateRoot}
+        storageStateRoot <- lift getStorageStateRoot
+        addressState <- lift $ getAddressState (envOwner env)
+        lift $ putAddressState (envOwner env) addressState{contractRoot=storageStateRoot}
 
         (state'', retValue) <- nestedRun env state'{stack=rest} gas (Address $ fromIntegral to) (envOwner env) value inputData
 
         --Need to load newest stateroot in case it changed recursively within the nestedRun
         --TODO- think this one out....  There should be a cleaner way to do this.  Also, I am not sure that I am passing in storage changes to the nested calls to begin with.
-        addressState <- getAddressState (envOwner env)
-        setStorageStateRoot (contractRoot addressState)
+        addressState <- lift $ getAddressState (envOwner env)
+        lift $ setStorageStateRoot (contractRoot addressState)
 
         state''' <-
           case retValue of
@@ -525,9 +524,9 @@ runOperation CALLCODE env state@VMState{stack=gas:to:value:inOffset:inSize:outOf
   (state', inputData) <- liftIO $ mLoadByteString state inOffset inSize
   let address = Address $ fromIntegral to
 
-  theAddressExists <- addressStateExists address
+  theAddressExists <- lift $ addressStateExists address
 
-  ownerBalance <- balance <$> getAddressState (envOwner env)
+  ownerBalance <- lift $ balance <$> getAddressState (envOwner env)
 
   case (ownerBalance < fromIntegral value, theAddressExists) of
     (True, _) -> return state'{stack=0:rest}
@@ -535,8 +534,8 @@ runOperation CALLCODE env state@VMState{stack=gas:to:value:inOffset:inSize:outOf
       state'' <- liftIO $ mStoreByteString state' outOffset (B.replicate (fromIntegral outSize) 0)
       return state''{stack=1:rest}
     _ -> do
-      addressState <- getAddressState address
-      code <- fromMaybe B.empty <$> getCode (codeHash addressState)
+      addressState <- lift $ getAddressState address
+      code <- lift $ fromMaybe B.empty <$> getCode (codeHash addressState)
 
       nestedState <-
         runCodeFromStart (callDepth state' + 1)
@@ -548,7 +547,8 @@ runOperation CALLCODE env state@VMState{stack=gas:to:value:inOffset:inSize:outOf
           envInputData = inputData,
           envSender = envOwner env,
           envValue = fromIntegral value,
-          envCode = bytes2Code code,
+          envCode = Code code,
+          envJumpDests = getValidJUMPDESTs code,
           envBlock = envBlock env
           }
 
@@ -560,7 +560,7 @@ runOperation CALLCODE env state@VMState{stack=gas:to:value:inOffset:inSize:outOf
 
       let success = 1
 
-      addressState' <- getAddressState address
+      addressState' <- lift $ getAddressState address
 
       paid <- pay "CALLCODE fees" (envOwner env) address (fromIntegral value)
 
@@ -582,7 +582,7 @@ runOperation RETURN _ state =
   return $ state { vmException=Just StackTooSmallException } 
 
 runOperation SUICIDE env state@VMState{stack=address:rest, suicideList=sl} = do
-  addressState <- getAddressState $ envOwner env
+  addressState <- lift $ getAddressState $ envOwner env
   let allFunds = balance addressState
   pay "transferring all funds upon suicide" (envOwner env) (Address $ fromIntegral address) allFunds
   return state{ stack=rest, done=True, suicideList=envOwner env:sl }
@@ -631,7 +631,7 @@ opGasPrice VMState{stack=_:_:size:_} CODECOPY = return (1 + ceiling (fromIntegra
 opGasPrice VMState{stack=_:_:size:_} CALLDATACOPY = return (1 + ceiling (fromIntegral size / (32::Double)), 0)
 opGasPrice VMState{stack=_:_:_:size:_} EXTCODECOPY = return (1 + ceiling (fromIntegral size / (32::Double)), 0)
 opGasPrice VMState{ stack=p:val:_ } SSTORE = do
-  oldVals <- getStorageKeyVals (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
+  oldVals <- lift $ getStorageKeyVals (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
   let oldVal =
           case oldVals of
             [] -> 0::Word256
@@ -698,7 +698,7 @@ printDebugInfo env memBefore memAfter c op state result = do
   liftIO $ putStr $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack result))
   liftIO $ putStr $ "    MEMORY\n" ++ showMem 0 (B.unpack $ memByteString)
   liftIO $ putStrLn $ "    STORAGE"
-  kvs <- getStorageKeyVals ""
+  kvs <- lift $ getStorageKeyVals ""
   liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (rlpDecode $ rlpDeserialize $ rlpDecode v::Integer)) kvs)
 
 runCode::Environment->VMState->Int->ContextM VMState
@@ -725,22 +725,22 @@ runCodeFromStart::Int->Integer->Environment->ContextM VMState
 runCodeFromStart callDepth' gasLimit' env = do
   when debug $ liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty $ envCode env)))
 
-  addressAlreadyExists <- addressStateExists (envOwner env)
+  addressAlreadyExists <- lift $ addressStateExists (envOwner env)
 
   storageRoot <-
     if addressAlreadyExists
     then do
-      addressState <- getAddressState (envOwner env)
+      addressState <- lift $ getAddressState (envOwner env)
       return $ contractRoot addressState
     else return emptyTriePtr
 
-  oldStateRoot <- getStorageStateRoot
-  setStorageStateRoot storageRoot
+  oldStateRoot <- lift getStorageStateRoot
+  lift $ setStorageStateRoot storageRoot
 
   vmState <- liftIO startingState
   state' <- runCode env vmState{callDepth=callDepth', vmGasRemaining=gasLimit'} 0
 
-  newStorageStateRoot <- getStorageStateRoot
+  newStorageStateRoot <- lift getStorageStateRoot
 
   --setStorageStateRoot oldStateRoot
 
@@ -763,7 +763,7 @@ create b callDepth' sender origin value' gasPrice' availableGas newAddress init'
   case Just $ fromMaybe B.empty $ returnVal vmState of
   --case returnVal vmState of
     Nothing -> do
-      addressState <- getAddressState newAddress
+      addressState <- lift $ getAddressState newAddress
       liftIO $ do
         putStrLn $ "Deleting zombie account: " ++ show (pretty newAddress)
         putStrLn $ "Deleting zombie account: " ++ format addressState
@@ -772,8 +772,8 @@ create b callDepth' sender origin value' gasPrice' availableGas newAddress init'
     Just result -> do
       if 5*toInteger (B.length result) < vmGasRemaining vmState
         then do 
-        addCode result
-        newAddressExists <- addressStateExists newAddress
+        lift $ addCode result
+        newAddressExists <- lift $ addressStateExists newAddress
         {-when newAddressExists $ do
           addressState <- getAddressState newAddress
           putAddressState newAddress addressState{codeHash=hash result}-}
@@ -813,8 +813,8 @@ sha2 input =
 call::Block->Int->Address->Address->Address->Word256->Word256->B.ByteString->Word256->Address->ContextM VMState
 call b callDepth receiveAddress codeAddress senderAddress value gasPrice theData gas originAddress = do
 
-  addressState <- getAddressState receiveAddress
-  code <- fromMaybe B.empty <$> getCode (codeHash addressState)
+  addressState <- lift $ getAddressState receiveAddress
+  code <- lift $ fromMaybe B.empty <$> getCode (codeHash addressState)
 
   vmState <-
       runCodeFromStart callDepth (fromIntegral gas)
@@ -826,7 +826,7 @@ call b callDepth receiveAddress codeAddress senderAddress value gasPrice theData
             envInputData = theData,
             envSender = senderAddress,
             envValue = fromIntegral value,
-            envCode = bytes2Code code
+            envCode = Code code
             }
 
   return vmState
@@ -855,14 +855,15 @@ runCodeForTransaction' b callDepth' sender origin value' gasPrice' availableGas 
             envInputData = theData,
             envSender = sender,
             envValue = value',
-            envCode = code
+            envCode = code,
+            envJumpDests = getValidJUMPDESTs $ codeBytes code
             }
 
 {- -}
-  newStorageStateRoot <- getStorageStateRoot
-  ownerAddressState <- getAddressState owner
+  newStorageStateRoot <- lift getStorageStateRoot
+  ownerAddressState <- lift $ getAddressState owner
   when (isNothing $ vmException vmState) $
-    putAddressState owner ownerAddressState{contractRoot=newStorageStateRoot}
+    lift $ putAddressState owner ownerAddressState{contractRoot=newStorageStateRoot}
 {- -}
 
   case vmException vmState of
@@ -885,7 +886,7 @@ runCodeForTransaction' b callDepth' sender origin value' gasPrice' availableGas 
 
 nestedRun::Environment->VMState->Word256->Address->Address->Word256->B.ByteString->ContextM (VMState, Maybe B.ByteString)
 nestedRun env state gas (Address x) _ value inputData | x > 0 && x < 4 = do
-  putAddressState (Address x) blankAddressState
+  lift $ putAddressState (Address x) blankAddressState
   pay "nestedRun fees" (envOwner env) (Address x) (fromIntegral value)
 
   let cost =
@@ -911,7 +912,7 @@ nestedRun env state gas (Address x) _ value inputData | x > 0 && x < 4 = do
     return (state{stack=1:stack state}, Just result)
 
 nestedRun env state gas address sender value inputData = do
-  theBalance <- fmap balance $ getAddressState $ envOwner env
+  theBalance <- lift $ fmap balance $ getAddressState $ envOwner env
 
   if theBalance < fromIntegral value
     then do
@@ -919,8 +920,8 @@ nestedRun env state gas address sender value inputData = do
     else do
       pay "nestedRun fees" (envOwner env) address (fromIntegral value)
 
-      addressState <- getAddressState address
-      code <- fromMaybe B.empty <$> getCode (codeHash addressState)
+      addressState <- lift $ getAddressState address
+      code <- lift $ fromMaybe B.empty <$> getCode (codeHash addressState)
 
       nestedState <-
           runCodeFromStart (callDepth state + 1)
@@ -932,7 +933,7 @@ nestedRun env state gas address sender value inputData = do
                                  envInputData = inputData,
                                  envSender = sender,
                                  envValue = fromIntegral value,
-                                 envCode = bytes2Code code,
+                                 envCode = Code code,
                                  envBlock = envBlock env
                                }
 
@@ -951,9 +952,9 @@ nestedRun env state gas address sender value inputData = do
                 Nothing -> 1
                 _ -> 0
 
-      storageStateRoot <- getStorageStateRoot
-      addressState <- getAddressState address
-      putAddressState address addressState{contractRoot=storageStateRoot}
+      storageStateRoot <- lift getStorageStateRoot
+      addressState <- lift $ getAddressState address
+      lift $ putAddressState address addressState{contractRoot=storageStateRoot}
 
       return
         (

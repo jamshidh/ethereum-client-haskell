@@ -6,6 +6,7 @@ import Prelude  hiding (EQ)
 import qualified Data.ByteString as B
 
 import Blockchain.Data.Address
+import Blockchain.Data.Code
 import Blockchain.Data.Transaction
 import Blockchain.Constants
 import Blockchain.JCommand

@@ -6,6 +6,7 @@ module Main (
 
 import Control.Monad.IO.Class
 import Control.Monad.State
+import Control.Monad.Trans
 import Control.Monad.Trans.Resource
 import Data.Bits
 import qualified Data.ByteString as B
@@ -35,11 +36,13 @@ import Blockchain.Data.Transaction
 import Blockchain.Data.Wire
 import Blockchain.Database.MerklePatricia
 import Blockchain.DB.CodeDB
-import Blockchain.Display
 import Blockchain.DB.ModifyStateDB
+import Blockchain.DBM
+import Blockchain.Display
 import Blockchain.PeerUrls
 import Blockchain.SampleTransactions
 import Blockchain.SHA
+import Blockchain.SigningTools
 import Blockchain.Util
 
 --import Debug.Trace
@@ -55,13 +58,13 @@ Just prvKey = makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061
 getNextBlock::Block->UTCTime->ContextM Block
 getNextBlock b ts = do
   let theCoinbase = prvKey2Address prvKey
-  setStateRoot $ bStateRoot bd
+  lift $ setStateRoot $ bStateRoot bd
   addToBalance theCoinbase (1500*finney)
 
-  ctx <- get
+  dbs <- lift get
 
   return Block{
-               blockData=testGetNextBlockData $ stateRoot $ stateDB ctx,
+               blockData=testGetNextBlockData $ stateRoot $ stateDB dbs,
                receiptTransactions=[],
                blockUncles=[]
              }
@@ -100,7 +103,7 @@ submitNextBlock handle baseDifficulty b = do
 
 ifBlockInDBSubmitNextBlock::Handle->Integer->Block->ContextM ()
 ifBlockInDBSubmitNextBlock handle baseDifficulty b = do
-  maybeBlock <- getBlock (blockHash b)
+  maybeBlock <- lift $ getBlock (blockHash b)
   case maybeBlock of
     Nothing -> return ()
     _ -> submitNextBlock handle baseDifficulty b
@@ -176,20 +179,20 @@ mkHello = do
 
 createTransaction::Transaction->ContextM SignedTransaction
 createTransaction t = do
-    userNonce <- addressStateNonce <$> getAddressState (prvKey2Address prvKey)
+    userNonce <- lift $ addressStateNonce <$> getAddressState (prvKey2Address prvKey)
     liftIO $ withSource devURandom $ signTransaction prvKey t{tNonce=userNonce}
 
 createTransactions::[Transaction]->ContextM [SignedTransaction]
 createTransactions transactions = do
-    userNonce <- addressStateNonce <$> getAddressState (prvKey2Address prvKey)
+    userNonce <- lift $ addressStateNonce <$> getAddressState (prvKey2Address prvKey)
     forM (zip transactions [userNonce..]) $ \(t, n) -> do
       liftIO $ withSource devURandom $ signTransaction prvKey t{tNonce=n}
 
 doit::Handle->ContextM ()
 doit handle = do
-  addCode B.empty --This is probably a bad place to do this, but I can't think of a more natural place to do it....  Empty code is used all over the place, and it needs to be in the database.
+  lift $ addCode B.empty --This is probably a bad place to do this, but I can't think of a more natural place to do it....  Empty code is used all over the place, and it needs to be in the database.
   sendMessage handle =<< (liftIO mkHello)
-  (setStateRoot . bStateRoot . blockData) =<< getBestBlock
+  lift . setStateRoot . bStateRoot . blockData =<< getBestBlock
 
   --signedTx <- createTransaction simpleTX
   --signedTx <- createTransaction outOfGasTX
@@ -232,5 +235,5 @@ main = do
 
   runResourceT $ do
     cxt <- openDBs "h"
-    _ <- liftIO $ runStateT (doit handle) cxt
+    _ <- liftIO $ runStateT (runStateT (doit handle) (Context [] 0 [])) cxt
     return ()

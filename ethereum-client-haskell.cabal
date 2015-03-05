@@ -34,6 +34,7 @@ executable ethereumH
                  , directory
                  , either
                  , entropy
+                 , ethereum-data-leveldb
                  , ethereum-merkle-patricia-db
                  , ethereum-rlp
                  , filepath
@@ -68,6 +69,7 @@ library
                  , directory
                  , either
                  , entropy
+                 , ethereum-data-leveldb
                  , ethereum-merkle-patricia-db
                  , ethereum-rlp
                  , filepath
@@ -85,32 +87,21 @@ library
     exposed-modules: 
                    Blockchain.BlockChain
                    Blockchain.BlockSynchronizer
-                   Blockchain.Colors
                    Blockchain.Communication
                    Blockchain.Constants
                    Blockchain.Context
-                   Blockchain.Data.Address
-                   Blockchain.Data.AddressState
-                   Blockchain.Data.Block
-                   Blockchain.Data.Log
                    Blockchain.Data.GenesisBlock
                    Blockchain.Data.Peer
-                   Blockchain.Data.SignedTransaction
-                   Blockchain.Data.Transaction
                    Blockchain.Data.TransactionReceipt
                    Blockchain.Data.Wire
-                   Blockchain.DB.CodeDB
                    Blockchain.DB.ModifyStateDB
                    Blockchain.Display
-                   Blockchain.ExtDBs
                    Blockchain.ExtendedECDSA
                    Blockchain.ExtWord
-                   Blockchain.Format
                    Blockchain.JCommand
                    Blockchain.PeerUrls
                    Blockchain.SampleTransactions
-                   Blockchain.SHA
-                   Blockchain.Util
+                   Blockchain.SigningTools
                    Blockchain.VM.Code
                    Blockchain.VM.Environment
                    Blockchain.VM.Labels

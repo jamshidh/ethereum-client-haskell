@@ -28,7 +28,7 @@ data GetBlockHashesResult = NeedMore SHA | NeededHashes [SHA] deriving (Show)
 
 findFirstHashAlreadyInDB::[SHA]->ContextM (Maybe SHA)
 findFirstHashAlreadyInDB hashes = do
-  items <- filterM (fmap (not . isNothing) . blockDBGet . BL.toStrict . Bin.encode) hashes
+  items <- lift $ filterM (fmap (not . isNothing) . blockDBGet . BL.toStrict . Bin.encode) hashes
   return $ safeHead items
   where
     safeHead::[a]->Maybe a
