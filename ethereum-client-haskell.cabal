@@ -97,7 +97,6 @@ library
                    Blockchain.DB.ModifyStateDB
                    Blockchain.Display
                    Blockchain.ExtendedECDSA
-                   Blockchain.ExtWord
                    Blockchain.JCommand
                    Blockchain.PeerUrls
                    Blockchain.SampleTransactions
