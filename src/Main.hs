@@ -6,12 +6,10 @@ module Main (
 
 import Control.Monad.IO.Class
 import Control.Monad.State
-import Control.Monad.Trans
 import Control.Monad.Trans.Resource
 import Data.Bits
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
-import Data.Functor
 import Data.Time.Clock
 import Data.Word
 import Network
@@ -29,10 +27,9 @@ import Blockchain.Communication
 import Blockchain.Constants
 import Blockchain.Context
 import Blockchain.Data.Address
-import Blockchain.Data.AddressState
 import Blockchain.Data.Block
-import Blockchain.Data.SignedTransaction
-import Blockchain.Data.Transaction
+--import Blockchain.Data.SignedTransaction
+--import Blockchain.Data.Transaction
 import Blockchain.Data.Wire
 import Blockchain.Database.MerklePatricia
 import Blockchain.DB.CodeDB
@@ -40,9 +37,9 @@ import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
 import Blockchain.Display
 import Blockchain.PeerUrls
-import Blockchain.SampleTransactions
+--import Blockchain.SampleTransactions
 import Blockchain.SHA
-import Blockchain.SigningTools
+--import Blockchain.SigningTools
 import Blockchain.Util
 
 --import Debug.Trace
@@ -157,14 +154,14 @@ getPayloads (0x22:0x40:0x08:0x91:s1:s2:s3:s4:remainder) =
 getPayloads _ = error "Malformed data sent to getPayloads"
 
 readAndOutput::Handle->ContextM ()
-readAndOutput h = do
-  payloads <- liftIO $ BL.hGetContents h
-  handleAllPayloads h $ getPayloads $ BL.unpack payloads
+readAndOutput handle = do
+  payloads <- liftIO $ BL.hGetContents handle
+  handleAllPayloads handle $ getPayloads $ BL.unpack payloads
   where
     handleAllPayloads _ [] = error "Server has closed the connection"
-    handleAllPayloads h (pl:rest) = do
-      handlePayload h $ B.pack pl
-      handleAllPayloads h rest
+    handleAllPayloads handle' (pl:rest) = do
+      handlePayload handle $ B.pack pl
+      handleAllPayloads handle' rest
 
 mkHello::IO Message
 mkHello = do
@@ -177,6 +174,7 @@ mkHello = do
                nodeId = fromIntegral $ byteString2Integer peerId
              }
 
+{-
 createTransaction::Transaction->ContextM SignedTransaction
 createTransaction t = do
     userNonce <- lift $ addressStateNonce <$> getAddressState (prvKey2Address prvKey)
@@ -187,6 +185,7 @@ createTransactions transactions = do
     userNonce <- lift $ addressStateNonce <$> getAddressState (prvKey2Address prvKey)
     forM (zip transactions [userNonce..]) $ \(t, n) -> do
       liftIO $ withSource devURandom $ signTransaction prvKey t{tNonce=n}
+-}
 
 doit::Handle->ContextM ()
 doit handle = do
@@ -227,9 +226,9 @@ main = do
           (arg:_) -> arg
           [] -> "1" --Just default to poc-8.ethdev.com
 
-  let (ipAddress, port) = ipAddresses !! read ipNum
+  let (ipAddress, thePort) = ipAddresses !! read ipNum
 
-  handle <- connectTo ipAddress (PortNumber port)
+  handle <- connectTo ipAddress (PortNumber thePort)
 
   putStrLn "Connected"
 

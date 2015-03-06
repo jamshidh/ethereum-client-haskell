@@ -50,7 +50,7 @@ import Blockchain.VM
 import Blockchain.VM.Code
 import Blockchain.VM.VMState
 
-import Debug.Trace
+--import Debug.Trace
 
 {-
 initializeBlockChain::ContextM ()
@@ -140,7 +140,7 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
 -----------------
 
     when debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList newVMState)
-    forM (suicideList newVMState) $ \address -> do
+    forM_ (suicideList newVMState) $ \address -> do
       lift $ deleteAddressState address
 
     return newVMState
@@ -169,7 +169,7 @@ runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
 -------------------------
 
       when debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList newVMState)
-      forM (suicideList newVMState) $ \address -> do
+      forM_ (suicideList newVMState) $ \address -> do
         lift $ deleteAddressState address
 
       return newVMState
@@ -229,7 +229,7 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
     when debug $
       liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining newVMState)
 
-    coinbaseAddressState <- lift $ getAddressState (coinbase $ blockData b)
+    --coinbaseAddressState <- lift $ getAddressState (coinbase $ blockData b)
 
     let realRefund =
           min (refund newVMState) ((tGasLimit ut - vmGasRemaining newVMState) `div` 2)
