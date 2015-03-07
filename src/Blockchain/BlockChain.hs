@@ -134,8 +134,13 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
     then do
     pay "pre-VM fees1" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
 
-    newVMState <- create b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas newAddress (tInit ut)
+    newVMStateOrException <- create b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas newAddress (tInit ut)
 
+    let newVMState =
+            case newVMStateOrException of
+              Left e -> (eState e){vmException = Just e}
+              Right x -> x
+      
     
 -----------------
 
@@ -146,7 +151,7 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
     return newVMState
     else do
     liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*gasPrice ut) ++ ", have " ++ show (balance addressState)
-    return VMState{vmException=Just InsufficientFunds, logs=[]}
+    return VMState{vmException=Just $ InsufficientFunds undefined, logs=[]}
     
 runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
   when debug $ liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ to ut)
@@ -156,7 +161,7 @@ runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
   success <- pay "transfer value2" tAddr (to ut) (value ut)
 
   if not success
-    then return VMState{vmException=Just InsufficientFunds, logs=[]}
+    then return VMState{vmException=Just $ InsufficientFunds undefined, logs=[]}
     else 
     if availableGas*gasPrice ut <= balance addressState
     then do
@@ -165,9 +170,14 @@ runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
 
       pay "pre-VM fees2" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
 
-      newVMState <- runCodeForTransaction' b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas (to ut) (Code contractCode) (tData ut)
+      newVMStateOrException <- runCodeForTransaction' b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas (to ut) (Code contractCode) (tData ut)
 -------------------------
 
+      let newVMState =
+            case newVMStateOrException of
+              Left e -> (eState e){vmException = Just e}
+              Right x -> x
+      
       when debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList newVMState)
       forM_ (suicideList newVMState) $ \address -> do
         lift $ deleteAddressState address
@@ -176,7 +186,7 @@ runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
     
     else do
       liftIO $ putStrLn "Insufficient funds to run the VM"
-      return VMState{vmException=Just InsufficientFunds, logs=[]}
+      return VMState{vmException=Just $ InsufficientFunds undefined, logs=[]}
 
 addBlocks::[Block]->ContextM ()
 addBlocks blocks = 
@@ -255,7 +265,7 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
     return
       (
         VMState{
-           vmException=Just InsufficientFunds,
+           vmException=Just $ InsufficientFunds undefined,
            logs=[],
            newAccounts=[],
            vmGasRemaining=error "undefined vmGasRemaining",

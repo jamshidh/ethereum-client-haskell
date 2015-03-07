@@ -22,13 +22,30 @@ import Blockchain.Data.Log
 import Blockchain.ExtWord
 import Blockchain.Format
 import Blockchain.VM.Code
+import Blockchain.VM.Environment
 
-data VMException = OutOfGasException | StackTooSmallException | VMException String | MalformedOpcodeException | DivByZeroException | InsufficientFunds | InvalidJump deriving (Show)
+data VMException =
+  OutOfGasException  {eState::VMState} |
+  StackTooSmallException {eState::VMState} |
+  VMException {message::String, eState::VMState} |
+  MalformedOpcodeException  {eState::VMState} |
+  DivByZeroException  {eState::VMState} |
+  InsufficientFunds  {eState::VMState} |
+  InvalidJump {eState::VMState}
+
+instance Format VMException where
+  format (OutOfGasException _) = "OutOfGasException"
+  format (StackTooSmallException _) = "StackTooSmallException"
+  format (VMException message _) = "VMException" ++ message
+  format (MalformedOpcodeException _) = "MalformedOpcodeException"
+  format (DivByZeroException _) = "DivByZeroException"
+  format (InsufficientFunds _) = "InsufficientFunds"
+  format (InvalidJump _) = "InvalidJump"
 
 addErr::String->Code->VMState->IO VMState
-addErr message c state = do
+addErr message' c state = do
   let (op, _) = getOperationAt c (pc state)
-  return state{vmException=Just $ VMException (message ++ " for a call to " ++ show op)}
+  return state{vmException=Just $ VMException {message = message' ++ " for a call to " ++ show op, eState = state}}
 
 data Memory =
   Memory {
@@ -59,6 +76,8 @@ data VMState =
     newAccounts::[(Maybe Address, Integer, AddressState)],
     
     logs::[Log],
+
+    environment::Environment,
     
     vmException::Maybe VMException
     }
@@ -71,8 +90,8 @@ instance Format VMState where
     "gasRemaining: " ++ show (vmGasRemaining state) ++ "\n" ++
     "stack: " ++ show (stack state) ++ "\n"
 
-startingState::IO VMState
-startingState = do
+startingState::Environment->IO VMState
+startingState env = do
   m <- newMemory
   return VMState 
              {
@@ -86,6 +105,7 @@ startingState = do
                callDepth=0,
                refund=0,
                logs=[],
+               environment=env,
                newAccounts=[],
                suicideList=[]
              }
