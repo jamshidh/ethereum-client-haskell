@@ -45,12 +45,12 @@ instance Word256Storable Integer where
 
 pop::Word256Storable a=>VMM a
 pop = do
-  state'@VMState{stack=val:rest} <- lift get
-  lift $ put state'{stack=rest}
-  return $ fromWord256 val
-
---TODO- check for empty stack
---  return state{vmException=Just StackTooSmallException}
+  state' <- lift get
+  case state' of
+    VMState{stack=val:rest} -> do
+                lift $ put state'{stack=rest}
+                return $ fromWord256 val
+    _ -> left $ StackTooSmallException state'
 
 
 push::Word256Storable a=>a->VMM ()
