@@ -120,7 +120,7 @@ swapn::Int->VMM ()
 swapn n = do
   v1 <- pop
   state <- lift get
-  if length (stack state) < n
+  if length (stack state) < n + 1
     then do
     state <- lift get
     left $ StackTooSmallException state
