@@ -106,6 +106,7 @@ library
                    Blockchain.VM.Labels
                    Blockchain.VM.Memory
                    Blockchain.VM.Opcodes
+                   Blockchain.VM.VMM
                    Blockchain.VM.VMState
                    Blockchain.VM
     C-sources: fastNonceFinder/nonceFinder.c
