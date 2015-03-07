@@ -655,44 +655,80 @@ runOperation x = error $ "Missing case in runOperation: " ++ show x
 movePC::VMState->Word256->VMState
 movePC state l = state{ pc=pc state + l }
 
-opGasPrice::VMState->Operation->ContextM (Integer, Integer)
-opGasPrice _ STOP = return (0, 0)
-opGasPrice _ SUICIDE = return (0, 0)
+opGasPrice::Operation->VMM (Integer, Integer)
+opGasPrice STOP = return (0, 0)
+opGasPrice SUICIDE = return (0, 0)
 
 
-opGasPrice _ BALANCE = return (20, 0)
-opGasPrice _ SLOAD = return (20, 0)
-opGasPrice _ CALL = return (20, 0)
+opGasPrice BALANCE = return (20, 0)
+opGasPrice SLOAD = return (20, 0)
+opGasPrice CALL = return (20, 0)
 --opGasPrice VMState{stack=value:_} CALLCODE = return (20+fromIntegral value, 0)
-opGasPrice VMState{stack=value:_} CALLCODE = return (20, 0)
+opGasPrice CALLCODE = return (20, 0)
 
-opGasPrice VMState{stack=_:size:_} LOG0 = return (32+fromIntegral size, 0)
-opGasPrice VMState{stack=_:size:_} LOG1 = return (64+fromIntegral size, 0)
-opGasPrice VMState{stack=_:size:_} LOG2 = return (96+fromIntegral size, 0)
-opGasPrice VMState{stack=_:size:_} LOG3 = return (128+fromIntegral size, 0)
-opGasPrice VMState{stack=_:size:_} LOG4 = return (160+fromIntegral size, 0)
+opGasPrice LOG0 = do
+    _ <- pop::VMM Word256
+    size <- pop::VMM Word256
+    return (32+fromIntegral size, 0)
+opGasPrice LOG1 = do
+    _ <- pop::VMM Word256
+    size <- pop::VMM Word256
+    return (64+fromIntegral size, 0)
+opGasPrice LOG2 = do
+    _ <- pop::VMM Word256
+    size <- pop::VMM Word256
+    return (96+fromIntegral size, 0)
+opGasPrice LOG3 = do
+    _ <- pop::VMM Word256
+    size <- pop::VMM Word256
+    return (128+fromIntegral size, 0)
+opGasPrice LOG4 = do
+    _ <- pop::VMM Word256
+    size <- pop::VMM Word256
+    return (160+fromIntegral size, 0)
 
-opGasPrice _  CREATE = return (100, 0)
+opGasPrice CREATE = return (100, 0)
 
-opGasPrice VMState{stack=_:size:_} SHA3 = return (10+10*ceiling(fromIntegral size/(32::Double)), 0)
+opGasPrice SHA3 = do
+  _ <- pop::VMM Word256
+  size <- pop::VMM Word256
+  return (10+10*ceiling(fromIntegral size/(32::Double)), 0)
 
-opGasPrice VMState{stack=_:e:_} EXP = return (1 + ceiling (log (fromIntegral e) / log (256::Double)), 0)
+opGasPrice EXP = do
+    _ <- pop::VMM Word256
+    e <- pop::VMM Word256
+    return (1 + ceiling (log (fromIntegral e) / log (256::Double)), 0)
 
-opGasPrice VMState{stack=_:_:size:_} CODECOPY = return (1 + ceiling (fromIntegral size / (32::Double)), 0)
-opGasPrice VMState{stack=_:_:size:_} CALLDATACOPY = return (1 + ceiling (fromIntegral size / (32::Double)), 0)
-opGasPrice VMState{stack=_:_:_:size:_} EXTCODECOPY = return (1 + ceiling (fromIntegral size / (32::Double)), 0)
-opGasPrice VMState{ stack=p:val:_ } SSTORE = do
-  oldVals <- lift $ getStorageKeyVals (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
+opGasPrice CODECOPY = do
+    _ <- pop::VMM Word256
+    _ <- pop::VMM Word256
+    size <- pop::VMM Word256
+    return (1 + ceiling (fromIntegral size / (32::Double)), 0)
+opGasPrice CALLDATACOPY = do
+    _ <- pop::VMM Word256
+    _ <- pop::VMM Word256
+    size <- pop::VMM Word256
+    return (1 + ceiling (fromIntegral size / (32::Double)), 0)
+opGasPrice EXTCODECOPY = do
+    _ <- pop::VMM Word256
+    _ <- pop::VMM Word256
+    _ <- pop::VMM Word256
+    size <- pop::VMM Word256
+    return (1 + ceiling (fromIntegral size / (32::Double)), 0)
+opGasPrice SSTORE = do
+  p <- pop
+  val <- pop
+  oldVals <- lift $ lift $ lift $ getStorageKeyVals (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
   let oldVal =
           case oldVals of
             [] -> 0::Word256
             [x] -> fromInteger $ rlpDecode $ snd x
             _ -> error "multiple values in storage"
   case (oldVal, val) of
-      (0, x) | x /= 0 -> return (300, 0)
+      (0, x) | x /= (0::Word256) -> return (300, 0)
       (x, 0) | x /= 0 -> return (0, 100)
       _ -> return (100, 0)
-opGasPrice _ _ = return (1, 0)
+opGasPrice _ = return (1, 0)
 
 --missing stuff
 --Glog 1 Partial payment for a LOG operation.
@@ -707,19 +743,20 @@ opGasPrice _ _ = return (1, 0)
 
 
 
-decreaseGas::Integer->VMState->VMState
-decreaseGas val state = do
-  if val <= vmGasRemaining state
-    then state{ vmGasRemaining = vmGasRemaining state - val }
-    else state{ vmGasRemaining = 0, vmException = Just $ OutOfGasException state }
+decreaseGas::Integer->VMM ()
+decreaseGas val = do
+  state' <- lift get
+  if val <= vmGasRemaining state'
+    then lift $ put state'{ vmGasRemaining = vmGasRemaining state' - val }
+    else do
+      lift $ put state'{ vmGasRemaining = 0 }
+      left $ OutOfGasException state' 
 
-decreaseGasForOp::Operation->VMState->ContextM VMState
-decreaseGasForOp op state = do
-  (val, theRefund) <- opGasPrice state op
-  return $ addToRefund theRefund $ decreaseGas val state
-      where
-        addToRefund::Integer->VMState->VMState
-        addToRefund val state' = state'{refund=refund state' + val}
+decreaseGasForOp::Operation->VMM ()
+decreaseGasForOp op = do
+  (val, theRefund) <- opGasPrice op
+  decreaseGas val
+  addToRefund theRefund
 
 nibbleString2ByteString::N.NibbleString->B.ByteString
 nibbleString2ByteString (N.EvenNibbleString s) = s
@@ -762,8 +799,7 @@ runCode c = do
   let (op, len) = getOperationAt code (pc state)
   --liftIO $ putStrLn $ "EVM [ 19:22" ++ show op ++ " #" ++ show c ++ " (" ++ show (vmGasRemaining state) ++ ")"
 
-  state' <- lift $ lift $ decreaseGasForOp op state
-  lift $ put state'
+  decreaseGasForOp op
   
   runOperation op
 

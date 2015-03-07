@@ -88,6 +88,11 @@ incrementPC p = do
   state' <- lift get
   lift $ put state'{pc=pc state' + p}
 
+addToRefund::Integer->VMM ()
+addToRefund val = do
+  state' <- lift get
+  lift $ put state'{refund=refund state' + val}
+
 getCallDepth::VMM Int
 getCallDepth = lift $ fmap callDepth $ get
 
