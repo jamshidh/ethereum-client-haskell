@@ -53,6 +53,13 @@ pop = do
     _ -> left $ StackTooSmallException state'
 
 
+getStackItem::Word256Storable a=>Int->VMM a
+getStackItem i = do
+  state' <- lift get
+  if length (stack state') > fromIntegral i
+    then return $ fromWord256 (stack state' !! i)
+    else left $ StackTooSmallException state'
+
 push::Word256Storable a=>a->VMM ()
 push val = do
   state' <- lift get

@@ -305,7 +305,7 @@ runOperation LOG0 = logN 0
 runOperation LOG1 = logN 1
 runOperation LOG2 = logN 2
 runOperation LOG3 = logN 3
-runOperation LOG4  = logN 4
+runOperation LOG4 = logN 4
 
 runOperation MLOAD = do
   p <- pop
@@ -491,9 +491,6 @@ runOperation CALL = do
 
   if theAddressExists || to < 5
     then do
-
-
-    --qqqqqqqqqqqq
     inputDataOrException <- lift $ runEitherT $ mLoadByteString inOffset inSize
 
     gasRemaining <- getGasRemaining
@@ -505,6 +502,7 @@ runOperation CALL = do
         state <- lift get
         left $ InsufficientFunds state
       (Right inputData, _) -> do
+        push (1::Word256)
 
         storageStateRoot <- lift $ lift $ lift getStorageStateRoot
         addressState <- lift $ lift $ lift $ getAddressState owner
@@ -667,57 +665,43 @@ opGasPrice CALL = return (20, 0)
 opGasPrice CALLCODE = return (20, 0)
 
 opGasPrice LOG0 = do
-    _ <- pop::VMM Word256
-    size <- pop::VMM Word256
-    return (32+fromIntegral size, 0)
+  size <- getStackItem 1::VMM Word256
+  return (32+fromIntegral size, 0)
 opGasPrice LOG1 = do
-    _ <- pop::VMM Word256
-    size <- pop::VMM Word256
-    return (64+fromIntegral size, 0)
+  size <- getStackItem 1::VMM Word256
+  return (64+fromIntegral size, 0)
 opGasPrice LOG2 = do
-    _ <- pop::VMM Word256
-    size <- pop::VMM Word256
-    return (96+fromIntegral size, 0)
+  size <- getStackItem 1::VMM Word256
+  return (96+fromIntegral size, 0)
 opGasPrice LOG3 = do
-    _ <- pop::VMM Word256
-    size <- pop::VMM Word256
-    return (128+fromIntegral size, 0)
+  size <- getStackItem 1::VMM Word256
+  return (128+fromIntegral size, 0)
 opGasPrice LOG4 = do
-    _ <- pop::VMM Word256
-    size <- pop::VMM Word256
-    return (160+fromIntegral size, 0)
+  size <- getStackItem 1::VMM Word256
+  return (160+fromIntegral size, 0)
 
 opGasPrice CREATE = return (100, 0)
 
 opGasPrice SHA3 = do
-  _ <- pop::VMM Word256
-  size <- pop::VMM Word256
+  size <- getStackItem 1::VMM Word256
   return (10+10*ceiling(fromIntegral size/(32::Double)), 0)
 
 opGasPrice EXP = do
-    _ <- pop::VMM Word256
-    e <- pop::VMM Word256
+    e <- getStackItem 1::VMM Word256
     return (1 + ceiling (log (fromIntegral e) / log (256::Double)), 0)
 
 opGasPrice CODECOPY = do
-    _ <- pop::VMM Word256
-    _ <- pop::VMM Word256
-    size <- pop::VMM Word256
+    size <- getStackItem 2::VMM Word256
     return (1 + ceiling (fromIntegral size / (32::Double)), 0)
 opGasPrice CALLDATACOPY = do
-    _ <- pop::VMM Word256
-    _ <- pop::VMM Word256
-    size <- pop::VMM Word256
+    size <- getStackItem 2::VMM Word256
     return (1 + ceiling (fromIntegral size / (32::Double)), 0)
 opGasPrice EXTCODECOPY = do
-    _ <- pop::VMM Word256
-    _ <- pop::VMM Word256
-    _ <- pop::VMM Word256
-    size <- pop::VMM Word256
+    size <- getStackItem 3::VMM Word256
     return (1 + ceiling (fromIntegral size / (32::Double)), 0)
 opGasPrice SSTORE = do
-  p <- pop
-  val <- pop
+  p <- getStackItem 0
+  val <- getStackItem 1
   oldVals <- lift $ lift $ lift $ getStorageKeyVals (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
   let oldVal =
           case oldVals of
@@ -965,7 +949,8 @@ runCodeForTransaction' b callDepth' sender origin value' gasPrice' availableGas 
 
   case vmStateOrException of
         Left e -> do
-          when debug $ liftIO $ putStrLn $ CL.red $ format e
+          when debug $ liftIO $ do
+                    putStrLn $ CL.red $ format e
           return $ Left e
 
         Right vmState -> do
