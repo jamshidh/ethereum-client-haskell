@@ -519,6 +519,10 @@ runOperation CALL = do
             addressState <- lift $ lift $ lift $ getAddressState owner
             lift $ lift $ lift $ setStorageStateRoot (contractRoot addressState)
 
+            forM_ (reverse $ logs state'') $ \log -> addLog log
+
+            setGasRemaining $ vmGasRemaining state''
+
             case retValue of
               Just bytes -> mStoreByteString outOffset bytes
               _ -> return ()
