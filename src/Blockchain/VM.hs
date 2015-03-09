@@ -172,14 +172,14 @@ runOperation ADDMOD = do
   modVal <- pop::VMM Word256
   size <- pop::VMM Word256
 
-  push $ (toInteger v1 + toInteger v2) `mod` toInteger modVal
+  push $ (toInteger v1 + toInteger v2) `safe_mod` toInteger modVal
 
 runOperation MULMOD = do
   v1 <- pop::VMM Word256
   v2 <- pop::VMM Word256
   modVal <- pop::VMM Word256
 
-  let ret = (toInteger v1 * toInteger v2) `mod` toInteger modVal
+  let ret = (toInteger v1 * toInteger v2) `safe_mod` toInteger modVal
   push ret
 
 
@@ -825,17 +825,21 @@ runCodeFromStart callDepth' gasLimit' env = do
 
   vmState <- liftIO $ startingState env
 
-  result <- runStateT (runEitherT (runCode 0)) vmState{callDepth=callDepth', vmGasRemaining=gasLimit'}
+  if callDepth' > 1024
+    then return $ Left $ CallStackTooDeep vmState
+    else do
 
-  newStorageStateRoot <- lift getStorageStateRoot
+    result <- runStateT (runEitherT (runCode 0)) vmState{callDepth=callDepth', vmGasRemaining=gasLimit'}
 
-  --setStorageStateRoot oldStateRoot
+    newStorageStateRoot <- lift getStorageStateRoot
 
-  when debug $ liftIO $ putStrLn "VM has finished running"
+    --setStorageStateRoot oldStateRoot
 
-  case result of
-    (Left e, _) -> return $ Left e
-    (_, state) -> return $ Right state
+    when debug $ liftIO $ putStrLn "VM has finished running"
+
+    case result of
+      (Left e, _) -> return $ Left e
+      (_, state) -> return $ Right state
 
 
 
@@ -1028,6 +1032,7 @@ nestedRun state gas address sender value inputData = do
                                  envSender = sender,
                                  envValue = fromIntegral value,
                                  envCode = Code code,
+                                 envJumpDests = getValidJUMPDESTs code,
                                  envBlock = envBlock env
                                }
 

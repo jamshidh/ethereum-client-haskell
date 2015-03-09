@@ -32,6 +32,7 @@ data VMException =
   DivByZeroException  {eState::VMState} |
   InsufficientFunds  {eState::VMState} |
   AddressDoesNotExist {eState::VMState} |
+  CallStackTooDeep {eState::VMState} |
   InvalidJump {eState::VMState}
 
 instance Format VMException where
@@ -42,6 +43,7 @@ instance Format VMException where
   format (DivByZeroException _) = "DivByZeroException"
   format (InsufficientFunds _) = "InsufficientFunds"
   format (AddressDoesNotExist _) = "AddressDoesNotExist"
+  format (CallStackTooDeep _) = "CallStackTooDeep"
   format (InvalidJump _) = "InvalidJump"
 
 addErr::String->Code->VMState->IO VMState
