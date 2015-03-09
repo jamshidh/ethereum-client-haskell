@@ -121,13 +121,12 @@ swapn::Int->VMM ()
 swapn n = do
   v1 <- pop
   state <- lift get
-  if length (stack state) < n + 1
+  if length (stack state) < n
     then do
-    state <- lift get
-    left $ StackTooSmallException state
+      left $ StackTooSmallException state
     else do
-    let (middle, v2:rest2) = splitAt (n-1) $ tail (stack state)
-    lift $ put state{stack = v2:(middle++(v1:rest2))}
+      let (middle, v2:rest2) = splitAt (n-1) $ stack state
+      lift $ put state{stack = v2:(middle++(v1:rest2))}
 
 getByte::Word256->Word256->Word256
 getByte whichByte val | whichByte < 32 = val `shiftR` (8*(31 - fromIntegral whichByte)) .&. 0xFF
