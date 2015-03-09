@@ -11,6 +11,7 @@ import Blockchain.Context
 import Blockchain.Data.Address
 import Blockchain.Data.AddressState
 import Blockchain.Data.Log
+import Blockchain.DB.ModifyStateDB
 import Blockchain.ExtWord
 import Blockchain.VM.Environment
 import Blockchain.VM.VMState
@@ -125,3 +126,12 @@ useGas::Integer->VMM ()
 useGas gas = do
   state' <- lift get
   lift $ put state'{vmGasRemaining=vmGasRemaining state' - gas}
+
+pay'::String->Address->Address->Integer->VMM ()
+pay' reason from to val = do
+  success <- lift $ lift $ pay reason from to val
+  if success
+    then return ()
+    else do
+      state' <- lift get
+      left $ InsufficientFunds state'

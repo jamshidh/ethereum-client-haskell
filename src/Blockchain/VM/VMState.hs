@@ -31,6 +31,7 @@ data VMException =
   MalformedOpcodeException  {eState::VMState} |
   DivByZeroException  {eState::VMState} |
   InsufficientFunds  {eState::VMState} |
+  AddressDoesNotExist {eState::VMState} |
   InvalidJump {eState::VMState}
 
 instance Format VMException where
@@ -40,6 +41,7 @@ instance Format VMException where
   format (MalformedOpcodeException _) = "MalformedOpcodeException"
   format (DivByZeroException _) = "DivByZeroException"
   format (InsufficientFunds _) = "InsufficientFunds"
+  format (AddressDoesNotExist _) = "AddressDoesNotExist"
   format (InvalidJump _) = "InvalidJump"
 
 addErr::String->Code->VMState->IO VMState
