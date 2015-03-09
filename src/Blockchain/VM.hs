@@ -52,6 +52,7 @@ import Blockchain.VM.Code
 import Blockchain.VM.Environment
 import Blockchain.VM.Memory
 import Blockchain.VM.Opcodes
+import Blockchain.VM.OpcodePrices
 import Blockchain.VM.VMM
 import Blockchain.VM.VMState
 import qualified Data.NibbleString as N
@@ -662,53 +663,45 @@ runOperation x = error $ "Missing case in runOperation: " ++ show x
 movePC::VMState->Word256->VMState
 movePC state l = state{ pc=pc state + l }
 
-opGasPrice::Operation->VMM (Integer, Integer)
-opGasPrice STOP = return (0, 0)
-opGasPrice SUICIDE = return (0, 0)
+opGasPriceAndRefund::Operation->VMM (Integer, Integer)
+--opGasPriceAndRefund CALL = return (20, 0)
+----opGasPriceAndRefund VMState{stack=value:_} CALLCODE = return (20+fromIntegral value, 0)
+--opGasPriceAndRefund CALLCODE = return (20, 0)
 
-
-opGasPrice BALANCE = return (20, 0)
-opGasPrice SLOAD = return (20, 0)
-opGasPrice CALL = return (20, 0)
---opGasPrice VMState{stack=value:_} CALLCODE = return (20+fromIntegral value, 0)
-opGasPrice CALLCODE = return (20, 0)
-
-opGasPrice LOG0 = do
+opGasPriceAndRefund LOG0 = do
   size <- getStackItem 1::VMM Word256
   return (32+fromIntegral size, 0)
-opGasPrice LOG1 = do
+opGasPriceAndRefund LOG1 = do
   size <- getStackItem 1::VMM Word256
   return (64+fromIntegral size, 0)
-opGasPrice LOG2 = do
+opGasPriceAndRefund LOG2 = do
   size <- getStackItem 1::VMM Word256
   return (96+fromIntegral size, 0)
-opGasPrice LOG3 = do
+opGasPriceAndRefund LOG3 = do
   size <- getStackItem 1::VMM Word256
   return (128+fromIntegral size, 0)
-opGasPrice LOG4 = do
+opGasPriceAndRefund LOG4 = do
   size <- getStackItem 1::VMM Word256
   return (160+fromIntegral size, 0)
 
-opGasPrice CREATE = return (100, 0)
-
-opGasPrice SHA3 = do
+opGasPriceAndRefund SHA3 = do
   size <- getStackItem 1::VMM Word256
-  return (10+10*ceiling(fromIntegral size/(32::Double)), 0)
+  return (30+6*ceiling(fromIntegral size/(32::Double)), 0)
 
-opGasPrice EXP = do
+opGasPriceAndRefund EXP = do
     e <- getStackItem 1::VMM Word256
-    return (1 + ceiling (log (fromIntegral e) / log (256::Double)), 0)
+    return (10 + 10*ceiling (log (fromIntegral e) / log (256::Double)), 0)
 
-opGasPrice CODECOPY = do
+opGasPriceAndRefund CODECOPY = do
     size <- getStackItem 2::VMM Word256
     return (1 + ceiling (fromIntegral size / (32::Double)), 0)
-opGasPrice CALLDATACOPY = do
+opGasPriceAndRefund CALLDATACOPY = do
     size <- getStackItem 2::VMM Word256
     return (1 + ceiling (fromIntegral size / (32::Double)), 0)
-opGasPrice EXTCODECOPY = do
+opGasPriceAndRefund EXTCODECOPY = do
     size <- getStackItem 3::VMM Word256
     return (1 + ceiling (fromIntegral size / (32::Double)), 0)
-opGasPrice SSTORE = do
+opGasPriceAndRefund SSTORE = do
   p <- getStackItem 0
   val <- getStackItem 1
   oldVals <- lift $ lift $ lift $ getStorageKeyVals (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
@@ -718,10 +711,11 @@ opGasPrice SSTORE = do
             [x] -> fromInteger $ rlpDecode $ snd x
             _ -> error "multiple values in storage"
   case (oldVal, val) of
-      (0, x) | x /= (0::Word256) -> return (300, 0)
-      (x, 0) | x /= 0 -> return (0, 100)
-      _ -> return (100, 0)
-opGasPrice _ = return (1, 0)
+      (0, x) | x /= (0::Word256) -> return (20000, 0)
+      (x, 0) | x /= 0 -> return (0, 15000)
+      _ -> return (5000, 0)
+
+opGasPriceAndRefund x = return (opGasPrice x, 0)
 
 --missing stuff
 --Glog 1 Partial payment for a LOG operation.
@@ -747,7 +741,7 @@ decreaseGas val = do
 
 decreaseGasForOp::Operation->VMM ()
 decreaseGasForOp op = do
-  (val, theRefund) <- opGasPrice op
+  (val, theRefund) <- opGasPriceAndRefund op
   decreaseGas val
   addToRefund theRefund
 
