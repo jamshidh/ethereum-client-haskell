@@ -151,7 +151,7 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
     return newVMState
     else do
     liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*gasPrice ut) ++ ", have " ++ show (balance addressState)
-    return VMState{vmException=Just $ InsufficientFunds undefined, logs=[]}
+    return VMState{vmException=Just $ InsufficientFunds undefined, newAccounts=[], logs=[]}
     
 runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
   when debug $ liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ to ut)
