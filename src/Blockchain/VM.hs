@@ -670,19 +670,19 @@ opGasPriceAndRefund::Operation->VMM (Integer, Integer)
 
 opGasPriceAndRefund LOG0 = do
   size <- getStackItem 1::VMM Word256
-  return (32+fromIntegral size, 0)
+  return (gLOG + gLOGDATA * fromIntegral size, 0)
 opGasPriceAndRefund LOG1 = do
   size <- getStackItem 1::VMM Word256
-  return (64+fromIntegral size, 0)
+  return (gLOG + gLOGTOPIC + gLOGDATA * fromIntegral size, 0)
 opGasPriceAndRefund LOG2 = do
   size <- getStackItem 1::VMM Word256
-  return (96+fromIntegral size, 0)
+  return (gLOG + 2*gLOGTOPIC + gLOGDATA * fromIntegral size, 0)
 opGasPriceAndRefund LOG3 = do
   size <- getStackItem 1::VMM Word256
-  return (128+fromIntegral size, 0)
+  return (gLOG + 3*gLOGTOPIC + gLOGDATA * fromIntegral size, 0)
 opGasPriceAndRefund LOG4 = do
   size <- getStackItem 1::VMM Word256
-  return (160+fromIntegral size, 0)
+  return (gLOG + 4*gLOGTOPIC + gLOGDATA * fromIntegral size, 0)
 
 opGasPriceAndRefund SHA3 = do
   size <- getStackItem 1::VMM Word256
@@ -690,17 +690,41 @@ opGasPriceAndRefund SHA3 = do
 
 opGasPriceAndRefund EXP = do
     e <- getStackItem 1::VMM Word256
-    return (10 + 10*ceiling (log (fromIntegral e) / log (256::Double)), 0)
+    return (gEXPBASE + gEXPBYTE*ceiling (log (fromIntegral e) / log (256::Double)), 0)
+
+
+
+opGasPriceAndRefund CALL = do
+  to <- getStackItem 1::VMM Word256
+  val <- getStackItem 2::VMM Word256
+  inOffset <- getStackItem 3::VMM Word256
+  inSize <- getStackItem 4::VMM Word256
+
+  inputData <- mLoadByteString inOffset inSize
+  
+
+  case to of
+    1 -> return (gECRECOVER, 0)
+    2 -> return (gSHA256BASE + gSHA256WORD*(ceiling $ fromIntegral (B.length inputData)/32), 0)
+    3 -> return (gRIPEMD160BASE + gRIPEMD160WORD*(ceiling $ fromIntegral (B.length inputData)/32), 0)
+    4 -> undefined
+    _ -> do
+      toAccountExists <- lift $ lift $ lift $ addressStateExists $ Address $ fromIntegral to
+
+      return (gCALL + (if toAccountExists then 0 else gCALLNEWACCOUNT) +
+              (if val > 0 then gCALLVALUETRANSFER else 0), 0)
+
+--  gCALLSTIPEND 
 
 opGasPriceAndRefund CODECOPY = do
     size <- getStackItem 2::VMM Word256
-    return (1 + ceiling (fromIntegral size / (32::Double)), 0)
+    return (gCODECOPYBASE + gCOPYWORD * ceiling (fromIntegral size / (32::Double)), 0)
 opGasPriceAndRefund CALLDATACOPY = do
     size <- getStackItem 2::VMM Word256
-    return (1 + ceiling (fromIntegral size / (32::Double)), 0)
+    return (gCALLDATACOPYBASE + gCOPYWORD * ceiling (fromIntegral size / (32::Double)), 0)
 opGasPriceAndRefund EXTCODECOPY = do
     size <- getStackItem 3::VMM Word256
-    return (1 + ceiling (fromIntegral size / (32::Double)), 0)
+    return (gEXTCODECOPYBASE + gCOPYWORD * ceiling (fromIntegral size / (32::Double)), 0)
 opGasPriceAndRefund SSTORE = do
   p <- getStackItem 0
   val <- getStackItem 1
@@ -712,8 +736,9 @@ opGasPriceAndRefund SSTORE = do
             _ -> error "multiple values in storage"
   case (oldVal, val) of
       (0, x) | x /= (0::Word256) -> return (20000, 0)
-      (x, 0) | x /= 0 -> return (0, 15000)
+      (x, 0) | x /= 0 -> return (5000, 15000)
       _ -> return (5000, 0)
+opGasPriceAndRefund SUICIDE = return (0, 24000)
 
 opGasPriceAndRefund x = return (opGasPrice x, 0)
 

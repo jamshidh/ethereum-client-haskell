@@ -63,10 +63,9 @@ initializeBlockChain = do
 nextDifficulty::Integer->UTCTime->UTCTime->Integer
 nextDifficulty oldDifficulty oldTime newTime =
     if round (utcTimeToPOSIXSeconds newTime) >=
-           --(round (utcTimeToPOSIXSeconds oldTime) + 5::Integer)
            (round (utcTimeToPOSIXSeconds oldTime) + 8::Integer)
-      then oldDifficulty - oldDifficulty `shiftR` 10
-      else oldDifficulty + oldDifficulty `shiftR` 10
+      then oldDifficulty - oldDifficulty `shiftR` 11
+      else oldDifficulty + oldDifficulty `shiftR` 11
 
 nextGasLimit::Integer->Integer->Integer
 nextGasLimit oldGasLimit oldGasUsed = max 125000 ((oldGasLimit * 1023 + oldGasUsed *6 `quot` 5) `quot` 1024)

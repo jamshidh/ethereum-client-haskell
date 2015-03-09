@@ -27,6 +27,7 @@ import Data.Word
 
 import Blockchain.ExtWord
 import Blockchain.Util
+import Blockchain.VM.OpcodePrices
 import Blockchain.VM.VMState
 import Blockchain.VM.VMM
 
@@ -74,8 +75,12 @@ setNewMaxSize newSize' = do
 
   let gasCharge =
         if newSize > fromIntegral oldSize
-        then fromInteger $ (ceiling $ fromIntegral newSize/(32::Double)) - (ceiling $ fromIntegral oldSize/(32::Double))
-        else 0
+        then
+          let newWordSize = fromInteger $ (ceiling $ fromIntegral newSize/(32::Double))
+              oldWordSize = (ceiling $ fromIntegral oldSize/(32::Double))
+              sizeCost c = gMEMWORD * c + (c*c `quot` gQUADCOEFFDIV)
+          in sizeCost newWordSize - sizeCost oldWordSize
+          else 0
 
   let oldLength = fromIntegral $ V.length (mVector $ memory state)
 

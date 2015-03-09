@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC  -fno-warn-missing-signatures -fno-warn-type-defaults #-}
 
 module Blockchain.VM.OpcodePrices where
 
@@ -48,8 +49,6 @@ opGasPrice MOD =	5
 opGasPrice SMOD =	5
 opGasPrice ADDMOD =	8
 opGasPrice MULMOD =	8
---opGasPrice EXPBASE =	10
---opGasPrice EXPBYTE =	10
 opGasPrice SIGNEXTEND =	5
 opGasPrice LT =	3
 opGasPrice GT =	3
@@ -62,15 +61,6 @@ opGasPrice OR =	3
 opGasPrice XOR =	3
 opGasPrice NOT =	3
 opGasPrice BYTE =	3
---opGasPrice SHA3BASE =	30
---opGasPrice SHA3WORD =	6
---opGasPrice ECRECOVER =	3000
---opGasPrice SHA256BASE =	60
---opGasPrice SHA256WORD =	12
---opGasPrice RIPEMD160BASE =	600
---opGasPrice RIPEMD160WORD =	120
---opGasPrice IDENTITYBASE =	15
---opGasPrice IDENTITYWORD =	3
 opGasPrice ADDRESS =	2
 opGasPrice BALANCE =	20
 opGasPrice ORIGIN =	2
@@ -78,13 +68,9 @@ opGasPrice CALLER =	2
 opGasPrice CALLVALUE =	2
 opGasPrice CALLDATALOAD =	3
 opGasPrice CALLDATASIZE =	2
---opGasPrice CALLDATACOPYBASE =	3
 opGasPrice CODESIZE =	2
---opGasPrice CODECOPYBASE =	3
 opGasPrice GASPRICE =	2
 opGasPrice EXTCODESIZE =	20
---opGasPrice EXTCODECOPYBASE =	20
---opGasPrice GCOPYWORD =	3
 opGasPrice BLOCKHASH =	20
 opGasPrice COINBASE =	2
 opGasPrice TIMESTAMP =	2
@@ -96,31 +82,17 @@ opGasPrice MLOAD =	3
 opGasPrice MSTORE =	3
 opGasPrice MSTORE8 =	3
 opGasPrice SLOAD =	50
---opGasPrice STORAGEADD =	200
---opGasPrice STORAGEMOD =	200
---opGasPrice STORAGEKILL =	200
 opGasPrice JUMP =	8
 opGasPrice JUMPI =	10
 opGasPrice PC =	2
 opGasPrice MSIZE =	2
 opGasPrice GAS =	2
 opGasPrice JUMPDEST =	1
---opGasPrice GLOG =	32
---opGasPrice GLOGTOPIC =	20
---opGasPrice GLOGDATA =	1
 opGasPrice CREATE =	40
---opGasPrice CREATEDATA =	3
-opGasPrice CALL =	40
 opGasPrice CALLCODE =	40
---opGasPrice GCALLVALUETRANSFER =	
---opGasPrice GCALLSTIPEND =	
---opGasPrice GCALLNEWACCOUNT =	
 opGasPrice RETURN =	0
 opGasPrice STOP =	0
 opGasPrice SUICIDE =	0
---opGasPrice GSUICIDEREFUND =	
---opGasPrice MEMWORD =	3
---opGasPrice QUADCOEFFDIV =	
 --opGasPrice GTX =	10000
 --opGasPrice GTXDATANONZERO =	
 --opGasPrice GTXDATAZERO =
@@ -128,3 +100,47 @@ opGasPrice SUICIDE =	0
 opGasPrice (MalformedOpcode _) = 0 --gonna fail anyway, just put something arbitrary here
 
 opGasPrice x = error $ "Missing opcode in opCodePrice: " ++ show x
+
+
+
+
+
+
+
+
+gMEMWORD =	3
+gQUADCOEFFDIV = 512
+
+
+gEXPBASE =	10
+gEXPBYTE =	10
+
+gCALLDATACOPYBASE =	3
+
+gCODECOPYBASE =	3
+gEXTCODECOPYBASE =	20
+gCOPYWORD =	3
+
+
+gLOG =	375
+gLOGTOPIC =	375
+gLOGDATA =	8
+
+gCALL =	40
+gCALLVALUETRANSFER = 9000
+gCALLSTIPEND = 2300
+gCALLNEWACCOUNT = 25000	
+
+gCREATEDATA =	3
+
+
+
+gSHA3BASE =	30
+gSHA3WORD =	6
+gECRECOVER =	3000
+gSHA256BASE =	60
+gSHA256WORD =	12
+gRIPEMD160BASE =	600
+gRIPEMD160WORD =	120
+gIDENTITYBASE =	15
+gIDENTITYWORD =	3
