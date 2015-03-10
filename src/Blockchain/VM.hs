@@ -520,8 +520,10 @@ runOperation CALL = do
              state' <- lift get
 
              useGas $ fromIntegral gas
+
+             let gas' = if value > 0 then gas + fromIntegral gCALLSTIPEND  else gas
     
-             result <- lift $ lift $  nestedRun state' gas (Address to) owner value inputData
+             result <- lift $ lift $  nestedRun state' gas' (Address to) owner value inputData
 
              case result of
                Right (state'', retValue) -> do
@@ -544,7 +546,9 @@ runOperation CALL = do
                       left e
     
   case result of
-    Left _ ->  push (0::Word256)
+    Left e -> do
+      liftIO $ putStrLn $ CL.red $ "-------Call failed: " ++ format e
+      push (0::Word256)
     Right _ -> push (1::Word256)
 
 
@@ -713,7 +717,6 @@ opGasPriceAndRefund CALL = do
       return (gCALL + (if toAccountExists then 0 else gCALLNEWACCOUNT) +
               (if val > 0 then gCALLVALUETRANSFER else 0), 0)
 
---  gCALLSTIPEND 
 
 opGasPriceAndRefund CODECOPY = do
     size <- getStackItem 2::VMM Word256
