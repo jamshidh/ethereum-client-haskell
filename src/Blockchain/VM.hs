@@ -422,7 +422,6 @@ runOperation CREATE = do
 
   initCodeBytes <- mLoadByteString input size
 
-
   state <- lift get
 
   result <-
@@ -447,7 +446,7 @@ runOperation CREATE = do
 
 runOperation CALL = do
   gas <- pop
-  Address to <- pop
+  to <- pop
   value <- pop::VMM Word256
   inOffset <- pop
   inSize <- pop
@@ -455,70 +454,35 @@ runOperation CALL = do
   outSize <- pop::VMM Word256
 
   owner <- getEnvVar envOwner
+  sender <- getEnvVar envSender
+
+  inputData <- mLoadByteString inOffset inSize
+
+  state <- lift get
+
+  addToBalance' owner (-fromIntegral value)
+
+  let gas' = if value > 0 then gas + fromIntegral gCALLSTIPEND  else gas
+
+  (result, maybeBytes) <-
+    case debugCallCreates state of
+      Nothing -> nestedRun_debugWrapper state gas' to sender value inputData 
+      Just rest -> do
+        addressState <- lift $ lift $ lift $ getAddressState owner
+        useGas (-fromIntegral gas'+ fromIntegral gas)
+        addDebugCallCreate DebugCallCreate {
+          ccData=inputData,
+          ccDestination=Just to,
+          ccGasLimit=fromIntegral gas',
+          ccValue=fromIntegral value
+          }
+        return (1, Nothing)
+
+  case maybeBytes of
+    Nothing -> return ()
+    Just bytes -> mStoreByteString outOffset bytes
   
-  theAddressExists <- lift $ lift $ lift $ addressStateExists (Address $ fromIntegral to)
-
-  result <- 
-      lift $ runEitherT $ 
-           do
-             when (not theAddressExists && to > 4) $ do
-                      lift $ lift $ addToBalance owner (-fromIntegral value)
-                      let newAccount =
-                              (Just $ Address $ fromIntegral to,
-                               fromIntegral gas,
-                               AddressState {
-                                 addressStateNonce=0,
-                                 balance = fromIntegral value,
-                                 contractRoot = emptyTriePtr,
-                                 codeHash = hash B.empty
-                               })
-                      state'' <- lift get
-                      left $ AddressDoesNotExist state''
-
-             inputData <- mLoadByteString inOffset inSize
-
-             gasRemaining <- getGasRemaining
-
-             --pay' "gas payment in CALL opcode run" owner (Address to) $ fromIntegral value
-
-             storageStateRoot <- lift $ lift $ lift getStorageStateRoot
-             addressState <- lift $ lift $ lift $ getAddressState owner
-             lift $ lift $ lift $ putAddressState owner addressState{contractRoot=storageStateRoot}
-
-             state' <- lift get
-
-             useGas $ fromIntegral gas
-
-             let gas' = if value > 0 then gas + fromIntegral gCALLSTIPEND  else gas
-    
-             result <- lift $ lift $  nestedRun_debugWrapper state' gas' (Address to) owner value inputData
-
-             case result of
-               Right (state'', retValue) -> do
-                           --Need to load newest stateroot in case it changed recursively within the nestedRun
-                           --TODO- think this one out....  There should be a cleaner way to do this.  Also, I am not sure that I am passing in storage changes to the nested calls to begin with.
-                           addressState <- lift $ lift $ lift $ getAddressState owner
-                           lift $ lift $ lift $ setStorageStateRoot (contractRoot addressState)
-
-                           forM_ (reverse $ logs state'') $ \log -> addLog log
-
-                           useGas (- vmGasRemaining state'')
-
-                           case retValue of
-                             Just bytes -> mStoreByteString outOffset bytes
-                             _ -> return ()
-
-
-               Left e -> do
-                      --useGas (- vmGasRemaining (eState e))
-                      left e
-    
-  case result of
-    Left e -> do
-      liftIO $ putStrLn $ CL.red $ "-------Call failed: " ++ format e
-      push (0::Word256)
-    Right _ -> push (1::Word256)
-
+  push result
 
 runOperation CALLCODE = do
 
@@ -1030,18 +994,60 @@ create_debugWrapper block owner value initCodeBytes = do
 
 
 
+nestedRun_debugWrapper::VMState->Word256->Address->Address->Word256->B.ByteString->VMM (Int, Maybe B.ByteString)
+nestedRun_debugWrapper state gas (Address address) sender value inputData = do
+  
+  theAddressExists <- lift $ lift $ lift $ addressStateExists (Address address)
 
+  result <-
+    lift $ runEitherT $ do
+      when (not theAddressExists && address > 4) $ do
+        let newAccount =
+              (Just $ Address $ fromIntegral address,
+               fromIntegral gas,
+               AddressState {
+                 addressStateNonce=0,
+                 balance = fromIntegral value,
+                 contractRoot = emptyTriePtr,
+                 codeHash = hash B.empty
+                 })
+        state'' <- lift get
+        left $ AddressDoesNotExist state''
 
-nestedRun_debugWrapper::VMState->Word256->Address->Address->Word256->B.ByteString->ContextM (Either VMException (VMState, Maybe B.ByteString))
-nestedRun_debugWrapper state gas address sender value inputData = do
-  case debugCallCreates state of
-    Nothing -> nestedRun state gas address sender value inputData
-    Just rest -> do
-      let newCallCreate =
-            DebugCallCreate {
-              ccData=inputData
-              }
-      return $ Right (state{debugCallCreates=Just (newCallCreate:rest)}, Nothing)
+      gasRemaining <- getGasRemaining
+
+      --pay' "gas payment in CALL opcode run" owner (Address to) $ fromIntegral value
+
+      storageStateRoot <- lift $ lift $ lift getStorageStateRoot
+      addressState <- lift $ lift $ lift $ getAddressState $ Address address
+      lift $ lift $ lift $ putAddressState (Address address) addressState{contractRoot=storageStateRoot}
+
+      state' <- lift get
+
+      useGas $ fromIntegral gas
+
+      result <- lift $ lift $  nestedRun state' gas (Address address) (Address address) value inputData
+
+      case result of
+        Right (state'', retValue) -> do
+          --Need to load newest stateroot in case it changed recursively within the nestedRun
+          --TODO- think this one out....  There should be a cleaner way to do this.  Also, I am not sure that I am passing in storage changes to the nested calls to begin with.
+          addressState <- lift $ lift $ lift $ getAddressState $ Address address
+          lift $ lift $ lift $ setStorageStateRoot (contractRoot addressState)
+
+          forM_ (reverse $ logs state'') $ \log -> addLog log
+
+          useGas (- vmGasRemaining state'')
+
+          case retValue of
+            Just bytes -> return (1, Just bytes)
+            _ -> return (1, Nothing)
+        Left _ -> return (0, Nothing)
+
+  case result of
+    Left _ -> return (0, Nothing)
+    Right _ -> return (1, Nothing)
+
 
 nestedRun::VMState->Word256->Address->Address->Word256->B.ByteString->ContextM (Either VMException (VMState, Maybe B.ByteString))
 nestedRun state gas (Address x) _ value inputData | x > 0 && x < 4 = do
