@@ -113,7 +113,8 @@ dupN n = do
 
 
 s256ToInteger::Word256->Integer
-s256ToInteger i | i < 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF = toInteger i
+--s256ToInteger i | i < 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF = toInteger i
+s256ToInteger i | i < 0x8000000000000000000000000000000000000000000000000000000000000000 = toInteger i
 s256ToInteger i = toInteger i - 0x10000000000000000000000000000000000000000000000000000000000000000
 
 
@@ -148,6 +149,9 @@ safe_quot x y = x `quot` y
 safe_mod _ 0 = 0
 safe_mod x y = x `mod` y
 
+safe_rem _ 0 = 0
+safe_rem x y = x `rem` y
+
 
 --TODO- This really should be in its own monad!
 --The monad should manage everything in the VM and environment (extending the ContextM), and have pop and push operations, perhaps even automating pc incrementing, gas charges, etc.
@@ -164,7 +168,7 @@ runOperation SUB = binaryAction (-)
 runOperation DIV = binaryAction safe_quot
 runOperation SDIV = binaryAction ((fromIntegral .) . safe_quot `on` s256ToInteger)
 runOperation MOD = binaryAction safe_mod
-runOperation SMOD = binaryAction ((fromIntegral .) . safe_mod `on` s256ToInteger)
+runOperation SMOD = binaryAction ((fromIntegral .) . safe_rem `on` s256ToInteger) --EVM mod corresponds to Haskell rem....  mod and rem only differ in how they handle negative numbers
 
 runOperation ADDMOD = do
   v1 <- pop::VMM Word256
