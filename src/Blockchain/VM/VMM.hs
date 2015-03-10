@@ -66,10 +66,12 @@ push val = do
   state' <- lift get
   lift $ put state'{stack = toWord256 val:stack state'}
 
-addNewAccount::(Maybe Address, Integer, AddressState)->VMM ()
-addNewAccount newAccount = do
-  state' <- lift get
-  lift $ put state'{newAccounts = newAccount:newAccounts state'}
+addDebugCallCreate::DebugCallCreate->VMM ()
+addDebugCallCreate callCreate = do
+  state' <- lift $ get
+  case debugCallCreates state' of
+    Just x -> lift $ put state'{debugCallCreates = Just (callCreate:x)}
+    Nothing -> error "You are trying to add a call create during a non-debug run"
 
 addSuicideList::Address->VMM ()
 addSuicideList address' = do
@@ -132,6 +134,15 @@ pay' reason from to val = do
   success <- lift $ lift $ pay reason from to val
   if success
     then return ()
+    else do
+      state' <- lift get
+      left $ InsufficientFunds state'
+
+addToBalance'::Address->Integer->VMM ()
+addToBalance' address val = do
+  addressState <- lift $ lift $ lift $ getAddressState address
+  if balance addressState + val >= 0
+    then lift $ lift $ addToBalance address val
     else do
       state' <- lift get
       left $ InsufficientFunds state'

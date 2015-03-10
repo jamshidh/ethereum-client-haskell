@@ -4,6 +4,7 @@ module Blockchain.VM.VMState (
   Memory(..),
   startingState,
   VMException(..),
+  DebugCallCreate(..),
   addErr
 --  getReturnValue
   ) where
@@ -16,7 +17,6 @@ import Data.Word
 
 
 import Blockchain.Data.Address
-import Blockchain.Data.AddressState
 import Blockchain.Data.Code
 import Blockchain.Data.Log
 import Blockchain.ExtWord
@@ -38,7 +38,7 @@ data VMException =
 instance Format VMException where
   format (OutOfGasException _) = "OutOfGasException"
   format (StackTooSmallException _) = "StackTooSmallException"
-  format (VMException message _) = "VMException" ++ message
+  format (VMException msg _) = "VMException" ++ msg
   format (MalformedOpcodeException _) = "MalformedOpcodeException"
   format (DivByZeroException _) = "DivByZeroException"
   format (InsufficientFunds _) = "InsufficientFunds"
@@ -65,6 +65,14 @@ newMemory = do
   forM_ [0..99] $ \p -> V.write arr p 0
   return $ Memory arr size
 
+data DebugCallCreate =
+  DebugCallCreate {
+    ccData::B.ByteString,
+    ccDestination::Maybe Address,
+    ccGasLimit::Integer,
+    ccValue::Integer
+    } deriving (Show, Eq)
+
 data VMState =
   VMState {
     vmGasRemaining::Integer,
@@ -77,7 +85,7 @@ data VMState =
     suicideList::[Address],
     done::Bool,
     returnVal::Maybe B.ByteString,
-    newAccounts::[(Maybe Address, Integer, AddressState)],
+    debugCallCreates::Maybe [DebugCallCreate],
     
     logs::[Log],
 
@@ -110,7 +118,7 @@ startingState env = do
                refund=0,
                logs=[],
                environment=env,
-               newAccounts=[],
+               debugCallCreates=Nothing, --only used for running ethereum tests
                suicideList=[]
              }
 

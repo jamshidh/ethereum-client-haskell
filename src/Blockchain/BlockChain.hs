@@ -150,7 +150,7 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
     return newVMState
     else do
     liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*gasPrice ut) ++ ", have " ++ show (balance addressState)
-    return VMState{vmException=Just $ InsufficientFunds undefined, newAccounts=[], logs=[]}
+    return VMState{vmException=Just $ InsufficientFunds undefined, debugCallCreates=Nothing, logs=[]}
     
 runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
   when debug $ liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ to ut)
@@ -169,7 +169,7 @@ runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
 
       pay "pre-VM fees2" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
 
-      newVMStateOrException <- runCodeForTransaction' b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas (to ut) (Code contractCode) (tData ut)
+      newVMStateOrException <- runCodeForTransaction' False b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas (to ut) (Code contractCode) (tData ut)
 -------------------------
 
       let newVMState =
@@ -266,7 +266,7 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
         VMState{
            vmException=Just $ InsufficientFunds undefined,
            logs=[],
-           newAccounts=[],
+           debugCallCreates=Nothing,
            vmGasRemaining=error "undefined vmGasRemaining",
            pc=error "undefined pc",
            memory=error "undefined memory"

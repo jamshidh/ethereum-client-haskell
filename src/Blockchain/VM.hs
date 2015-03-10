@@ -419,62 +419,31 @@ runOperation CREATE = do
 
   owner <- getEnvVar envOwner
   block <- getEnvVar envBlock
-  
-  addressState <- lift $ lift $ lift $ getAddressState owner
-  let newAddress = getNewAddress owner (addressStateNonce addressState)
 
   initCodeBytes <- mLoadByteString input size
 
-  if fromIntegral value > balance addressState
-    then push (0::Word256)
-    else do
-      when debug $ liftIO $ putStrLn "transfer value"
-      lift $ lift $ addToBalance owner (-fromIntegral value)
 
-      let initCode = Code initCodeBytes
-      
-      origin <- getEnvVar envOrigin
-      gasPrice <- getEnvVar envGasPrice
+  state <- lift get
 
-      gasRemaining <- getGasRemaining
+  result <-
+    case debugCallCreates state of
+      Nothing -> create_debugWrapper block owner value initCodeBytes
+      Just rest -> do
+        addressState <- lift $ lift $ lift $ getAddressState owner
+        let newAddress = getNewAddress owner (addressStateNonce addressState)
 
-      callDepth <- getCallDepth
+        addToBalance' owner (-fromIntegral value)
+        addDebugCallCreate DebugCallCreate {
+          ccData=initCodeBytes,
+          ccDestination=Nothing,
+          ccGasLimit=vmGasRemaining state,
+          ccValue=fromIntegral value
+          }
+        return $ Just newAddress
 
-      newVMStateOrException <- lift $ lift $ create block callDepth owner origin (toInteger value) gasPrice gasRemaining newAddress initCode
-
-      case newVMStateOrException of
-        Left e -> do
-          push (0::Word256)
-        Right newVMState -> do
-          let codeBytes = fromMaybe B.empty $ returnVal newVMState
-
-          lift $ lift $ lift $ addCode initCodeBytes
-
-          let newAccount =
-                (if B.null codeBytes then Nothing else Just newAddress,
-                 vmGasRemaining newVMState,
-                 AddressState {
-                   addressStateNonce=0,
-                   balance = fromIntegral value,
-                   contractRoot = emptyTriePtr,
-                   codeHash = hash initCodeBytes
-                   })
-
-          newAddressExists <- lift $ lift $ lift $ addressStateExists newAddress
-          when newAddressExists $ lift $ lift $ incrementNonce owner
-
-          let result =
-                case vmException newVMState of
-                  Nothing -> 
-                    let Address result = newAddress
-                    in result::Word160
-                  Just _ -> 0
-
-          setGasRemaining $ vmGasRemaining newVMState
-
-          addNewAccount newAccount
-      
-          push $ (fromIntegral result::Word256)
+  case result of
+    Just address -> push address
+    Nothing -> push (0::Word256)
 
 runOperation CALL = do
   gas <- pop
@@ -503,7 +472,6 @@ runOperation CALL = do
                                  contractRoot = emptyTriePtr,
                                  codeHash = hash B.empty
                                })
-                      addNewAccount newAccount
                       state'' <- lift get
                       left $ AddressDoesNotExist state''
 
@@ -523,7 +491,7 @@ runOperation CALL = do
 
              let gas' = if value > 0 then gas + fromIntegral gCALLSTIPEND  else gas
     
-             result <- lift $ lift $  nestedRun state' gas' (Address to) owner value inputData
+             result <- lift $ lift $  nestedRun_debugWrapper state' gas' (Address to) owner value inputData
 
              case result of
                Right (state'', retValue) -> do
@@ -586,7 +554,7 @@ runOperation CALLCODE = do
       callDepth' <- getCallDepth
 
       nestedStateOrException <-
-        lift $ lift $ runCodeFromStart (callDepth' + 1)
+        lift $ lift $ runCodeFromStart False (callDepth' + 1)
         (fromIntegral gas)
         Environment {
           envOwner = owner,
@@ -828,8 +796,8 @@ runCode c = do
       incrementPC len
       runCode (c+1)
 
-runCodeFromStart::Int->Integer->Environment->ContextM (Either VMException VMState)
-runCodeFromStart callDepth' gasLimit' env = do
+runCodeFromStart::Bool->Int->Integer->Environment->ContextM (Either VMException VMState)
+runCodeFromStart isTest callDepth' gasLimit' env = do
   when debug $ liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty $ envCode env)))
 
   addressAlreadyExists <- lift $ addressStateExists (envOwner env)
@@ -844,12 +812,16 @@ runCodeFromStart callDepth' gasLimit' env = do
   oldStateRoot <- lift getStorageStateRoot
   lift $ setStorageStateRoot storageRoot
 
-  vmState <- liftIO $ startingState env
+  vmState <-
+    if isTest
+      then do
+        theStartingState <- liftIO $ startingState env
+        return theStartingState{debugCallCreates=Just []}
+      else liftIO $ startingState env
 
   if callDepth' > 1024
     then return $ Left $ CallStackTooDeep vmState
     else do
-
     result <- runStateT (runEitherT (runCode 0)) vmState{callDepth=callDepth', vmGasRemaining=gasLimit'}
 
     newStorageStateRoot <- lift getStorageStateRoot
@@ -868,7 +840,7 @@ runCodeFromStart callDepth' gasLimit' env = do
 create::Block->Int->Address->Address->Integer->Integer->Integer->Address->Code->ContextM (Either VMException VMState)
 create b callDepth' sender origin value' gasPrice' availableGas newAddress init' = do
 
-  vmStateOrException <- runCodeForTransaction' b callDepth' sender origin value' gasPrice' availableGas newAddress init' B.empty
+  vmStateOrException <- runCodeForTransaction' False b callDepth' sender origin value' gasPrice' availableGas newAddress init' B.empty
 
 
   case vmStateOrException of
@@ -934,7 +906,7 @@ call b callDepth receiveAddress codeAddress senderAddress value gasPrice theData
   code <- lift $ fromMaybe B.empty <$> getCode (codeHash addressState)
 
   vmState <-
-      runCodeFromStart callDepth (fromIntegral gas)
+      runCodeFromStart False callDepth (fromIntegral gas)
           Environment{
             envGasPrice=fromIntegral gasPrice,
             envBlock=b,
@@ -949,8 +921,8 @@ call b callDepth receiveAddress codeAddress senderAddress value gasPrice theData
   return vmState
 
 
-runCodeForTransaction'::Block->Int->Address->Address->Integer->Integer->Integer->Address->Code->B.ByteString->ContextM (Either VMException VMState)
-runCodeForTransaction' b callDepth' sender origin value' gasPrice' availableGas owner code theData = do
+runCodeForTransaction'::Bool->Block->Int->Address->Address->Integer->Integer->Integer->Address->Code->B.ByteString->ContextM (Either VMException VMState)
+runCodeForTransaction' isTest b callDepth' sender origin value' gasPrice' availableGas owner code theData = do
 
   when debug $ liftIO $ putStrLn $ "availableGas: " ++ show availableGas
 
@@ -963,7 +935,7 @@ runCodeForTransaction' b callDepth' sender origin value' gasPrice' availableGas 
   --pay "transaction value transfer" origin owner value'
 
   vmStateOrException <-
-      runCodeFromStart callDepth' availableGas
+      runCodeFromStart isTest callDepth' availableGas
           Environment{
             envGasPrice=gasPrice',
             envBlock=b,
@@ -1000,6 +972,76 @@ runCodeForTransaction' b callDepth' sender origin value' gasPrice' availableGas 
 
 
 
+create_debugWrapper::Block->Address->Word256->B.ByteString->VMM (Maybe Address)
+create_debugWrapper block owner value initCodeBytes = do
+
+  addressState <- lift $ lift $ lift $ getAddressState owner
+  let newAddress = getNewAddress owner (addressStateNonce addressState)
+
+  if fromIntegral value > balance addressState
+    then return Nothing
+    else do
+      when debug $ liftIO $ putStrLn "transfer value"
+      lift $ lift $ addToBalance owner (-fromIntegral value)
+
+      let initCode = Code initCodeBytes
+      
+      origin <- getEnvVar envOrigin
+      gasPrice <- getEnvVar envGasPrice
+
+      gasRemaining <- getGasRemaining
+
+      callDepth <- getCallDepth
+
+      newVMStateOrException <- lift $ lift $ create block callDepth owner origin (toInteger value) gasPrice gasRemaining newAddress initCode
+
+      case newVMStateOrException of
+        Left e -> return Nothing
+        Right newVMState -> do
+          let codeBytes = fromMaybe B.empty $ returnVal newVMState
+
+          lift $ lift $ lift $ addCode initCodeBytes
+
+          let newAccount =
+                (if B.null codeBytes then Nothing else Just newAddress,
+                 vmGasRemaining newVMState,
+                 AddressState {
+                   addressStateNonce=0,
+                   balance = fromIntegral value,
+                   contractRoot = emptyTriePtr,
+                   codeHash = hash initCodeBytes
+                   })
+
+          newAddressExists <- lift $ lift $ lift $ addressStateExists newAddress
+          when newAddressExists $ lift $ lift $ incrementNonce owner
+
+          let result =
+                case vmException newVMState of
+                  Nothing -> 
+                    let Address result = newAddress
+                    in result::Word160
+                  Just _ -> 0
+
+          setGasRemaining $ vmGasRemaining newVMState
+
+          return $ Just newAddress
+
+
+
+
+
+
+
+nestedRun_debugWrapper::VMState->Word256->Address->Address->Word256->B.ByteString->ContextM (Either VMException (VMState, Maybe B.ByteString))
+nestedRun_debugWrapper state gas address sender value inputData = do
+  case debugCallCreates state of
+    Nothing -> nestedRun state gas address sender value inputData
+    Just rest -> do
+      let newCallCreate =
+            DebugCallCreate {
+              ccData=inputData
+              }
+      return $ Right (state{debugCallCreates=Just (newCallCreate:rest)}, Nothing)
 
 nestedRun::VMState->Word256->Address->Address->Word256->B.ByteString->ContextM (Either VMException (VMState, Maybe B.ByteString))
 nestedRun state gas (Address x) _ value inputData | x > 0 && x < 4 = do
@@ -1043,7 +1085,7 @@ nestedRun state gas address sender value inputData = do
       code <- lift $ fromMaybe B.empty <$> getCode (codeHash addressState)
 
       maybeNestedState <-
-          runCodeFromStart (callDepth state + 1)
+          runCodeFromStart False (callDepth state + 1)
                                (fromIntegral gas)
                                Environment {
                                  envOwner = address,
