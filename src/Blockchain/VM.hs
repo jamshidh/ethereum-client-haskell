@@ -632,8 +632,14 @@ opGasPriceAndRefund SHA3 = do
 
 opGasPriceAndRefund EXP = do
     e <- getStackItem 1::VMM Word256
-    return (gEXPBASE + gEXPBYTE*ceiling (log (fromIntegral e) / log (256::Double)), 0)
+    if e == 0
+      then return (gEXPBASE, 0)
+      else return (gEXPBASE + gEXPBYTE*bytesNeeded e, 0)
 
+    where
+      bytesNeeded::Word256->Integer
+      bytesNeeded 0 = 0
+      bytesNeeded x = 1+bytesNeeded (x `shiftR` 8)
 
 
 opGasPriceAndRefund CALL = do
