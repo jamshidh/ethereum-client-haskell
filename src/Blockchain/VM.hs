@@ -176,7 +176,6 @@ runOperation ADDMOD = do
   v1 <- pop::VMM Word256
   v2 <- pop::VMM Word256
   modVal <- pop::VMM Word256
-  size <- pop::VMM Word256
 
   push $ (toInteger v1 + toInteger v2) `safe_mod` toInteger modVal
 
