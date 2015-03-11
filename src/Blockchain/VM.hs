@@ -134,11 +134,13 @@ getByte whichByte val | whichByte < 32 = val `shiftR` (8*(31 - fromIntegral whic
 getByte _ _ = 0;
 
 signExtend::Word256->Word256->Word256
-signExtend numBytes val = fromInteger prefix .|. val
+signExtend numBytes val | numBytes > 31 = val
+signExtend numBytes val = baseValue + if highBitSet then highFilter else 0
   where
-    lastByte = getByte numBytes val
-    lastBitSet = testBit lastByte 7
-    prefix = bytes2Integer $ replicate (fromIntegral $ numBytes+1) (if lastBitSet then 0xff else 0) ++ replicate (fromIntegral $ 31 - numBytes) 0
+    lowFilter = 2^(8*numBytes+8)-1
+    highFilter = (2^256-1) - lowFilter
+    baseValue = lowFilter .&. val
+    highBitSet =  val `shiftR` (8*fromIntegral numBytes + 7) .&. 1 == 1
 
 safe_div _ 0 = 0
 safe_div x y = x `div` y
@@ -473,7 +475,9 @@ runOperation CALL = do
       Nothing -> nestedRun_debugWrapper state gas' to sender value inputData 
       Just rest -> do
         addressState <- lift $ lift $ lift $ getAddressState owner
-        useGas (-fromIntegral gas'+ fromIntegral gas)
+        useGas (fromIntegral gas') -- + fromIntegral gas)
+        --useGas (-2*fromIntegral gCALLSTIPEND - fromIntegral gas) -- + fromIntegral gas)
+        liftIO $ putStrLn "qqqqqqqqqqqqqqafter"
         addDebugCallCreate DebugCallCreate {
           ccData=inputData,
           ccDestination=Just to,
