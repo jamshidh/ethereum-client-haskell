@@ -131,6 +131,13 @@ useGas gas = do
     x | x < 0 -> left $ OutOfGasException state'
     x -> lift $ put state'{vmGasRemaining=x}
 
+addGas::Integer->VMM ()
+addGas gas = do
+  state' <- lift get
+  case vmGasRemaining state' + gas of
+    x | x < 0 -> left $ OutOfGasException state'
+    x -> lift $ put state'{vmGasRemaining=x}
+
 pay'::String->Address->Address->Integer->VMM ()
 pay' reason from to val = do
   success <- lift $ lift $ pay reason from to val

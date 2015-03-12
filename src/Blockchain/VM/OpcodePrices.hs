@@ -4,6 +4,7 @@ module Blockchain.VM.OpcodePrices where
 
 import Prelude hiding (EQ, LT, GT)
 
+import Blockchain.ExtWord
 import Blockchain.VM.Opcodes
 
 opGasPrice::Operation->Integer
@@ -127,9 +128,9 @@ gLOGTOPIC =	375
 gLOGDATA =	8
 
 gCALL =	40
-gCALLVALUETRANSFER = 9000
-gCALLSTIPEND = 2300
-gCALLNEWACCOUNT = 25000	
+gCALLVALUETRANSFER = 9000::Word256
+gCALLSTIPEND = 2300::Word256
+gCALLNEWACCOUNT = 25000::Word256
 
 gCREATEDATA =	3
 

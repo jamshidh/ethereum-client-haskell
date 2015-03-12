@@ -450,7 +450,7 @@ runOperation CREATE = do
     Nothing -> push (0::Word256)
 
 runOperation CALL = do
-  gas <- pop
+  gas <- pop::VMM Word256
   to <- pop
   value <- pop::VMM Word256
   inOffset <- pop
@@ -467,20 +467,24 @@ runOperation CALL = do
 
   addToBalance' owner (-fromIntegral value)
 
-  let gas' = if value > 0 then gas + fromIntegral gCALLSTIPEND  else gas
+  toAddressExists <- lift $ lift $ lift $ addressStateExists to
 
+  let newAccountCost = if not toAddressExists then gCALLNEWACCOUNT else 0
+
+  let stipend = if value > 0 then gCALLSTIPEND  else 0
+  
   (result, maybeBytes) <-
     case debugCallCreates state of
-      Nothing -> nestedRun_debugWrapper state gas' to sender value inputData 
+      Nothing -> nestedRun_debugWrapper state gas to sender value inputData 
       Just rest -> do
         addressState <- lift $ lift $ lift $ getAddressState owner
-        useGas (fromIntegral gas') -- + fromIntegral gas)
-        --useGas (-2*fromIntegral gCALLSTIPEND - fromIntegral gas) -- + fromIntegral gas)
-        liftIO $ putStrLn "qqqqqqqqqqqqqqafter"
+        useGas $ fromIntegral newAccountCost
+        addGas $ fromIntegral stipend
+        addGas $ fromIntegral gas
         addDebugCallCreate DebugCallCreate {
           ccData=inputData,
           ccDestination=Just to,
-          ccGasLimit=fromIntegral gas',
+          ccGasLimit=fromIntegral (gas + stipend),
           ccValue=fromIntegral value
           }
         return (1, Nothing)
@@ -502,71 +506,41 @@ runOperation CALLCODE = do
   outSize <- pop::VMM Word256
 
   owner <- getEnvVar envOwner
-  origin <- getEnvVar envOrigin
-  gasPrice <- getEnvVar envGasPrice
-  block <- getEnvVar envBlock
+  sender <- getEnvVar envSender
 
   inputData <- mLoadByteString inOffset inSize
-  let address = to
 
-  theAddressExists <- lift $ lift $ lift $ addressStateExists address
+  state <- lift get
 
-  ownerBalance <- lift $ lift $ lift $ balance <$> getAddressState owner
+  addToBalance' owner (-fromIntegral value)
 
-  case (ownerBalance < fromIntegral value, theAddressExists) of
-    (True, _) -> push (0::Word256)
-    (_, False) -> do
-      mStoreByteString outOffset (B.replicate (fromIntegral outSize) 0)
-      push (1::Word256)
-    _ -> do
-      addressState <- lift $ lift $ lift $ getAddressState address
-      code <- lift $  lift $ lift $ fromMaybe B.empty <$> getCode (codeHash addressState)
+  let stipend = if value > 0 then gCALLSTIPEND  else 0
 
-      callDepth' <- getCallDepth
+  toAddressExists <- lift $ lift $ lift $ addressStateExists to
 
-      nestedStateOrException <-
-        lift $ lift $ runCodeFromStart False (callDepth' + 1)
-        (fromIntegral gas)
-        Environment {
-          envOwner = owner,
-          envOrigin = origin,
-          envGasPrice = gasPrice,
-          envInputData = inputData,
-          envSender = owner,
-          envValue = fromIntegral value,
-          envCode = Code code,
-          envJumpDests = getValidJUMPDESTs code,
-          envBlock = block
+  let newAccountCost = if not toAddressExists then gCALLNEWACCOUNT else 0
+
+  (result, maybeBytes) <-
+    case debugCallCreates state of
+      Nothing -> nestedRun_debugWrapper state gas to sender value inputData 
+      Just rest -> do
+        addressState <- lift $ lift $ lift $ getAddressState owner
+        useGas $ fromIntegral newAccountCost
+        addGas $ fromIntegral stipend
+        addGas $ fromIntegral gas
+        addDebugCallCreate DebugCallCreate {
+          ccData=inputData,
+          ccDestination=Just $  owner,
+          ccGasLimit=fromIntegral $ gas + stipend,
+          ccValue=fromIntegral value
           }
+        return (1, Nothing)
 
-      case nestedStateOrException of
-        Left e -> do
-          push (1::Word256)
-          let usedGas = fromIntegral gas - vmGasRemaining (eState e)
-          paid <- lift $ lift $ pay "CALLCODE fees" owner address (fromIntegral value)
-
-          if paid
-            then do
-            useGas usedGas
-            else left $ InsufficientFunds $ eState e
-          
-        Right nestedState -> do
-          let retVal = fromMaybe B.empty $ returnVal nestedState
-          let usedGas = fromIntegral gas - vmGasRemaining nestedState
-
-          mStoreByteString outOffset retVal
-
-          let success = 1::Word256
-
-          addressState' <- lift $ lift $ lift $ getAddressState address
- 
-          paid <- lift $ lift $ pay "CALLCODE fees" owner address (fromIntegral value)
-
-          if paid
-            then do
-            push success
-            useGas usedGas
-            else left $ InsufficientFunds nestedState
+  case maybeBytes of
+    Nothing -> return ()
+    Just bytes -> mStoreByteString outOffset bytes
+  
+  push result
 
 runOperation RETURN = do
   address <- pop
@@ -643,24 +617,47 @@ opGasPriceAndRefund EXP = do
 
 
 opGasPriceAndRefund CALL = do
+  gas <- getStackItem 0::VMM Word256
   to <- getStackItem 1::VMM Word256
   val <- getStackItem 2::VMM Word256
   inOffset <- getStackItem 3::VMM Word256
   inSize <- getStackItem 4::VMM Word256
 
   inputData <- mLoadByteString inOffset inSize
-  
 
   case to of
-    1 -> return (gECRECOVER, 0)
-    2 -> return (gSHA256BASE + gSHA256WORD*(ceiling $ fromIntegral (B.length inputData)/32), 0)
-    3 -> return (gRIPEMD160BASE + gRIPEMD160WORD*(ceiling $ fromIntegral (B.length inputData)/32), 0)
+    1 -> return (fromIntegral gas + gECRECOVER, 0)
+    2 -> return (fromIntegral gas + gSHA256BASE + gSHA256WORD*(ceiling $ fromIntegral (B.length inputData)/32), 0)
+    3 -> return (fromIntegral gas + gRIPEMD160BASE + gRIPEMD160WORD*(ceiling $ fromIntegral (B.length inputData)/32), 0)
     4 -> undefined
     _ -> do
       toAccountExists <- lift $ lift $ lift $ addressStateExists $ Address $ fromIntegral to
 
-      return (gCALL + (if toAccountExists then 0 else gCALLNEWACCOUNT) +
-              (if val > 0 then gCALLVALUETRANSFER else 0), 0)
+      return $ (fromIntegral $
+                       fromIntegral gas +
+                       fromIntegral gCALL +
+                       (if toAccountExists then 0 else gCALLNEWACCOUNT) +
+                       (if val > 0 then gCALLVALUETRANSFER else 0),
+                0)
+
+
+opGasPriceAndRefund CALLCODE = do
+  gas <- getStackItem 0::VMM Word256
+  to <- getStackItem 1::VMM Word256
+  val <- getStackItem 2::VMM Word256
+  inOffset <- getStackItem 3::VMM Word256
+  inSize <- getStackItem 4::VMM Word256
+
+  inputData <- mLoadByteString inOffset inSize
+
+  toAccountExists <- lift $ lift $ lift $ addressStateExists $ Address $ fromIntegral to
+
+  return $ (fromIntegral $
+                fromIntegral gas +
+                fromIntegral gCALL +
+                (if toAccountExists then 0 else gCALLNEWACCOUNT) +
+                (if val > 0 then gCALLVALUETRANSFER else 0),
+            0)
 
 
 opGasPriceAndRefund CODECOPY = do
