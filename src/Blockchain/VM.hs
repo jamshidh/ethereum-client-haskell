@@ -930,6 +930,7 @@ runCodeForTransaction' isTest b callDepth' sender origin value' gasPrice' availa
   ownerAddressState <- lift $ getAddressState owner
 {- -}
 
+  
   case vmStateOrException of
         Left e -> do
           when debug $ liftIO $ do
@@ -943,6 +944,12 @@ runCodeForTransaction' isTest b callDepth' sender origin value' gasPrice' availa
             putStrLn $ "Result: " ++ format result
             putStrLn $ "Gas remaining: " ++ show (vmGasRemaining vmState) ++ ", needed: " ++ show (5*toInteger (B.length result))
             putStrLn $ show (pretty owner) ++ ": " ++ format result
+
+          when debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList vmState)
+          forM_ (suicideList vmState) $ \address -> do
+            lift $ deleteAddressState address
+
+
 
           --return vmState{vmGasRemaining=vmGasRemaining vmState + refund vmState, refund=0}
           return $ Right vmState

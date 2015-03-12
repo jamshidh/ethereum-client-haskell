@@ -143,9 +143,7 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
     
 -----------------
 
-    when debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList newVMState)
-    forM_ (suicideList newVMState) $ \address -> do
-      lift $ deleteAddressState address
+    
 
     return newVMState
     else do
@@ -177,10 +175,6 @@ runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
               Left e -> (eState e){vmException = Just e}
               Right x -> x
       
-      when debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList newVMState)
-      forM_ (suicideList newVMState) $ \address -> do
-        lift $ deleteAddressState address
-
       return newVMState
     
     else do
