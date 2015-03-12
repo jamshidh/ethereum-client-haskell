@@ -436,14 +436,19 @@ runOperation CREATE = do
         addressState <- lift $ lift $ lift $ getAddressState owner
         let newAddress = getNewAddress owner (addressStateNonce addressState)
 
-        addToBalance' owner (-fromIntegral value)
-        addDebugCallCreate DebugCallCreate {
-          ccData=initCodeBytes,
-          ccDestination=Nothing,
-          ccGasLimit=vmGasRemaining state,
-          ccValue=fromIntegral value
-          }
-        return $ Just newAddress
+        addressState <- lift $ lift $ lift $ getAddressState owner
+        
+        if balance addressState < fromIntegral value
+          then return Nothing
+          else do
+          addToBalance' owner (-fromIntegral value)
+          addDebugCallCreate DebugCallCreate {
+            ccData=initCodeBytes,
+            ccDestination=Nothing,
+            ccGasLimit=vmGasRemaining state,
+            ccValue=fromIntegral value
+            }
+          return $ Just newAddress
 
   case result of
     Just address -> push address
@@ -691,29 +696,6 @@ opGasPriceAndRefund x = return (opGasPrice x, 0)
 --Glogdata 1 Paid for each byte in a LOG operation’s data.
 --Glogtopic 1 Paid for each topic of a LOG operation.
 
-
-
-
-
-
-
-
-
-decreaseGas::Integer->VMM ()
-decreaseGas val = do
-  state' <- lift get
-  if val <= vmGasRemaining state'
-    then lift $ put state'{ vmGasRemaining = vmGasRemaining state' - val }
-    else do
-      lift $ put state'{ vmGasRemaining = 0 }
-      left $ OutOfGasException state' 
-
-decreaseGasForOp::Operation->VMM ()
-decreaseGasForOp op = do
-  (val, theRefund) <- opGasPriceAndRefund op
-  decreaseGas val
-  addToRefund theRefund
-
 nibbleString2ByteString::N.NibbleString->B.ByteString
 nibbleString2ByteString (N.EvenNibbleString s) = s
 nibbleString2ByteString (N.OddNibbleString c s) = c `B.cons` s
@@ -755,8 +737,10 @@ runCode c = do
   let (op, len) = getOperationAt code (pc state)
   --liftIO $ putStrLn $ "EVM [ 19:22" ++ show op ++ " #" ++ show c ++ " (" ++ show (vmGasRemaining state) ++ ")"
 
-  decreaseGasForOp op
-  
+  (val, theRefund) <- opGasPriceAndRefund op
+  useGas val
+  addToRefund theRefund
+
   runOperation op
 
   memAfter <- getSizeInWords
