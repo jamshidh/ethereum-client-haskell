@@ -94,9 +94,6 @@ opGasPrice CALLCODE =	40
 opGasPrice RETURN =	0
 opGasPrice STOP =	0
 opGasPrice SUICIDE =	0
---opGasPrice GTX =	10000
---opGasPrice GTXDATANONZERO =	
---opGasPrice GTXDATAZERO =
 
 opGasPrice (MalformedOpcode _) = 0 --gonna fail anyway, just put something arbitrary here
 
@@ -107,6 +104,9 @@ opGasPrice x = error $ "Missing opcode in opCodePrice: " ++ show x
 
 
 
+gTX =	21000
+gTXDATANONZERO =	68
+gTXDATAZERO = 4
 
 
 gMEMWORD =	3

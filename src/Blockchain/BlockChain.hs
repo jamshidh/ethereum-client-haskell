@@ -48,6 +48,7 @@ import Blockchain.SHA
 import Blockchain.SigningTools
 import Blockchain.VM
 import Blockchain.VM.Code
+import Blockchain.VM.OpcodePrices
 import Blockchain.VM.VMState
 
 --import Debug.Trace
@@ -140,6 +141,11 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
               Left e -> (eState e){vmException = Just e}
               Right x -> x
       
+    newAddressState <- lift $ getAddressState newAddress
+    case returnVal newVMState of
+      Just codeBytes ->
+        lift $ putAddressState newAddress newAddressState{codeHash=hash codeBytes}
+      Nothing -> return ()
     
 -----------------
 
@@ -199,7 +205,7 @@ zeroBytesLength MessageTX{tData=d} = length $ filter (==0) $ B.unpack d
 zeroBytesLength ContractCreationTX{tInit=Code d} = length $ filter (==0) $ B.unpack d
 
 intrinsicGas::Transaction->Integer
-intrinsicGas t = zeroLen + 5 * (fromIntegral (codeOrDataLength t) - zeroLen) + 500
+intrinsicGas t = gTXDATAZERO * zeroLen + gTXDATAZERO * (fromIntegral (codeOrDataLength t) - zeroLen) + gTX
     where
       zeroLen = fromIntegral $ zeroBytesLength t
 --intrinsicGas t@ContractCreationTX{} = 5 * (fromIntegral (codeOrDataLength t)) + 500

@@ -470,21 +470,23 @@ runOperation CALL = do
 
   state <- lift get
 
-  addToBalance' owner (-fromIntegral value)
-
   toAddressExists <- lift $ lift $ lift $ addressStateExists to
 
   let newAccountCost = if not toAddressExists then gCALLNEWACCOUNT else 0
 
   let stipend = if value > 0 then gCALLSTIPEND  else 0
-  
+
+  addGas $ fromIntegral stipend
+  useGas $ fromIntegral newAccountCost
+
   (result, maybeBytes) <-
     case debugCallCreates state of
-      Nothing -> nestedRun_debugWrapper state gas to sender value inputData 
+      Nothing -> do
+        lift $ lift $ pay "nestedRun fees" owner to (fromIntegral value)
+        nestedRun_debugWrapper state gas to sender value inputData 
       Just rest -> do
+        addToBalance' owner (-fromIntegral value)
         addressState <- lift $ lift $ lift $ getAddressState owner
-        useGas $ fromIntegral newAccountCost
-        addGas $ fromIntegral stipend
         addGas $ fromIntegral gas
         addDebugCallCreate DebugCallCreate {
           ccData=inputData,
@@ -688,6 +690,11 @@ opGasPriceAndRefund SSTORE = do
       (x, 0) | x /= 0 -> return (5000, 15000)
       _ -> return (5000, 0)
 opGasPriceAndRefund SUICIDE = return (0, 24000)
+
+{-opGasPriceAndRefund RETURN = do
+  size <- getStackItem 1
+
+  return (gTXDATANONZERO*size, 0)-}
 
 opGasPriceAndRefund x = return (opGasPrice x, 0)
 
@@ -1086,8 +1093,6 @@ nestedRun state gas address sender value inputData = do
     then do
     return $ Right (state{stack=0:stack state}, Nothing)
     else do
-      pay "nestedRun fees" (envOwner env) address (fromIntegral value)
-
       addressState <- lift $ getAddressState address
       code <- lift $ fromMaybe B.empty <$> getCode (codeHash addressState)
 
