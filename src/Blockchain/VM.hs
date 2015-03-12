@@ -631,17 +631,17 @@ opGasPriceAndRefund CALL = do
   inputData <- mLoadByteString inOffset inSize
 
   case to of
-    1 -> return (fromIntegral gas + gECRECOVER, 0)
+{-    1 -> return (fromIntegral gas + gECRECOVER, 0)
     2 -> return (fromIntegral gas + gSHA256BASE + gSHA256WORD*(ceiling $ fromIntegral (B.length inputData)/32), 0)
     3 -> return (fromIntegral gas + gRIPEMD160BASE + gRIPEMD160WORD*(ceiling $ fromIntegral (B.length inputData)/32), 0)
-    4 -> undefined
+    4 -> undefined -}
     _ -> do
       toAccountExists <- lift $ lift $ lift $ addressStateExists $ Address $ fromIntegral to
 
       return $ (fromIntegral $
                        fromIntegral gas +
                        fromIntegral gCALL +
-                       (if toAccountExists then 0 else gCALLNEWACCOUNT) +
+                       (if toAccountExists || to < 5 then 0 else gCALLNEWACCOUNT) +
                        (if val > 0 then gCALLVALUETRANSFER else 0),
                 0)
 
