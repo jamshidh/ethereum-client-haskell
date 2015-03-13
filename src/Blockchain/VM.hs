@@ -1007,61 +1007,55 @@ nestedRun_debugWrapper state gas (Address address) sender value inputData = do
   
   theAddressExists <- lift $ lift $ lift $ addressStateExists (Address address)
 
+  when (not theAddressExists && address > 4) $ do
+    let newAccount =
+                (Just $ Address $ fromIntegral address,
+                 fromIntegral gas,
+                 AddressState {
+                   addressStateNonce=0,
+                   balance = fromIntegral value,
+                   contractRoot = emptyTriePtr,
+                   codeHash = hash B.empty
+                   })
+    state'' <- lift get
+    left $ AddressDoesNotExist state''
+
+  gasRemaining <- getGasRemaining
+
+  --pay' "gas payment in CALL opcode run" owner (Address to) $ fromIntegral value
+
+  storageStateRoot <- lift $ lift $ lift getStorageStateRoot
+  addressState <- lift $ lift $ lift $ getAddressState $ Address address
+  lift $ lift $ lift $ putAddressState (Address address) addressState{contractRoot=storageStateRoot}
+
+  state' <- lift get
+
+    --useGas $ fromIntegral gas
+
   result <-
-    lift $ runEitherT $ do
-      when (not theAddressExists && address > 4) $ do
-        let newAccount =
-              (Just $ Address $ fromIntegral address,
-               fromIntegral gas,
-               AddressState {
-                 addressStateNonce=0,
-                 balance = fromIntegral value,
-                 contractRoot = emptyTriePtr,
-                 codeHash = hash B.empty
-                 })
-        state'' <- lift get
-        left $ AddressDoesNotExist state''
-
-      gasRemaining <- getGasRemaining
-
-      --pay' "gas payment in CALL opcode run" owner (Address to) $ fromIntegral value
-
-      storageStateRoot <- lift $ lift $ lift getStorageStateRoot
-      addressState <- lift $ lift $ lift $ getAddressState $ Address address
-      lift $ lift $ lift $ putAddressState (Address address) addressState{contractRoot=storageStateRoot}
-
-      state' <- lift get
-
-      --useGas $ fromIntegral gas
-
-      result <- lift $ lift $  nestedRun state' gas (Address address) (Address address) value inputData
-
-      case result of
-        Right (state'', retValue) -> do
-          --Need to load newest stateroot in case it changed recursively within the nestedRun
-          --TODO- think this one out....  There should be a cleaner way to do this.  Also, I am not sure that I am passing in storage changes to the nested calls to begin with.
-          addressState <- lift $ lift $ lift $ getAddressState $ Address address
-          lift $ lift $ lift $ setStorageStateRoot (contractRoot addressState)
-
-          forM_ (reverse $ logs state'') $ \log -> addLog log
-
-          useGas (- vmGasRemaining state'')
-
-          case retValue of
-            Just bytes -> return (1, Just bytes)
-            _ -> return (1, Nothing)
-        Left _ -> return (0, Nothing)
-
+    lift $ lift $ runEitherT $ do
+      (state'', retValue) <- nestedRun state' gas (Address address) (Address address) value inputData
+      --Need to load newest stateroot in case it changed recursively within the nestedRun
+      --TODO- think this one out....  There should be a cleaner way to do this.  Also, I am not sure that I am passing in storage changes to the nested calls to begin with.
+      addressState <- lift $ lift $ getAddressState $ Address address
+      lift $ lift $ setStorageStateRoot (contractRoot addressState)
+      return (state'', retValue)
+  
   case result of
-    Left _ -> return (0, Nothing)
-    Right x -> return x
+        Right (state'', retValue) -> do
+          forM_ (reverse $ logs state'') $ \log -> addLog log
+          useGas (- vmGasRemaining state'')
+          return (1, retValue)
+        Left e -> do
+--          liftIO $ print (e::VMException)
+          return (0, Nothing)
 
 
-nestedRun::VMState->Word256->Address->Address->Word256->B.ByteString->ContextM (Either VMException (VMState, Maybe B.ByteString))
+nestedRun::VMState->Word256->Address->Address->Word256->B.ByteString->EitherT VMException ContextM (VMState, Maybe B.ByteString)
 nestedRun state gas (Address x) _ value inputData | x > 0 && x < 4 = do
   let env = environment state
-  lift $ putAddressState (Address x) blankAddressState
-  pay "nestedRun fees" (envOwner env) (Address x) (fromIntegral value)
+  lift $ lift $ putAddressState (Address x) blankAddressState
+  lift $ pay "nestedRun fees" (envOwner env) (Address x) (fromIntegral value)
 
   let cost =
         case x of
@@ -1072,10 +1066,10 @@ nestedRun state gas (Address x) _ value inputData | x > 0 && x < 4 = do
 
   if gas < cost
     then do
-    pay "nestedRun fees" (envSender env) (coinbase . blockData . envBlock $ env) (fromIntegral gas*envGasPrice env)
-    return $ Right (state{stack=0:stack state}, Just B.empty)
+    lift $ pay "nestedRun fees" (envSender env) (coinbase . blockData . envBlock $ env) (fromIntegral gas*envGasPrice env)
+    return (state{stack=0:stack state}, Just B.empty)
     else do
-    pay "nestedRun fees" (envSender env) (coinbase . blockData . envBlock $ env) (fromIntegral cost*envGasPrice env)
+    lift $ pay "nestedRun fees" (envSender env) (coinbase . blockData . envBlock $ env) (fromIntegral cost*envGasPrice env)
 
     let result =
           case x of
@@ -1083,21 +1077,21 @@ nestedRun state gas (Address x) _ value inputData | x > 0 && x < 4 = do
             2 -> sha2 inputData
             3 -> ripemd inputData
 
-    return $ Right (state{stack=1:stack state}, Just result)
+    return (state{stack=1:stack state}, Just result)
 
 nestedRun state gas address sender value inputData = do
   let env = environment state
-  theBalance <- lift $ fmap balance $ getAddressState $ envOwner env
+  theBalance <- lift $ lift $ fmap balance $ getAddressState $ envOwner env
 
   if theBalance < fromIntegral value
     then do
-    return $ Right (state{stack=0:stack state}, Nothing)
+    return (state{stack=0:stack state}, Nothing)
     else do
-      addressState <- lift $ getAddressState address
-      code <- lift $ fromMaybe B.empty <$> getCode (codeHash addressState)
+      addressState <- lift $ lift $ getAddressState address
+      code <- lift $ lift $ fromMaybe B.empty <$> getCode (codeHash addressState)
 
       maybeNestedState <-
-          runCodeFromStart False (callDepth state + 1)
+        lift $ runCodeFromStart False (callDepth state + 1)
                                (fromIntegral gas)
                                Environment {
                                  envOwner = address,
@@ -1112,7 +1106,7 @@ nestedRun state gas address sender value inputData = do
                                }
 
       case maybeNestedState of
-        Left e -> return $ Left e
+        Left e -> left e
         Right nestedState -> do
           let retVal = fromMaybe B.empty $ returnVal nestedState
 
@@ -1129,9 +1123,9 @@ nestedRun state gas address sender value inputData = do
                   Nothing -> 1
                   _ -> 0
 
-          storageStateRoot <- lift getStorageStateRoot
-          addressState <- lift $ getAddressState address
-          lift $ putAddressState address addressState{contractRoot=storageStateRoot}
+          storageStateRoot <- lift $ lift getStorageStateRoot
+          addressState <- lift $ lift $ getAddressState address
+          lift $ lift $ putAddressState address addressState{contractRoot=storageStateRoot}
 
           let newState = state{
                 logs=logs nestedState ++ logs state,
@@ -1140,6 +1134,6 @@ nestedRun state gas address sender value inputData = do
                 refund= refund state + if isNothing (vmException nestedState) then refund nestedState else 0
                 }
                          
-          return $ Right (nestedState, Just retVal)
+          return (nestedState, Just retVal)
 
 
