@@ -476,15 +476,15 @@ runOperation CALL = do
 
   let stipend = if value > 0 then gCALLSTIPEND  else 0
 
-  addGas $ fromIntegral stipend
   useGas $ fromIntegral newAccountCost
 
   (result, maybeBytes) <-
     case debugCallCreates state of
       Nothing -> do
         lift $ lift $ pay "nestedRun fees" owner to (fromIntegral value)
-        nestedRun_debugWrapper state gas to sender value inputData 
+        nestedRun_debugWrapper state (gas + stipend) to sender value inputData 
       Just rest -> do
+        addGas $ fromIntegral stipend
         addToBalance' owner (-fromIntegral value)
         addressState <- lift $ lift $ lift $ getAddressState owner
         addGas $ fromIntegral gas
@@ -1032,7 +1032,7 @@ nestedRun_debugWrapper state gas (Address address) sender value inputData = do
 
       state' <- lift get
 
-      useGas $ fromIntegral gas
+      --useGas $ fromIntegral gas
 
       result <- lift $ lift $  nestedRun state' gas (Address address) (Address address) value inputData
 
