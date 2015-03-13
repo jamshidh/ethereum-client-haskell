@@ -1054,7 +1054,7 @@ nestedRun_debugWrapper state gas (Address address) sender value inputData = do
 
   case result of
     Left _ -> return (0, Nothing)
-    Right _ -> return (1, Nothing)
+    Right x -> return x
 
 
 nestedRun::VMState->Word256->Address->Address->Word256->B.ByteString->ContextM (Either VMException (VMState, Maybe B.ByteString))
