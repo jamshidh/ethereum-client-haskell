@@ -9,7 +9,7 @@ import qualified Data.ByteString as B
 
 import Blockchain.Context
 import Blockchain.Data.Address
-import Blockchain.Data.AddressState
+import Blockchain.Data.DataDefs
 import Blockchain.Data.Log
 import Blockchain.DB.ModifyStateDB
 import Blockchain.ExtWord

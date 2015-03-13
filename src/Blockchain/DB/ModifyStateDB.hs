@@ -13,7 +13,8 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Blockchain.Context
 import Blockchain.Data.Address
-import Blockchain.Data.AddressState
+import Blockchain.Data.DataDefs
+import Blockchain.Data.AddressStateDB
 
 --import Debug.Trace
 import Blockchain.Debug
@@ -21,7 +22,7 @@ import Blockchain.Debug
 addToBalance::Address->Integer->ContextM ()
 addToBalance address val = do
   addressState <- lift $ getAddressState address
-  lift $ putAddressState address addressState{ balance = balance addressState + fromIntegral val }
+  lift $ putAddressState address addressState{ addressStateBalance = addressStateBalance addressState + fromIntegral val }
 
 incrementNonce::Address->ContextM ()
 incrementNonce address = do
@@ -33,17 +34,17 @@ pay description fromAddr toAddr val = do
   when debug $ do
     liftIO $ putStrLn $ "payment: from " ++ show (pretty fromAddr) ++ " to " ++ show (pretty toAddr) ++ ": " ++ show val ++ ", " ++ description
     fromAddressState <- lift $ getAddressState fromAddr
-    liftIO $ putStrLn $ "from Funds: " ++ show (balance fromAddressState)
+    liftIO $ putStrLn $ "from Funds: " ++ show (addressStateBalance fromAddressState)
     toAddressState <- lift $ getAddressState toAddr
-    liftIO $ putStrLn $ "to Funds: " ++ show (balance toAddressState)
-    when (balance fromAddressState < val) $
+    liftIO $ putStrLn $ "to Funds: " ++ show (addressStateBalance toAddressState)
+    when (addressStateBalance fromAddressState < val) $
        liftIO $ putStrLn "insufficient funds"
 
   if val == 0
     then return True
     else do
     fromAddressState <- lift $ getAddressState fromAddr
-    if balance fromAddressState < val
+    if addressStateBalance fromAddressState < val
       then return False
       else do
       addToBalance fromAddr (-val)

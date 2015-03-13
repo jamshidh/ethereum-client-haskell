@@ -14,7 +14,7 @@ import Data.Maybe
 import System.IO
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
-import Blockchain.Data.Block
+import Blockchain.Data.DataDefs
 import Blockchain.BlockChain
 import Blockchain.Communication
 import Blockchain.Context
@@ -67,6 +67,6 @@ askForSomeBlocks handle = do
 handleNewBlocks::Handle->[Block]->ContextM ()
 handleNewBlocks handle blocks = do
   liftIO $ putStrLn "Submitting new blocks"
-  addBlocks $ sortBy (compare `on` number . blockData) blocks
+  addBlocks $ sortBy (compare `on` blockDataNumber . blockBlockData) blocks
   liftIO $ putStrLn $ show (length blocks) ++ " blocks have been submitted"
   askForSomeBlocks handle
