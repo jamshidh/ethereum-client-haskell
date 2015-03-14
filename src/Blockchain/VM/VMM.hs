@@ -51,7 +51,7 @@ pop = do
     VMState{stack=val:rest} -> do
                 lift $ put state'{stack=rest}
                 return $ fromWord256 val
-    _ -> left $ StackTooSmallException state'
+    _ -> left StackTooSmallException 
 
 
 getStackItem::Word256Storable a=>Int->VMM a
@@ -59,7 +59,7 @@ getStackItem i = do
   state' <- lift get
   if length (stack state') > fromIntegral i
     then return $ fromWord256 (stack state' !! i)
-    else left $ StackTooSmallException state'
+    else left StackTooSmallException
 
 push::Word256Storable a=>a->VMM ()
 push val = do
@@ -128,14 +128,14 @@ useGas::Integer->VMM ()
 useGas gas = do
   state' <- lift get
   case vmGasRemaining state' - gas of
-    x | x < 0 -> left $ OutOfGasException state'
+    x | x < 0 -> left OutOfGasException
     x -> lift $ put state'{vmGasRemaining=x}
 
 addGas::Integer->VMM ()
 addGas gas = do
   state' <- lift get
   case vmGasRemaining state' + gas of
-    x | x < 0 -> left $ OutOfGasException state'
+    x | x < 0 -> left OutOfGasException
     x -> lift $ put state'{vmGasRemaining=x}
 
 pay'::String->Address->Address->Integer->VMM ()
@@ -145,7 +145,7 @@ pay' reason from to val = do
     then return ()
     else do
       state' <- lift get
-      left $ InsufficientFunds state'
+      left InsufficientFunds
 
 addToBalance'::Address->Integer->VMM ()
 addToBalance' address val = do
@@ -154,4 +154,4 @@ addToBalance' address val = do
     then lift $ lift $ addToBalance address val
     else do
       state' <- lift get
-      left $ InsufficientFunds state'
+      left InsufficientFunds

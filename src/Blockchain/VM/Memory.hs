@@ -87,7 +87,7 @@ setNewMaxSize newSize' = do
   if vmGasRemaining state < gasCharge
      then do
           setGasRemaining 0
-          left $ OutOfGasException state
+          left OutOfGasException
     else do
     when (newSize > fromIntegral oldSize) $ do
       liftIO $ writeIORef (mSize $ memory state) (fromInteger newSize)

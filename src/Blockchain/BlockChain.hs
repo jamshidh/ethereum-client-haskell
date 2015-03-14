@@ -139,7 +139,7 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
     newVMState <-
       case result of
         Left e -> do
-          when debug $ liftIO $ putStrLn $ CL.red $ format e
+          when debug $ liftIO $ putStrLn $ CL.red $ show e
           return newVMState'{vmException = Just e}
         Right x -> return newVMState'
       
@@ -156,7 +156,7 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
     return newVMState
     else do
     liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*gasPrice ut) ++ ", have " ++ show (balance addressState)
-    return VMState{vmException=Just $ InsufficientFunds undefined, vmGasRemaining=0, refund=0, debugCallCreates=Nothing, logs=[]}
+    return VMState{vmException=Just InsufficientFunds, vmGasRemaining=0, refund=0, debugCallCreates=Nothing, logs=[]}
     
 runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
   when debug $ liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ to ut)
@@ -166,7 +166,7 @@ runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
   success <- pay "transfer value2" tAddr (to ut) (value ut)
 
   if not success
-    then return VMState{vmException=Just $ InsufficientFunds undefined, logs=[]}
+    then return VMState{vmException=Just InsufficientFunds, logs=[]}
     else 
     if availableGas*gasPrice ut <= balance addressState
     then do
@@ -184,7 +184,7 @@ runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
       newVMState <-
         case result of
           Left e -> do
-            when debug $ liftIO $ putStrLn $ CL.red $ format e
+            when debug $ liftIO $ putStrLn $ CL.red $ show e
             return newVMState'{vmException = Just e}
           Right x -> return newVMState'
       
@@ -192,7 +192,7 @@ runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
     
     else do
       liftIO $ putStrLn "Insufficient funds to run the VM"
-      return VMState{vmException=Just $ InsufficientFunds undefined, logs=[]}
+      return VMState{vmException=Just InsufficientFunds, logs=[]}
 
 addBlocks::[Block]->ContextM ()
 addBlocks blocks = 
@@ -271,7 +271,7 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
     return
       (
         VMState{
-           vmException=Just $ InsufficientFunds undefined,
+           vmException=Just InsufficientFunds,
            logs=[],
            debugCallCreates=Nothing,
            vmGasRemaining=error "undefined vmGasRemaining",

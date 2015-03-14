@@ -5,7 +5,7 @@ module Blockchain.VM.VMState (
   startingState,
   VMException(..),
   DebugCallCreate(..),
-  addErr
+--  addErr
 --  getReturnValue
   ) where
 
@@ -25,31 +25,20 @@ import Blockchain.VM.Code
 import Blockchain.VM.Environment
 
 data VMException =
-  OutOfGasException  {eState::VMState} |
-  StackTooSmallException {eState::VMState} |
-  VMException {message::String, eState::VMState} |
-  MalformedOpcodeException  {eState::VMState} |
-  DivByZeroException  {eState::VMState} |
-  InsufficientFunds  {eState::VMState} |
-  AddressDoesNotExist {eState::VMState} |
-  CallStackTooDeep {eState::VMState} |
-  InvalidJump {eState::VMState}
-
-instance Format VMException where
-  format (OutOfGasException _) = "OutOfGasException"
-  format (StackTooSmallException _) = "StackTooSmallException"
-  format (VMException msg _) = "VMException" ++ msg
-  format (MalformedOpcodeException _) = "MalformedOpcodeException"
-  format (DivByZeroException _) = "DivByZeroException"
-  format (InsufficientFunds _) = "InsufficientFunds"
-  format (AddressDoesNotExist _) = "AddressDoesNotExist"
-  format (CallStackTooDeep _) = "CallStackTooDeep"
-  format (InvalidJump _) = "InvalidJump"
+  OutOfGasException |
+  StackTooSmallException |
+  VMException String |
+  MalformedOpcodeException |
+  DivByZeroException |
+  InsufficientFunds |
+  AddressDoesNotExist |
+  CallStackTooDeep |
+  InvalidJump deriving (Show)
 
 addErr::String->Code->VMState->IO VMState
 addErr message' c state = do
   let (op, _) = getOperationAt c (pc state)
-  return state{vmException=Just $ VMException {message = message' ++ " for a call to " ++ show op, eState = state}}
+  return state{vmException=Just $ VMException $ message' ++ " for a call to " ++ show op}
 
 data Memory =
   Memory {

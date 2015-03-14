@@ -110,8 +110,7 @@ dupN n = do
   stack <- lift $ fmap stack get
   if length stack < n
     then do
-    state <- lift get
-    left $ StackTooSmallException state
+    left StackTooSmallException
     else push $ stack !! (n-1)
 
 
@@ -127,7 +126,7 @@ swapn n = do
   state <- lift get
   if length (stack state) < n
     then do
-      left $ StackTooSmallException state
+      left StackTooSmallException 
     else do
       let (middle, v2:rest2) = splitAt (n-1) $ stack state
       lift $ put state{stack = v2:(middle++(v1:rest2))}
@@ -356,9 +355,7 @@ runOperation JUMP = do
   --let (destOpcode, _) = getOperationAt theCode p
   if p `elem` jumpDests
     then setPC $ fromIntegral p - 1 -- Subtracting 1 to compensate for the pc-increment that occurs every step.
-    else do
-         state <- lift get
-         left $ InvalidJump state
+    else left InvalidJump
 
 runOperation JUMPI = do
   p <- pop
@@ -369,9 +366,7 @@ runOperation JUMPI = do
   case (p `elem` jumpDests, (0::Word256) /= cond) of
     (_, False) -> return ()
     (True, _) -> setPC $ fromIntegral p - 1
-    _ -> do
-      state <- lift get
-      left $ InvalidJump state
+    _ -> left InvalidJump
   
 runOperation PC = pushVMStateVar pc
 
@@ -574,8 +569,7 @@ runOperation SUICIDE = do
 
 runOperation (MalformedOpcode opcode) = do
   when debug $ liftIO $ putStrLn $ CL.red ("Malformed Opcode: " ++ showHex opcode "")
-  state <- lift get
-  left $ MalformedOpcodeException state
+  left MalformedOpcodeException
 
 runOperation x = error $ "Missing case in runOperation: " ++ show x
 
@@ -760,11 +754,9 @@ runCodeFromStart callDepth' = do
   oldStateRoot <- lift $ lift $ lift getStorageStateRoot
   lift $ lift $ lift $ setStorageStateRoot storageRoot
 
-  vmState <- liftIO $ startingState env
-
   result <- 
     if callDepth' > 1024
-    then left $ CallStackTooDeep vmState
+    then left CallStackTooDeep
     else runCode 0
 
   newStorageStateRoot <- lift $ lift $ lift getStorageStateRoot
@@ -775,7 +767,7 @@ runCodeFromStart callDepth' = do
 
   newVMState <- lift get
 
-  when debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList vmState)
+  when debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList newVMState)
 
   forM_ (suicideList newVMState) $ \address -> do
     lift $ lift $ lift $ deleteAddressState address
@@ -931,7 +923,7 @@ create_debugWrapper block owner value initCodeBytes = do
 
       case result of
         Left e -> do
-          liftIO $ putStrLn $ CL.red $ format e
+          liftIO $ putStrLn $ CL.red $ show e
           return Nothing
         Right (Code codeBytes) -> do
           let codeBytes = fromMaybe B.empty $ returnVal finalVMState
@@ -958,8 +950,7 @@ nestedRun_debugWrapper gas (Address address') sender value inputData = do
   theAddressExists <- lift $ lift $ lift $ addressStateExists (Address address')
 
   when (not theAddressExists && address' > 4) $ do
-    state'' <- lift get
-    left $ AddressDoesNotExist state''
+    left AddressDoesNotExist
 
   --pay' "gas payment in CALL opcode run" owner (Address to) $ fromIntegral value
 
