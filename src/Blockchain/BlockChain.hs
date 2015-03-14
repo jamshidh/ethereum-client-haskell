@@ -26,7 +26,7 @@ import Data.Time
 import Data.Time.Clock.POSIX
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
-import qualified Blockchain.Colors as C
+import qualified Blockchain.Colors as CL
 import Blockchain.Context
 import Blockchain.Data.Address
 import Blockchain.Data.AddressState
@@ -134,12 +134,14 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
     then do
     pay "pre-VM fees1" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
 
-    newVMStateOrException <- create b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas newAddress (tInit ut)
+    (result, newVMState') <- create b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas newAddress (tInit ut)
 
-    let newVMState =
-            case newVMStateOrException of
-              Left e -> (eState e){vmException = Just e}
-              Right x -> x
+    newVMState <-
+      case result of
+        Left e -> do
+          when debug $ liftIO $ putStrLn $ CL.red $ format e
+          return newVMState'{vmException = Just e}
+        Right x -> return newVMState'
       
     newAddressState <- lift $ getAddressState newAddress
     case returnVal newVMState of
@@ -173,13 +175,18 @@ runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
 
       pay "pre-VM fees2" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
 
-      newVMStateOrException <- runCodeForTransaction' False b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas (to ut) (Code contractCode) (tData ut)
+      (result, newVMState') <- call b 0 (to ut) (to ut) tAddr
+                               (fromIntegral $ value ut) (fromIntegral $ gasPrice ut) (tData ut) (fromIntegral availableGas) (to ut)
 -------------------------
 
-      let newVMState =
-            case newVMStateOrException of
-              Left e -> (eState e){vmException = Just e}
-              Right x -> x
+
+      
+      newVMState <-
+        case result of
+          Left e -> do
+            when debug $ liftIO $ putStrLn $ CL.red $ format e
+            return newVMState'{vmException = Just e}
+          Right x -> return newVMState'
       
       return newVMState
     
@@ -256,7 +263,7 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
     return (newVMState, remainingBlockGas - (tGasLimit ut - realRefund - vmGasRemaining newVMState))
     else do
     when debug $ liftIO $ do
-      putStrLn $ C.red "Insertion of transaction failed!"
+      putStrLn $ CL.red "Insertion of transaction failed!"
       when (not $ tGasLimit ut * gasPrice ut + value ut <= balance addressState) $ putStrLn "sender doesn't have high enough balance"
       when (not $ intrinsicGas' <= tGasLimit ut) $ putStrLn "intrinsic gas higher than transaction gas limit"
       when (not $ tGasLimit ut <= remainingBlockGas) $ putStrLn "block gas has run out"

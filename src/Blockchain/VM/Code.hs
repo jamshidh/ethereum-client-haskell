@@ -27,8 +27,8 @@ showCode lineNumber c@(Code rom) = showHex lineNumber "" ++ " " ++ format (B.pac
 instance Pretty Code where
     pretty = text . showCode 0
 
-getValidJUMPDESTs::B.ByteString->[Word256]
-getValidJUMPDESTs bytes =
+getValidJUMPDESTs::Code->[Word256]
+getValidJUMPDESTs (Code bytes) =
   map fst $ filter ((== JUMPDEST) . snd) $ getOps bytes 0
   where
     getOps::B.ByteString->Word256->[(Word256, Operation)]
