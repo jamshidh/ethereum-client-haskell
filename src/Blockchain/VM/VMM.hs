@@ -29,7 +29,7 @@ instance Word256Storable Word256 where
   toWord256 = id
 
 instance Word256Storable Address where
-  fromWord256 h = Address $ fromIntegral h
+  fromWord256 h = Address $ fromIntegral (h `mod` (2^160)::Word256)
   toWord256 (Address h) = fromIntegral h
 
 instance Word256Storable SHA where

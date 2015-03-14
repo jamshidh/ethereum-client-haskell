@@ -255,21 +255,18 @@ runOperation CODECOPY = do
 runOperation GASPRICE = pushEnvVar envGasPrice
 
 
---TODO- add code to automatically `mod` (2^160) addresses
 runOperation EXTCODESIZE = do
-  addressWord <- pop
-  let address' = Address $ fromIntegral (addressWord `mod` (2^160)::Word256)
+  address' <- pop
   addressState <- lift $ lift $ lift $ getAddressState address'
   code <- lift $ lift $ lift $ fromMaybe B.empty <$> getCode (codeHash addressState)
   push $ (fromIntegral (B.length code)::Word256)
 
 runOperation EXTCODECOPY = do
-  addressWord <- pop
+  address' <- pop
   memOffset <- pop
   codeOffset <- pop
   size <- pop
   
-  let address' = Address $ (fromIntegral (addressWord `mod` (2^160)::Word256))
   addressState <- lift $ lift $ lift $ getAddressState address'
   code <- lift $ lift $ lift $ fromMaybe B.empty <$> getCode (codeHash addressState)
   mStoreByteString memOffset (safeTake size $ safeDrop codeOffset $ code)
