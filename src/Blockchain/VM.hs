@@ -8,25 +8,20 @@ module Blockchain.VM (
 
 import Prelude hiding (LT, GT, EQ)
 
-import qualified Codec.Digest.SHA as SHA2
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans
 import Control.Monad.Trans.Either
 import Control.Monad.Trans.State
-import qualified Crypto.Hash.RIPEMD160 as RIPEMD
-import Data.Binary hiding (get, put)
 import Data.Bits
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
-import qualified Data.ByteString.Lazy as BL
 import Data.Char
 import Data.Function
 import Data.Functor
 import Data.List
 import Data.Maybe
 import Data.Time.Clock.POSIX
-import Network.Haskoin.Internals (Signature(..))
 import Numeric
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
@@ -43,7 +38,6 @@ import Blockchain.DB.CodeDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
 import Blockchain.ExtDBs
-import Blockchain.ExtendedECDSA
 import Blockchain.ExtWord
 import Blockchain.Format
 import Blockchain.SHA
@@ -107,11 +101,11 @@ logN n = do
 
 dupN::Int->VMM ()
 dupN n = do
-  stack <- lift $ fmap stack get
-  if length stack < n
+  stack' <- lift $ fmap stack get
+  if length stack' < n
     then do
     left StackTooSmallException
-    else push $ stack !! (n-1)
+    else push $ stack' !! (n-1)
 
 
 s256ToInteger::Word256->Integer
@@ -123,13 +117,13 @@ s256ToInteger i = toInteger i - 0x1000000000000000000000000000000000000000000000
 swapn::Int->VMM ()
 swapn n = do
   v1 <- pop
-  state <- lift get
-  if length (stack state) < n
+  vmState <- lift get
+  if length (stack vmState) < n
     then do
       left StackTooSmallException 
     else do
-      let (middle, v2:rest2) = splitAt (n-1) $ stack state
-      lift $ put state{stack = v2:(middle++(v1:rest2))}
+      let (middle, v2:rest2) = splitAt (n-1) $ stack vmState
+      lift $ put vmState{stack = v2:(middle++(v1:rest2))}
 
 getByte::Word256->Word256->Word256
 getByte whichByte val | whichByte < 32 = val `shiftR` (8*(31 - fromIntegral whichByte)) .&. 0xFF
@@ -140,19 +134,19 @@ signExtend numBytes val | numBytes > 31 = val
 signExtend numBytes val = baseValue + if highBitSet then highFilter else 0
   where
     lowFilter = 2^(8*numBytes+8)-1
-    highFilter = (2^256-1) - lowFilter
+    highFilter = (2^(256::Integer)-1) - lowFilter
     baseValue = lowFilter .&. val
     highBitSet =  val `shiftR` (8*fromIntegral numBytes + 7) .&. 1 == 1
 
-safe_div _ 0 = 0
-safe_div x y = x `div` y
-
+safe_quot::Integral a=>a->a->a
 safe_quot _ 0 = 0
 safe_quot x y = x `quot` y
 
+safe_mod::Integral a=>a->a->a
 safe_mod _ 0 = 0
 safe_mod x y = x `mod` y
 
+safe_rem::Integral a=>a->a->a
 safe_rem _ 0 = 0
 safe_rem x y = x `rem` y
 
