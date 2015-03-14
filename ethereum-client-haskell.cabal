@@ -54,7 +54,7 @@ executable ethereumH
     C-sources: fastNonceFinder/nonceFinder.c
     ghc-options: -Wall
     buildable: True
-    hs-source-dirs: src
+    hs-source-dirs: exec_src
 
 library
     default-language: Haskell98
@@ -88,7 +88,6 @@ library
                    Blockchain.BlockChain
                    Blockchain.BlockSynchronizer
                    Blockchain.Communication
-                   Blockchain.Constants
                    Blockchain.Context
                    Blockchain.Data.GenesisBlock
                    Blockchain.Data.Peer
