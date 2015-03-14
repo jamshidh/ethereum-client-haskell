@@ -106,6 +106,7 @@ library
                    Blockchain.VM.Memory
                    Blockchain.VM.Opcodes
                    Blockchain.VM.OpcodePrices
+                   Blockchain.VM.PrecompiledContracts
                    Blockchain.VM.VMM
                    Blockchain.VM.VMState
                    Blockchain.VM
