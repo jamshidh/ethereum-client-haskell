@@ -481,7 +481,7 @@ runOperation CALL = do
   (result, maybeBytes) <-
     case debugCallCreates state of
       Nothing -> do
-        lift $ lift $ pay "nestedRun fees" owner to (fromIntegral value)
+        pay' "nestedRun fees" owner to (fromIntegral value)
         nestedRun_debugWrapper state (gas + stipend) to sender value inputData 
       Just rest -> do
         addGas $ fromIntegral stipend
@@ -564,7 +564,7 @@ runOperation SUICIDE = do
   owner <- getEnvVar envOwner
 
   let allFunds = balance addressState
-  lift $ lift $ pay "transferring all funds upon suicide" owner address allFunds
+  pay' "transferring all funds upon suicide" owner address allFunds
   addSuicideList owner
   setDone True
 
@@ -1010,19 +1010,8 @@ nestedRun_debugWrapper state gas (Address address) sender value inputData = do
   theAddressExists <- lift $ lift $ lift $ addressStateExists (Address address)
 
   when (not theAddressExists && address > 4) $ do
-    let newAccount =
-                (Just $ Address $ fromIntegral address,
-                 fromIntegral gas,
-                 AddressState {
-                   addressStateNonce=0,
-                   balance = fromIntegral value,
-                   contractRoot = emptyTriePtr,
-                   codeHash = hash B.empty
-                   })
     state'' <- lift get
     left $ AddressDoesNotExist state''
-
-  gasRemaining <- getGasRemaining
 
   --pay' "gas payment in CALL opcode run" owner (Address to) $ fromIntegral value
 
@@ -1030,17 +1019,9 @@ nestedRun_debugWrapper state gas (Address address) sender value inputData = do
   addressState <- lift $ lift $ lift $ getAddressState $ Address address
   lift $ lift $ lift $ putAddressState (Address address) addressState{contractRoot=storageStateRoot}
 
-  state' <- lift get
-
-    --useGas $ fromIntegral gas
-
-  gasRemaining <- getGasRemaining
-
   currentCallDepth <- getCallDepth
 
   env <- lift $ fmap environment $ get
-
-  nestedVMState <- liftIO $ startingState env
 
   (result, finalVMState) <- 
     lift $ lift $
@@ -1054,15 +1035,15 @@ nestedRun_debugWrapper state gas (Address address) sender value inputData = do
       return (state'', returnVal state'') -}
   
   case result of
-        Right returnVal -> do
-          forM_ (reverse $ logs finalVMState) $ \log -> addLog log
+        Right retVal -> do
+          forM_ (reverse $ logs finalVMState) addLog
           useGas (- vmGasRemaining finalVMState)
-          return (1, Just returnVal)
-        Left e -> do
+          return (1, Just retVal)
+        Left _ -> do
 --          liftIO $ print (e::VMException)
           return (0, Nothing)
 
-
+{-
 nestedRun::VMState->Word256->Address->Address->Word256->B.ByteString->VMM ()
 nestedRun state gas (Address x) _ value inputData | x > 0 && x < 4 = do
   let env = environment state
@@ -1141,3 +1122,4 @@ nestedRun state gas address sender value inputData = do
       return ()
 
 
+-}
