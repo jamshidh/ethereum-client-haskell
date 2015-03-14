@@ -163,8 +163,8 @@ safe_rem x y = x `rem` y
 
 runOperation::Operation->VMM ()
 runOperation STOP = do
-  state <- lift get
-  lift $ put state{done=True}
+  vmState <- lift get
+  lift $ put vmState{done=True}
 
 runOperation ADD = binaryAction (+)
 runOperation MUL = binaryAction (*)
@@ -264,8 +264,8 @@ runOperation GASPRICE = pushEnvVar envGasPrice
 --TODO- add code to automatically `mod` (2^160) addresses
 runOperation EXTCODESIZE = do
   addressWord <- pop
-  let address = Address $ fromIntegral (addressWord `mod` (2^160)::Word256)
-  addressState <- lift $ lift $ lift $ getAddressState address
+  let address' = Address $ fromIntegral (addressWord `mod` (2^160)::Word256)
+  addressState <- lift $ lift $ lift $ getAddressState address'
   code <- lift $ lift $ lift $ fromMaybe B.empty <$> getCode (codeHash addressState)
   push $ (fromIntegral (B.length code)::Word256)
 
@@ -275,8 +275,8 @@ runOperation EXTCODECOPY = do
   codeOffset <- pop
   size <- pop
   
-  let address = Address $ (fromIntegral (addressWord `mod` (2^160)::Word256))
-  addressState <- lift $ lift $ lift $ getAddressState address
+  let address' = Address $ (fromIntegral (addressWord `mod` (2^160)::Word256))
+  addressState <- lift $ lift $ lift $ getAddressState address'
   code <- lift $ lift $ lift $ fromMaybe B.empty <$> getCode (codeHash addressState)
   mStoreByteString memOffset (safeTake size $ safeDrop codeOffset $ code)
   push $ (fromIntegral (B.length code)::Word256)
@@ -350,9 +350,7 @@ runOperation SSTORE = do
 runOperation JUMP = do
   p <- pop
   jumpDests <- getEnvVar envJumpDests
-  theCode <- getEnvVar envCode
 
-  --let (destOpcode, _) = getOperationAt theCode p
   if p `elem` jumpDests
     then setPC $ fromIntegral p - 1 -- Subtracting 1 to compensate for the pc-increment that occurs every step.
     else left InvalidJump
@@ -361,7 +359,6 @@ runOperation JUMPI = do
   p <- pop
   cond <- pop
   jumpDests <- getEnvVar envJumpDests
-  theCode <- getEnvVar envCode
   
   case (p `elem` jumpDests, (0::Word256) /= cond) of
     (_, False) -> return ()
@@ -430,13 +427,13 @@ runOperation CREATE = do
   result <-
     case debugCallCreates vmState of
       Nothing -> create_debugWrapper block owner value initCodeBytes
-      Just rest -> do
+      Just _ -> do
         addressState <- lift $ lift $ lift $ getAddressState owner
         let newAddress = getNewAddress owner (addressStateNonce addressState)
 
-        addressState <- lift $ lift $ lift $ getAddressState owner
+        addressState' <- lift $ lift $ lift $ getAddressState owner
         
-        if balance addressState < fromIntegral value
+        if balance addressState' < fromIntegral value
           then return Nothing
           else do
           addToBalance' owner (-fromIntegral value)
@@ -449,7 +446,7 @@ runOperation CREATE = do
           return $ Just newAddress
 
   case result of
-    Just address -> push address
+    Just address' -> push address'
     Nothing -> push (0::Word256)
 
 runOperation CALL = do
@@ -484,7 +481,6 @@ runOperation CALL = do
       Just rest -> do
         addGas $ fromIntegral stipend
         addToBalance' owner (-fromIntegral value)
-        addressState <- lift $ lift $ lift $ getAddressState owner
         addGas $ fromIntegral gas
         addDebugCallCreate DebugCallCreate {
           ccData=inputData,
@@ -528,8 +524,7 @@ runOperation CALLCODE = do
   (result, maybeBytes) <-
     case debugCallCreates vmState of
       Nothing -> nestedRun_debugWrapper gas to sender value inputData 
-      Just rest -> do
-        addressState <- lift $ lift $ lift $ getAddressState owner
+      Just _ -> do
         useGas $ fromIntegral newAccountCost
         addGas $ fromIntegral stipend
         addGas $ fromIntegral gas
@@ -548,21 +543,20 @@ runOperation CALLCODE = do
   push result
 
 runOperation RETURN = do
-  address <- pop
+  address' <- pop
   size <- pop
   
-  retVal <- mLoadByteString address size
+  retVal <- mLoadByteString address' size
   setDone True
   setReturnVal $ Just retVal
 
 runOperation SUICIDE = do
-  address <- pop
+  address' <- pop
   owner <- getEnvVar envOwner
   addressState <- lift $ lift $ lift $ getAddressState $ owner
-  owner <- getEnvVar envOwner
 
   let allFunds = balance addressState
-  pay' "transferring all funds upon suicide" owner address allFunds
+  pay' "transferring all funds upon suicide" owner address' allFunds
   addSuicideList owner
   setDone True
 
@@ -698,12 +692,12 @@ showHexU::Integer->[Char]
 showHexU = map toUpper . flip showHex ""
 
 printDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState->ContextM ()
-printDebugInfo env memBefore memAfter c op state result = do
-  liftIO $ putStrLn $ "EVM [ eth | " ++ show (callDepth state) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc state)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining state) ++ " | " ++ show (vmGasRemaining result - vmGasRemaining state) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
+printDebugInfo env memBefore memAfter c op stateBefore stateAfter = do
+  liftIO $ putStrLn $ "EVM [ eth | " ++ show (callDepth stateBefore) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc stateBefore)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining stateBefore) ++ " | " ++ show (vmGasRemaining stateAfter - vmGasRemaining stateBefore) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
   liftIO $ putStrLn $ "EVM [ eth ] "
-  memByteString <- liftIO $ getMemAsByteString (memory result)
+  memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
   liftIO $ putStrLn "    STACK"
-  liftIO $ putStr $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack result))
+  liftIO $ putStr $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack stateAfter))
   liftIO $ putStr $ "    MEMORY\n" ++ showMem 0 (B.unpack $ memByteString)
   liftIO $ putStrLn $ "    STORAGE"
   kvs <- lift $ getStorageKeyVals ""
@@ -714,9 +708,9 @@ runCode c = do
   memBefore <- getSizeInWords
   code <- getEnvVar envCode
 
-  state <- lift get
+  vmState <- lift get
 
-  let (op, len) = getOperationAt code (pc state)
+  let (op, len) = getOperationAt code (pc vmState)
   --liftIO $ putStrLn $ "EVM [ 19:22" ++ show op ++ " #" ++ show c ++ " (" ++ show (vmGasRemaining state) ++ ")"
 
   (val, theRefund) <- opGasPriceAndRefund op
@@ -728,7 +722,7 @@ runCode c = do
   memAfter <- getSizeInWords
 
   result <- lift get
-  when debug $ lift $ lift $ printDebugInfo (environment result) memBefore memAfter c op state result
+  when debug $ lift $ lift $ printDebugInfo (environment result) memBefore memAfter c op vmState result
 
   case result of
     VMState{done=True} -> incrementPC len
@@ -769,8 +763,7 @@ runCodeFromStart callDepth' = do
 
   when debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList newVMState)
 
-  forM_ (suicideList newVMState) $ \address -> do
-    lift $ lift $ lift $ deleteAddressState address
+  forM_ (suicideList newVMState) $ lift . lift . lift . deleteAddressState
 
   return result
 
@@ -925,13 +918,12 @@ create_debugWrapper block owner value initCodeBytes = do
         Left e -> do
           liftIO $ putStrLn $ CL.red $ show e
           return Nothing
-        Right (Code codeBytes) -> do
-          let codeBytes = fromMaybe B.empty $ returnVal finalVMState
+        Right (Code codeBytes') -> do
 
-          lift $ lift $ lift $ addCode $ codeBytes
+          lift $ lift $ lift $ addCode $ codeBytes'
 
           addressState' <- lift $ lift $ lift $ getAddressState newAddress
-          lift $ lift $ lift $ putAddressState newAddress addressState'{codeHash = hash codeBytes}
+          lift $ lift $ lift $ putAddressState newAddress addressState'{codeHash = hash codeBytes'}
 
           newAddressExists <- lift $ lift $ lift $ addressStateExists newAddress
           when newAddressExists $ lift $ lift $ incrementNonce owner
