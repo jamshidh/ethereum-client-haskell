@@ -234,5 +234,5 @@ main = do
 
   runResourceT $ do
     cxt <- openDBs "h"
-    _ <- liftIO $ runStateT (runStateT (doit handle) (Context [] 0 [])) cxt
+    _ <- liftIO $ runStateT (runStateT (doit handle) (Context [] 0 [] False)) cxt
     return ()

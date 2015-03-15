@@ -9,6 +9,7 @@ module Blockchain.VM (
 import Prelude hiding (LT, GT, EQ)
 
 import Control.Monad
+import Control.Monad.IfElse
 import Control.Monad.IO.Class
 import Control.Monad.Trans
 import Control.Monad.Trans.Either
@@ -54,7 +55,6 @@ import qualified Data.NibbleString as N
 
 
 --import Debug.Trace
-import Blockchain.Debug
 
 bool2Word256::Bool->Word256
 bool2Word256 True = 1
@@ -553,7 +553,7 @@ runOperation SUICIDE = do
 
 
 runOperation (MalformedOpcode opcode) = do
-  when debug $ liftIO $ putStrLn $ CL.red ("Malformed Opcode: " ++ showHex opcode "")
+  whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ CL.red ("Malformed Opcode: " ++ showHex opcode "")
   left MalformedOpcodeException
 
 runOperation x = error $ "Missing case in runOperation: " ++ show x
@@ -713,7 +713,7 @@ runCode c = do
   memAfter <- getSizeInWords
 
   result <- lift get
-  when debug $ lift $ lift $ printDebugInfo (environment result) memBefore memAfter c op vmState result
+  whenM (lift $ lift isDebugEnabled) $ lift $ lift $ printDebugInfo (environment result) memBefore memAfter c op vmState result
 
   case result of
     VMState{done=True} -> incrementPC len
@@ -725,7 +725,7 @@ runCodeFromStart::Int->VMM ()
 runCodeFromStart callDepth' = do
   env <- lift $ fmap environment get
 
-  when debug $ liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty $ envCode env)))
+  whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty $ envCode env)))
 
   addressAlreadyExists <- lift $ lift $ lift $ addressStateExists (envOwner env)
 
@@ -752,7 +752,7 @@ runCodeFromStart callDepth' = do
 
   newVMState <- lift get
 
-  when debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList newVMState)
+  whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList newVMState)
 
   forM_ (suicideList newVMState) $ lift . lift . lift . deleteAddressState
 
@@ -782,7 +782,7 @@ create b callDepth' sender origin value' gasPrice' availableGas newAddress init'
     flip runStateT vmState{callDepth=callDepth', vmGasRemaining=availableGas} $ runEitherT $
     create' callDepth'
 
-  when debug $ liftIO $ putStrLn "VM has finished running"
+  whenM isDebugEnabled $ liftIO $ putStrLn "VM has finished running"
 
   return result
 
@@ -796,7 +796,7 @@ create' callDepth' = do
   vmState <- lift get
   
   let result = fromMaybe B.empty $ returnVal vmState
-  when debug $ liftIO $ putStrLn $ "Result: " ++ show result
+  whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ "Result: " ++ show result
   --Not sure which way this is supposed to go....  I'll keep going back and forth until I figure it out
 
   useGas $ 5 * toInteger (B.length result)
@@ -836,7 +836,7 @@ call b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' t
         then callPrecompiledContract codeAddress theData
         else call' callDepth'
 
-  when debug $ liftIO $ putStrLn "VM has finished running"
+  whenM isDebugEnabled $ liftIO $ putStrLn "VM has finished running"
 
   return result
 
@@ -847,13 +847,13 @@ call'::Int->VMM B.ByteString
 --call' callDepth' address codeAddress sender value' gasPrice' theData availableGas origin = do
 call' callDepth' = do
 
-  --when debug $ liftIO $ putStrLn $ "availableGas: " ++ show availableGas
+  --whenM isDebugEnabled $ liftIO $ putStrLn $ "availableGas: " ++ show availableGas
 
   runCodeFromStart callDepth'
 
   vmState <- lift get
 
-  when debug $ liftIO $ do
+  whenM (lift $ lift isDebugEnabled) $ liftIO $ do
       let result = fromMaybe B.empty $ returnVal vmState
       putStrLn $ "Result: " ++ format result
       putStrLn $ "Gas remaining: " ++ show (vmGasRemaining vmState) ++ ", needed: " ++ show (5*toInteger (B.length result))
@@ -874,7 +874,7 @@ create_debugWrapper block owner value initCodeBytes = do
   if fromIntegral value > balance addressState
     then return Nothing
     else do
-      when debug $ liftIO $ putStrLn "transfer value"
+      whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn "transfer value"
       lift $ lift $ addToBalance owner (-fromIntegral value)
 
       let initCode = Code initCodeBytes
@@ -954,6 +954,7 @@ nestedRun_debugWrapper gas (Address address') sender value inputData = do
         Right retVal -> do
           forM_ (reverse $ logs finalVMState) addLog
           useGas (- vmGasRemaining finalVMState)
+          addToRefund (refund finalVMState)
           return (1, Just retVal)
         Left _ -> do
 --          liftIO $ print (e::VMException)

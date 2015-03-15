@@ -16,7 +16,6 @@ import Blockchain.Data.Address
 import Blockchain.Data.AddressState
 
 --import Debug.Trace
-import Blockchain.Debug
 
 addToBalance::Address->Integer->ContextM ()
 addToBalance address val = do
@@ -30,6 +29,7 @@ incrementNonce address = do
 
 pay::String->Address->Address->Integer->ContextM Bool
 pay description fromAddr toAddr val = do
+  debug <- isDebugEnabled
   when debug $ do
     liftIO $ putStrLn $ "payment: from " ++ show (pretty fromAddr) ++ " to " ++ show (pretty toAddr) ++ ": " ++ show val ++ ", " ++ description
     fromAddressState <- lift $ getAddressState fromAddr

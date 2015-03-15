@@ -74,6 +74,7 @@ library
                  , ethereum-rlp
                  , filepath
                  , haskoin
+                 , IfElse
                  , leveldb-haskell
                  , mtl
                  , network

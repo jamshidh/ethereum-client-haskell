@@ -12,6 +12,7 @@ module Blockchain.BlockChain (
   ) where
 
 import Control.Monad
+import Control.Monad.IfElse
 import Control.Monad.IO.Class
 import Control.Monad.Trans
 import Control.Monad.State hiding (state)
@@ -36,7 +37,6 @@ import Blockchain.Data.RLP
 import Blockchain.Data.SignedTransaction
 import Blockchain.Data.Transaction
 import Blockchain.Database.MerklePatricia
-import Blockchain.Debug
 import Blockchain.DB.CodeDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
@@ -121,7 +121,7 @@ checkValidity b = do
 
 runCodeForTransaction::Block->Integer->Address->Transaction->ContextM VMState
 runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
-  when debug $ liftIO $ putStrLn "runCodeForTransaction: ContractCreationTX"
+  whenM isDebugEnabled $ liftIO $ putStrLn "runCodeForTransaction: ContractCreationTX"
 
   --Create the new account
   let newAddress = getNewAddress tAddr $ tNonce ut
@@ -139,7 +139,7 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
     newVMState <-
       case result of
         Left e -> do
-          when debug $ liftIO $ putStrLn $ CL.red $ show e
+          whenM isDebugEnabled $ liftIO $ putStrLn $ CL.red $ show e
           return newVMState'{vmException = Just e}
         Right x -> return newVMState'
       
@@ -159,7 +159,7 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
     return VMState{vmException=Just InsufficientFunds, vmGasRemaining=0, refund=0, debugCallCreates=Nothing, logs=[]}
     
 runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
-  when debug $ liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ to ut)
+  whenM isDebugEnabled $ liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ to ut)
   
   addressState <- lift $ getAddressState tAddr
   
@@ -184,7 +184,7 @@ runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
       newVMState <-
         case result of
           Left e -> do
-            when debug $ liftIO $ putStrLn $ CL.red $ show e
+            whenM isDebugEnabled $ liftIO $ putStrLn $ CL.red $ show e
             return newVMState'{vmException = Just e}
           Right x -> return newVMState'
       
@@ -224,7 +224,7 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
   let signAddress = whoSignedThisTransaction t
 
   let intrinsicGas' = intrinsicGas ut
-  when debug $
+  whenM isDebugEnabled $
     liftIO $ putStrLn $ "intrinsicGas: " ++ show (intrinsicGas')
 
   addressState <- lift $ getAddressState signAddress
@@ -236,13 +236,13 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
     then do
     incrementNonce signAddress
     pay "intrinsic gas payment" signAddress (coinbase $ blockData b) (intrinsicGas' * gasPrice ut)
-    when debug $ liftIO $ putStrLn "running code"
+    whenM isDebugEnabled $ liftIO $ putStrLn "running code"
 
     let tAddr = whoSignedThisTransaction t
 
     newVMState <- runCodeForTransaction b (tGasLimit ut - intrinsicGas') tAddr ut
 
-    when debug $
+    whenM isDebugEnabled $
       liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining newVMState)
 
     --coinbaseAddressState <- lift $ getAddressState (coinbase $ blockData b)
@@ -250,7 +250,7 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
     let realRefund =
           min (refund newVMState) ((tGasLimit ut - vmGasRemaining newVMState) `div` 2)
 
-    when debug $ liftIO $ do
+    whenM isDebugEnabled $ liftIO $ do
       putStrLn $ "full refund: " ++ show (refund newVMState)
       putStrLn $ "half spent: " ++ show ((tGasLimit ut - vmGasRemaining newVMState) `div` 2)
       putStrLn $ "realRefund: " ++ show realRefund
@@ -262,7 +262,7 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
         return ()
     return (newVMState, remainingBlockGas - (tGasLimit ut - realRefund - vmGasRemaining newVMState))
     else do
-    when debug $ liftIO $ do
+    whenM isDebugEnabled $ liftIO $ do
       putStrLn $ CL.red "Insertion of transaction failed!"
       when (not $ tGasLimit ut * gasPrice ut + value ut <= balance addressState) $ putStrLn "sender doesn't have high enough balance"
       when (not $ intrinsicGas' <= tGasLimit ut) $ putStrLn "intrinsic gas higher than transaction gas limit"
