@@ -450,7 +450,6 @@ runOperation CALL = do
   outSize <- pop::VMM Word256
 
   owner <- getEnvVar envOwner
-  sender <- getEnvVar envSender
 
   inputData <- mLoadByteString inOffset inSize
 
@@ -468,7 +467,7 @@ runOperation CALL = do
     case debugCallCreates vmState of
       Nothing -> do
         pay' "nestedRun fees" owner to (fromIntegral value)
-        nestedRun_debugWrapper (gas + stipend) to sender value inputData 
+        nestedRun_debugWrapper (gas + stipend) to owner value inputData 
       Just _ -> do
         addGas $ fromIntegral stipend
         addToBalance' owner (-fromIntegral value)
@@ -689,7 +688,7 @@ printDebugInfo env memBefore memAfter c op stateBefore stateAfter = do
   memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
   liftIO $ putStrLn "    STACK"
   liftIO $ putStr $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack stateAfter))
-  liftIO $ putStr $ "    MEMORY\n" ++ showMem 0 (B.unpack $ memByteString)
+--  liftIO $ putStr $ "    MEMORY\n" ++ showMem 0 (B.unpack $ memByteString)
   liftIO $ putStrLn $ "    STORAGE"
   kvs <- lift $ getStorageKeyVals ""
   liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (rlpDecode $ rlpDeserialize $ rlpDecode v::Integer)) kvs)
@@ -930,10 +929,6 @@ nestedRun_debugWrapper gas (Address address') sender value inputData = do
     left AddressDoesNotExist
 
   --pay' "gas payment in CALL opcode run" owner (Address to) $ fromIntegral value
-
-  storageStateRoot <- lift $ lift $ lift getStorageStateRoot
-  addressState <- lift $ lift $ lift $ getAddressState $ Address address'
-  lift $ lift $ lift $ putAddressState (Address address') addressState{contractRoot=storageStateRoot}
 
   currentCallDepth <- getCallDepth
 
