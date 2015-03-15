@@ -469,7 +469,7 @@ runOperation CALL = do
       Nothing -> do
         pay' "nestedRun fees" owner to (fromIntegral value)
         nestedRun_debugWrapper (gas + stipend) to sender value inputData 
-      Just rest -> do
+      Just _ -> do
         addGas $ fromIntegral stipend
         addToBalance' owner (-fromIntegral value)
         addGas $ fromIntegral gas
@@ -798,16 +798,12 @@ create' callDepth' = do
   let result = fromMaybe B.empty $ returnVal vmState
   when debug $ liftIO $ putStrLn $ "Result: " ++ show result
   --Not sure which way this is supposed to go....  I'll keep going back and forth until I figure it out
-  case Just $ fromMaybe B.empty $ returnVal vmState of
-        --case returnVal vmState of
-        Nothing -> return $ Code B.empty
-        Just result -> do
-          if 5*toInteger (B.length result) < vmGasRemaining vmState
-            then do 
-            lift $ lift $ lift $ addCode result
-            useGas $ 5 * toInteger (B.length result)
-            return $ Code result
-            else return $ Code result
+
+  useGas $ 5 * toInteger (B.length result)
+
+  lift $ lift $ lift $ addCode result
+
+  return $ Code result
 
 --bool Executive::call(Address _receiveAddress, Address _codeAddress, Address _senderAddress, u256 _value, u256 _gasPrice, bytesConstRef _data, u256 _gas, Address _originAddress)
 
@@ -910,8 +906,6 @@ create_debugWrapper block owner value initCodeBytes = do
           liftIO $ putStrLn $ CL.red $ show e
           return Nothing
         Right (Code codeBytes') -> do
-
-          lift $ lift $ lift $ addCode $ codeBytes'
 
           addressState' <- lift $ lift $ lift $ getAddressState newAddress
           lift $ lift $ lift $ putAddressState newAddress addressState'{codeHash = hash codeBytes'}
