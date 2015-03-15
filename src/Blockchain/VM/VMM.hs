@@ -29,7 +29,7 @@ instance Word256Storable Word256 where
   toWord256 = id
 
 instance Word256Storable Address where
-  fromWord256 h = Address $ fromIntegral (h `mod` (2^160)::Word256)
+  fromWord256 h = Address $ fromIntegral (h `mod` (2^(160::Integer))::Word256)
   toWord256 (Address h) = fromIntegral h
 
 instance Word256Storable SHA where
@@ -143,15 +143,11 @@ pay' reason from to val = do
   success <- lift $ lift $ pay reason from to val
   if success
     then return ()
-    else do
-      state' <- lift get
-      left InsufficientFunds
+    else left InsufficientFunds
 
 addToBalance'::Address->Integer->VMM ()
-addToBalance' address val = do
-  addressState <- lift $ lift $ lift $ getAddressState address
+addToBalance' address' val = do
+  addressState <- lift $ lift $ lift $ getAddressState address'
   if balance addressState + val >= 0
-    then lift $ lift $ addToBalance address val
-    else do
-      state' <- lift get
-      left InsufficientFunds
+    then lift $ lift $ addToBalance address' val
+    else left InsufficientFunds
