@@ -212,7 +212,7 @@ zeroBytesLength MessageTX{tData=d} = length $ filter (==0) $ B.unpack d
 zeroBytesLength ContractCreationTX{tInit=Code d} = length $ filter (==0) $ B.unpack d
 
 intrinsicGas::Transaction->Integer
-intrinsicGas t = gTXDATAZERO * zeroLen + gTXDATAZERO * (fromIntegral (codeOrDataLength t) - zeroLen) + gTX
+intrinsicGas t = gTXDATAZERO * zeroLen + gTXDATANONZERO * (fromIntegral (codeOrDataLength t) - zeroLen) + gTX
     where
       zeroLen = fromIntegral $ zeroBytesLength t
 --intrinsicGas t@ContractCreationTX{} = 5 * (fromIntegral (codeOrDataLength t)) + 500
