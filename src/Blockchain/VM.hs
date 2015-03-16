@@ -214,10 +214,14 @@ runOperation SHA3 = do
 runOperation ADDRESS = pushEnvVar envOwner
 
 runOperation BALANCE = do
-  x <- pop
-  addressState <- lift $ lift $ lift $ getAddressState x
-  push $ balance addressState
-
+  address' <- pop
+  exists <- lift $ lift $ lift $ addressStateExists address'
+  if exists
+    then do
+    addressState <- lift $ lift $ lift $ getAddressState address'
+    push $ balance addressState
+    else push (0::Word256)
+    
 runOperation ORIGIN = pushEnvVar envOrigin
 runOperation CALLER = pushEnvVar envSender
 runOperation CALLVALUE = pushEnvVar envValue
@@ -463,12 +467,15 @@ runOperation CALL = do
 
   useGas $ fromIntegral newAccountCost
 
+  addressState <- lift $ lift $ lift $ getAddressState owner
+  
   (result, maybeBytes) <-
-    case debugCallCreates vmState of
-      Nothing -> do
+    case (fromIntegral value > balance addressState, debugCallCreates vmState) of
+      (True, _) -> return (0, Nothing)
+      (_, Nothing) -> do
         pay' "nestedRun fees" owner to (fromIntegral value)
         nestedRun_debugWrapper (gas + stipend) to owner value inputData 
-      Just _ -> do
+      (_, Just _) -> do
         addGas $ fromIntegral stipend
         addToBalance' owner (-fromIntegral value)
         addGas $ fromIntegral gas
@@ -503,18 +510,22 @@ runOperation CALLCODE = do
 
   vmState <- lift get
 
-  addToBalance' owner (-fromIntegral value)
-
   let stipend = if value > 0 then gCALLSTIPEND  else 0
 
   toAddressExists <- lift $ lift $ lift $ addressStateExists to
 
   let newAccountCost = if not toAddressExists then gCALLNEWACCOUNT else 0
 
+  addressState <- lift $ lift $ lift $ getAddressState owner
+  
   (result, maybeBytes) <-
-    case debugCallCreates vmState of
-      Nothing -> nestedRun_debugWrapper gas to sender value inputData 
-      Just _ -> do
+    case (fromIntegral value > balance addressState, debugCallCreates vmState) of
+      (True, _) -> return (0, Nothing)
+      (_, Nothing) -> do
+        pay' "nestedRun fees" owner to (fromIntegral value)
+        nestedRun_debugWrapper gas to sender value inputData 
+      (_, Just _) -> do
+        addToBalance' owner (-fromIntegral value)
         useGas $ fromIntegral newAccountCost
         addGas $ fromIntegral stipend
         addGas $ fromIntegral gas
@@ -885,16 +896,10 @@ create_debugWrapper block owner value initCodeBytes = do
 
       currentCallDepth <- getCallDepth
 
-      let newAccountState =
-                AddressState {
-                  addressStateNonce=0,
-                  balance = fromIntegral value,
-                  contractRoot = emptyTriePtr,
-                  codeHash = hash B.empty
-                  }
-
-      lift $ lift $ lift $ putAddressState newAddress newAccountState
-          
+      --This next line will actually create the account addressState data....
+      --In the extremely unlikely even that the address already exists, it will preserve
+      --the existing balance.
+      addToBalance' newAddress $ fromIntegral value
 
       (result, finalVMState) <- 
         lift $ lift $
