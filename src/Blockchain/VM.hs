@@ -538,7 +538,7 @@ runOperation CALLCODE = do
       (True, _) -> return (0, Nothing)
       (_, Nothing) -> do
         --pay' "nestedRun fees" owner to (fromIntegral value)
-        nestedRun_debugWrapper gas owner to sender value inputData 
+        nestedRun_debugWrapper (gas+stipend) owner to owner value inputData 
       (_, Just _) -> do
         addToBalance' owner (-fromIntegral value)
         useGas $ fromIntegral newAccountCost
@@ -752,17 +752,10 @@ runCodeFromStart callDepth' = do
 
   whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty $ envCode env)))
 
-  addressAlreadyExists <- lift $ lift $ lift $ addressStateExists (envOwner env)
 
-  storageRoot <-
-    if addressAlreadyExists
-    then do
-      addressState <- lift $ lift $ lift $ getAddressState (envOwner env)
-      return $ contractRoot addressState
-    else return emptyTriePtr
+  addressState <- lift $ lift $ lift $ getAddressState (envOwner env)
 
-  oldStateRoot <- lift $ lift $ lift getStorageStateRoot
-  lift $ lift $ lift $ setStorageStateRoot storageRoot
+  lift $ lift $ lift $ setStorageStateRoot $ contractRoot addressState
 
   result <- 
     if callDepth' > 1024
@@ -773,7 +766,7 @@ runCodeFromStart callDepth' = do
   ownerAddressState <- lift $ lift $ lift $ getAddressState $ envOwner env
   lift $ lift $ lift $ putAddressState (envOwner env) ownerAddressState{contractRoot=newStorageStateRoot}
 
-  lift $ lift $ lift $ setStorageStateRoot oldStateRoot
+  --lift $ lift $ lift $ setStorageStateRoot oldStateRoot
 
   newVMState <- lift get
 
@@ -781,7 +774,6 @@ runCodeFromStart callDepth' = do
 
   forM_ (suicideList newVMState) $ lift . lift . lift . deleteAddressState
 
-  return result
 
 
 --bool Executive::create(Address _sender, u256 _endowment, u256 _gasPrice, u256 _gas, bytesConstRef _init, Address _origin)
@@ -951,9 +943,18 @@ nestedRun_debugWrapper gas receiveAddress (Address address') sender value inputD
 
   env <- lift $ fmap environment $ get
 
+  defaultContractRoot <- lift $ lift $ lift getStorageStateRoot
+  addressState <- lift $ lift $ lift $ getAddressState sender
+  lift $ lift $ lift $ putAddressState sender addressState{contractRoot=defaultContractRoot}
+
   (result, finalVMState) <- 
     lift $ lift $
       call (envBlock env) currentCallDepth receiveAddress (Address address') sender value (fromIntegral $ envGasPrice env) inputData gas (envOrigin env)
+
+  addressState' <- lift $ lift $ lift $ getAddressState sender
+  lift $ lift $ lift $ setStorageStateRoot $ contractRoot addressState'
+
+
 
 {-      state'' <- lift get
       --Need to load newest stateroot in case it changed recursively within the nestedRun
