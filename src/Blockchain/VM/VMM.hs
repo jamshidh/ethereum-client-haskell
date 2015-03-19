@@ -128,7 +128,9 @@ useGas::Integer->VMM ()
 useGas gas = do
   state' <- lift get
   case vmGasRemaining state' - gas of
-    x | x < 0 -> left OutOfGasException
+    x | x < 0 -> do
+      lift $ put state'{vmGasRemaining=0}
+      left OutOfGasException
     x -> lift $ put state'{vmGasRemaining=x}
 
 addGas::Integer->VMM ()
