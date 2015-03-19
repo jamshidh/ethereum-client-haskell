@@ -176,7 +176,7 @@ runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
       pay "pre-VM fees2" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
 
       (result, newVMState') <- call b 0 (to ut) (to ut) tAddr
-                               (fromIntegral $ value ut) (fromIntegral $ gasPrice ut) (tData ut) (fromIntegral availableGas) (to ut)
+                               (fromIntegral $ value ut) (fromIntegral $ gasPrice ut) (tData ut) (fromIntegral availableGas) tAddr
 -------------------------
 
 
