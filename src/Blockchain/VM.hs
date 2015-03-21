@@ -474,13 +474,7 @@ runOperation CALL = do
 
   vmState <- lift get
 
-  toAddressExists <- lift $ lift $ lift $ addressStateExists to
-
-  let newAccountCost = if not toAddressExists then gCALLNEWACCOUNT else 0
-
   let stipend = if value > 0 then gCALLSTIPEND  else 0
-
-  useGas $ fromIntegral newAccountCost
 
   addressState <- lift $ lift $ lift $ getAddressState owner
   
@@ -529,19 +523,24 @@ runOperation CALLCODE = do
 
   toAddressExists <- lift $ lift $ lift $ addressStateExists to
 
-  let newAccountCost = if not toAddressExists then gCALLNEWACCOUNT else 0
+--  let newAccountCost = if not toAddressExists then gCALLNEWACCOUNT else 0
+
+--  useGas $ fromIntegral newAccountCost
 
   addressState <- lift $ lift $ lift $ getAddressState owner
   
   (result, maybeBytes) <-
     case (fromIntegral value > balance addressState, debugCallCreates vmState) of
-      (True, _) -> return (0, Nothing)
+      (True, _) -> do
+        addGas $ fromIntegral gas
+        addGas $ fromIntegral stipend
+        liftIO $ putStrLn $ CL.red "Insufficient balance"
+        return (0, Nothing)
       (_, Nothing) -> do
         --pay' "nestedRun fees" owner to (fromIntegral value)
         nestedRun_debugWrapper (gas+stipend) owner to owner value inputData 
       (_, Just _) -> do
         addToBalance' owner (-fromIntegral value)
-        useGas $ fromIntegral newAccountCost
         addGas $ fromIntegral stipend
         addGas $ fromIntegral gas
         addDebugCallCreate DebugCallCreate {
@@ -632,7 +631,8 @@ opGasPriceAndRefund CALL = do
   return $ (fromIntegral $
                        fromIntegral gas +
                        fromIntegral gCALL +
-                       (if toAccountExists || to < 5 then 0 else gCALLNEWACCOUNT) +
+                       (if toAccountExists then 0 else gCALLNEWACCOUNT) +
+--                       (if toAccountExists || to < 5 then 0 else gCALLNEWACCOUNT) +
                        (if val > 0 then gCALLVALUETRANSFER else 0),
                 0)
 
@@ -647,7 +647,7 @@ opGasPriceAndRefund CALLCODE = do
   return $ (fromIntegral $
                 fromIntegral gas +
                 fromIntegral gCALL +
-                (if toAccountExists then 0 else gCALLNEWACCOUNT) +
+--                (if toAccountExists then 0 else gCALLNEWACCOUNT) +
                 (if val > 0 then gCALLVALUETRANSFER else 0),
             0)
 
@@ -816,7 +816,7 @@ create' callDepth' = do
   whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ "Result: " ++ show result
   --Not sure which way this is supposed to go....  I'll keep going back and forth until I figure it out
 
-  useGas $ 5 * toInteger (B.length result)
+  useGas $ gCREATEDATA * toInteger (B.length result)
 
   lift $ lift $ lift $ addCode result
 
@@ -966,6 +966,8 @@ nestedRun_debugWrapper gas receiveAddress (Address address') sender value inputD
   case result of
         Right retVal -> do
           forM_ (reverse $ logs finalVMState) addLog
+          whenM (lift $ lift isDebugEnabled) $
+            liftIO $ putStrLn $ "Refunding: " ++ show (vmGasRemaining finalVMState)
           useGas (- vmGasRemaining finalVMState)
           addToRefund (refund finalVMState)
           return (1, Just retVal)
