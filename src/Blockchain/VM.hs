@@ -34,7 +34,6 @@ import Blockchain.Data.Block
 import Blockchain.Data.Code
 import Blockchain.Data.Log
 import Blockchain.Data.RLP
-import Blockchain.Database.MerklePatricia
 import Blockchain.DB.CodeDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
@@ -367,10 +366,10 @@ runOperation JUMP = do
 
 runOperation JUMPI = do
   p <- pop
-  cond <- pop
+  condition <- pop
   jumpDests <- getEnvVar envJumpDests
   
-  case (p `elem` jumpDests, (0::Word256) /= cond) of
+  case (p `elem` jumpDests, (0::Word256) /= condition) of
     (_, False) -> return ()
     (True, _) -> setPC $ fromIntegral p - 1
     _ -> left InvalidJump
@@ -513,7 +512,6 @@ runOperation CALLCODE = do
   outSize <- pop::VMM Word256
 
   owner <- getEnvVar envOwner
-  sender <- getEnvVar envSender
 
   inputData <- mLoadByteString inOffset inSize
 
@@ -521,7 +519,7 @@ runOperation CALLCODE = do
 
   let stipend = if value > 0 then gCALLSTIPEND  else 0
 
-  toAddressExists <- lift $ lift $ lift $ addressStateExists to
+--  toAddressExists <- lift $ lift $ lift $ addressStateExists to
 
 --  let newAccountCost = if not toAddressExists then gCALLNEWACCOUNT else 0
 
@@ -585,9 +583,6 @@ runOperation x = error $ "Missing case in runOperation: " ++ show x
 -------------------
 
 opGasPriceAndRefund::Operation->VMM (Integer, Integer)
---opGasPriceAndRefund CALL = return (20, 0)
-----opGasPriceAndRefund VMState{stack=value:_} CALLCODE = return (20+fromIntegral value, 0)
---opGasPriceAndRefund CALLCODE = return (20, 0)
 
 opGasPriceAndRefund LOG0 = do
   size <- getStackItem 1::VMM Word256
@@ -639,10 +634,10 @@ opGasPriceAndRefund CALL = do
 
 opGasPriceAndRefund CALLCODE = do
   gas <- getStackItem 0::VMM Word256
-  to <- getStackItem 1::VMM Word256
+--  to <- getStackItem 1::VMM Word256
   val <- getStackItem 2::VMM Word256
 
-  toAccountExists <- lift $ lift $ lift $ addressStateExists $ Address $ fromIntegral to
+--  toAccountExists <- lift $ lift $ lift $ addressStateExists $ Address $ fromIntegral to
 
   return $ (fromIntegral $
                 fromIntegral gas +
@@ -711,7 +706,7 @@ printDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState-
 printDebugInfo env memBefore memAfter c op stateBefore stateAfter = do
   liftIO $ putStrLn $ "EVM [ eth | " ++ show (callDepth stateBefore) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc stateBefore)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining stateBefore) ++ " | " ++ show (vmGasRemaining stateAfter - vmGasRemaining stateBefore) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
   liftIO $ putStrLn $ "EVM [ eth ] "
-  memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
+--  memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
   liftIO $ putStrLn "    STACK"
   liftIO $ putStr $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack stateAfter))
 --  liftIO $ putStr $ "    MEMORY\n" ++ showMem 0 (B.unpack $ memByteString)
@@ -757,8 +752,7 @@ runCodeFromStart callDepth' = do
 
   lift $ lift $ lift $ setStorageStateRoot $ contractRoot addressState
 
-  result <- 
-    if callDepth' > 1024
+  if callDepth' > 1024
     then left CallStackTooDeep
     else runCode 0
 
@@ -933,11 +927,7 @@ create_debugWrapper block owner value initCodeBytes = do
 nestedRun_debugWrapper::Word256->Address->Address->Address->Word256->B.ByteString->VMM (Int, Maybe B.ByteString)
 nestedRun_debugWrapper gas receiveAddress (Address address') sender value inputData = do
   
-  theAddressExists <- lift $ lift $ lift $ addressStateExists (Address address')
-
-  --when (not theAddressExists && address' > 4) $ do
-
-  --pay' "gas payment in CALL opcode run" owner (Address to) $ fromIntegral value
+--  theAddressExists <- lift $ lift $ lift $ addressStateExists (Address address')
 
   currentCallDepth <- getCallDepth
 
@@ -954,15 +944,6 @@ nestedRun_debugWrapper gas receiveAddress (Address address') sender value inputD
   addressState' <- lift $ lift $ lift $ getAddressState sender
   lift $ lift $ lift $ setStorageStateRoot $ contractRoot addressState'
 
-
-
-{-      state'' <- lift get
-      --Need to load newest stateroot in case it changed recursively within the nestedRun
-      --TODO- think this one out....  There should be a cleaner way to do this.  Also, I am not sure that I am passing in storage changes to the nested calls to begin with.
-      addressState <- lift $ lift $ lift $ getAddressState $ Address address
-      lift $ lift $ lift $ setStorageStateRoot (contractRoot addressState)
-      return (state'', returnVal state'') -}
-  
   case result of
         Right retVal -> do
           forM_ (reverse $ logs finalVMState) addLog
@@ -971,6 +952,4 @@ nestedRun_debugWrapper gas receiveAddress (Address address') sender value inputD
           useGas (- vmGasRemaining finalVMState)
           addToRefund (refund finalVMState)
           return (1, Just retVal)
-        Left _ -> do
---          liftIO $ print (e::VMException)
-          return (0, Nothing)
+        Left _ -> return (0, Nothing)
