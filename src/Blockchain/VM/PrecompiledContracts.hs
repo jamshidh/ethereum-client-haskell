@@ -63,4 +63,9 @@ callPrecompiledContract 3 inputData = do
     gRIPEMD160WORD*(ceiling $ fromIntegral (B.length inputData)/(32::Double))
   return $ ripemd inputData
 
+callPrecompiledContract 4 inputData = do
+  useGas $ gIDENTITYBASE +
+    gIDENTITYWORD*(ceiling $ fromIntegral (B.length inputData)/(32::Double))
+  return inputData
+
 callPrecompiledContract x _ = error $ "missing precompiled contract: " ++ show x
