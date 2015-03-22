@@ -125,7 +125,7 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
 
   --Create the new account
   let newAddress = getNewAddress tAddr $ tNonce ut
-  lift $ putAddressState newAddress blankAddressState
+  --lift $ putAddressState newAddress blankAddressState
   pay "transfer value1" tAddr newAddress (value ut)
 
   addressState <- lift $ getAddressState tAddr
@@ -163,17 +163,10 @@ runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
   
   addressState <- lift $ getAddressState tAddr
   
-  success <- pay "transfer value2" tAddr (to ut) (value ut)
+  --success <- pay "transfer value2" tAddr (to ut) (value ut)
 
-  if not success
-    then return VMState{vmException=Just InsufficientFunds, logs=[]}
-    else 
-    if availableGas*gasPrice ut <= balance addressState
+  if availableGas*gasPrice ut <= balance addressState
     then do
-      recipientAddressState <- lift $ getAddressState (to ut)
-      contractCode <- lift $ fromMaybe B.empty <$> getCode (codeHash recipientAddressState)
-
-      --pay "pre-VM fees2" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
       addToBalance tAddr (-availableGas*gasPrice ut)
 
       (result, newVMState') <- call b 0 (to ut) (to ut) tAddr

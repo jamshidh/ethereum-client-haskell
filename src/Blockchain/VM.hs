@@ -476,7 +476,6 @@ runOperation CALL = do
     case (fromIntegral value > balance addressState, debugCallCreates vmState) of
       (True, _) -> return (0, Nothing)
       (_, Nothing) -> do
-        pay' "nestedRun fees" owner to (fromIntegral value)
         nestedRun_debugWrapper (gas + stipend) to to owner value inputData 
       (_, Just _) -> do
         addGas $ fromIntegral stipend
@@ -530,7 +529,6 @@ runOperation CALLCODE = do
         liftIO $ putStrLn $ CL.red "Insufficient balance"
         return (0, Nothing)
       (_, Nothing) -> do
-        --pay' "nestedRun fees" owner to (fromIntegral value)
         nestedRun_debugWrapper (gas+stipend) owner to owner value inputData 
       (_, Just _) -> do
         addToBalance' owner (-fromIntegral value)
@@ -818,6 +816,8 @@ call b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' t
   result <-
     flip runStateT nestedVMState{callDepth=callDepth', vmGasRemaining=fromIntegral gas} $
     runEitherT $ do
+      pay' "call value transfer" sender receiveAddress (fromIntegral value')
+
       if codeAddress < 5
         then callPrecompiledContract codeAddress theData
         else call' callDepth'
