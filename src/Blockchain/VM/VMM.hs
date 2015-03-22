@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
+{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, OverloadedStrings #-}
 
 module Blockchain.VM.VMM where
 
@@ -11,11 +11,17 @@ import Blockchain.Context
 import Blockchain.Data.Address
 import Blockchain.Data.AddressState
 import Blockchain.Data.Log
+import qualified Blockchain.Database.MerklePatricia as MPDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.ExtWord
+import Blockchain.Data.RLP
+import Blockchain.DBM
+import Blockchain.Util
 import Blockchain.VM.Environment
 import Blockchain.VM.VMState
 import Blockchain.SHA
+import qualified Data.NibbleString as N
+
 
 type VMM = EitherT VMException (StateT VMState ContextM)
 
@@ -153,3 +159,25 @@ addToBalance' address' val = do
   if balance addressState + val >= 0
     then lift $ lift $ addToBalance address' val
     else left InsufficientFunds
+
+getStorageKeyVal::Word256->VMM Word256
+getStorageKeyVal key = do
+  owner <- getEnvVar envOwner
+  lift $ lift $ getStorageKeyVal' owner key
+
+getAllStorageKeyVals::VMM [(MPDB.Key, Word256)]
+getAllStorageKeyVals = do
+  owner <- getEnvVar envOwner
+  lift $ lift $ getAllStorageKeyVals' owner
+
+
+putStorageKeyVal::Word256->Word256->VMM ()
+putStorageKeyVal key val = do
+  owner <- getEnvVar envOwner
+  lift $ lift $ putStorageKeyVal' owner key val
+
+deleteStorageKey::Word256->VMM ()
+deleteStorageKey key = do
+  owner <- getEnvVar envOwner
+  lift $ lift $ deleteStorageKey' owner key
+

@@ -340,20 +340,15 @@ runOperation MSTORE8 = do
 
 runOperation SLOAD = do
   p <- pop
-  vals <- lift $ lift $ lift $ getStorageKeyVals (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
-  let val = case vals of
-              [] -> 0::Word256
-              [x] -> fromInteger $ rlpDecode $ rlpDeserialize $ rlpDecode $ snd x
-              _ -> error "Multiple values in storage"
-
+  val <- getStorageKeyVal p
   push val
   
 runOperation SSTORE = do
   p <- pop
-  val <- pop
+  val <- pop::VMM Word256
   if val == 0
-    then lift $ lift $ lift $ deleteStorageKey (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
-    else lift $ lift $ lift $ putStorageKeyVal p val
+    then deleteStorageKey p
+    else putStorageKeyVal p val
 
 --TODO- refactor so that I don't have to use this -1 hack
 runOperation JUMP = do
@@ -659,12 +654,7 @@ opGasPriceAndRefund EXTCODECOPY = do
 opGasPriceAndRefund SSTORE = do
   p <- getStackItem 0
   val <- getStackItem 1
-  oldVals <- lift $ lift $ lift $ getStorageKeyVals (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes p)
-  let oldVal =
-          case oldVals of
-            [] -> 0::Word256
-            [x] -> fromInteger $ rlpDecode $ snd x
-            _ -> error "multiple values in storage"
+  oldVal <- getStorageKeyVal p
   case (oldVal, val) of
       (0, x) | x /= (0::Word256) -> return (20000, 0)
       (x, 0) | x /= 0 -> return (5000, 15000)
@@ -702,7 +692,7 @@ formatAddressWithoutColor (Address x) = padZeros 40 $ showHex x ""
 showHexU::Integer->[Char]
 showHexU = map toUpper . flip showHex ""
 
-printDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState->ContextM ()
+printDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM ()
 printDebugInfo env memBefore memAfter c op stateBefore stateAfter = do
   liftIO $ putStrLn $ "EVM [ eth | " ++ show (callDepth stateBefore) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc stateBefore)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining stateBefore) ++ " | " ++ show (vmGasRemaining stateAfter - vmGasRemaining stateBefore) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
   liftIO $ putStrLn $ "EVM [ eth ] "
@@ -711,8 +701,8 @@ printDebugInfo env memBefore memAfter c op stateBefore stateAfter = do
   liftIO $ putStr $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack stateAfter))
 --  liftIO $ putStr $ "    MEMORY\n" ++ showMem 0 (B.unpack $ memByteString)
   liftIO $ putStrLn $ "    STORAGE"
-  kvs <- lift $ getStorageKeyVals ""
-  liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (rlpDecode $ rlpDeserialize $ rlpDecode v::Integer)) kvs)
+  kvs <- getAllStorageKeyVals
+  liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (fromIntegral v)) kvs)
 
 runCode::Int->VMM ()
 runCode c = do
@@ -733,7 +723,7 @@ runCode c = do
   memAfter <- getSizeInWords
 
   result <- lift get
-  whenM (lift $ lift isDebugEnabled) $ lift $ lift $ printDebugInfo (environment result) memBefore memAfter c op vmState result
+  whenM (lift $ lift isDebugEnabled) $ printDebugInfo (environment result) memBefore memAfter c op vmState result
 
   case result of
     VMState{done=True} -> incrementPC len
@@ -750,17 +740,9 @@ runCodeFromStart callDepth' = do
 
   addressState <- lift $ lift $ lift $ getAddressState (envOwner env)
 
-  lift $ lift $ lift $ setStorageStateRoot $ contractRoot addressState
-
   if callDepth' > 1024
     then left CallStackTooDeep
     else runCode 0
-
-  newStorageStateRoot <- lift $ lift $ lift getStorageStateRoot
-  ownerAddressState <- lift $ lift $ lift $ getAddressState $ envOwner env
-  lift $ lift $ lift $ putAddressState (envOwner env) ownerAddressState{contractRoot=newStorageStateRoot}
-
-  --lift $ lift $ lift $ setStorageStateRoot oldStateRoot
 
   newVMState <- lift get
 
@@ -933,16 +915,9 @@ nestedRun_debugWrapper gas receiveAddress (Address address') sender value inputD
 
   env <- lift $ fmap environment $ get
 
-  defaultContractRoot <- lift $ lift $ lift getStorageStateRoot
-  addressState <- lift $ lift $ lift $ getAddressState sender
-  lift $ lift $ lift $ putAddressState sender addressState{contractRoot=defaultContractRoot}
-
   (result, finalVMState) <- 
     lift $ lift $
       call (envBlock env) currentCallDepth receiveAddress (Address address') sender value (fromIntegral $ envGasPrice env) inputData gas (envOrigin env)
-
-  addressState' <- lift $ lift $ lift $ getAddressState sender
-  lift $ lift $ lift $ setStorageStateRoot $ contractRoot addressState'
 
   case result of
         Right retVal -> do

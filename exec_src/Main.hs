@@ -233,6 +233,6 @@ main = do
   putStrLn "Connected"
 
   runResourceT $ do
-    cxt <- openDBs "h"
-    _ <- liftIO $ runStateT (runStateT (doit handle) (Context [] 0 [] False)) cxt
-    return ()
+         cxt <- openDBs "h"
+         _ <- runStateT (runStateT (doit handle) (Context [] 0 [] False)) cxt
+         return ()

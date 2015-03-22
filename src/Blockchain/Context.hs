@@ -1,9 +1,14 @@
+{-# LANGUAGE OverloadedStrings #-}
 
 module Blockchain.Context (
   Context(..),
   ContextM,
   initContext,
-  isDebugEnabled
+  isDebugEnabled,
+  getStorageKeyVal',
+  getAllStorageKeyVals',
+  putStorageKeyVal',
+  deleteStorageKey'
   ) where
 
 
@@ -17,7 +22,14 @@ import System.FilePath
 import Blockchain.Constants
 import Blockchain.DBM
 import Blockchain.Data.Peer
+import Blockchain.Data.Address
+import Blockchain.Data.AddressState
+import Blockchain.Data.RLP
+import qualified Blockchain.Database.MerklePatricia as MPDB
+import Blockchain.ExtWord
 import Blockchain.SHA
+import Blockchain.Util
+import qualified Data.NibbleString as N
 
 --import Debug.Trace
 
@@ -45,3 +57,52 @@ initContext theType = do
       0
       []
       False
+
+getStorageKeyVal'::Address->Word256->ContextM Word256
+getStorageKeyVal' owner key = do
+  addressState <- lift $ getAddressState owner
+  dbs <- lift get
+  let mpdb = (stateDB dbs){MPDB.stateRoot=contractRoot addressState}
+  vals <- lift $ lift $ MPDB.getKeyVals mpdb (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes key)
+  case vals of
+    [] -> return 0
+    [x] -> return $ fromInteger $ rlpDecode $ rlpDeserialize $ rlpDecode $ snd x
+    _ -> error "Multiple values in storage"
+
+getAllStorageKeyVals'::Address->ContextM [(MPDB.Key, Word256)]
+getAllStorageKeyVals' owner = do
+  addressState <- lift $ getAddressState owner
+  dbs <- lift get
+  let mpdb = (stateDB dbs){MPDB.stateRoot=contractRoot addressState}
+  kvs <- lift $ lift $ MPDB.getKeyVals mpdb ""
+  return $ map (fmap $ fromInteger . rlpDecode . rlpDeserialize . rlpDecode) kvs
+
+putStorageKeyVal'::Address->Word256->Word256->ContextM ()
+putStorageKeyVal' owner key val = do
+  addressState <- lift $ getAddressState owner
+  dbs <- lift get
+  let mpdb = (stateDB dbs){MPDB.stateRoot=contractRoot addressState}
+  newContractRoot <- fmap MPDB.stateRoot $ lift $ lift $ MPDB.putKeyVal mpdb (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes key) (rlpEncode $ rlpSerialize $ rlpEncode $ toInteger val)
+  lift $ putAddressState owner addressState{contractRoot=newContractRoot}
+
+deleteStorageKey'::Address->Word256->ContextM ()
+deleteStorageKey' owner key = do
+  addressState <- lift $ getAddressState owner
+  dbs <- lift get
+  let mpdb = (stateDB dbs){MPDB.stateRoot=contractRoot addressState}
+  newContractRoot <- fmap MPDB.stateRoot $ lift $ lift $ MPDB.deleteKey mpdb (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes key)
+  lift $ putAddressState owner addressState{contractRoot=newContractRoot}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
