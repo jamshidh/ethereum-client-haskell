@@ -123,17 +123,13 @@ runCodeForTransaction::Block->Integer->Address->Transaction->ContextM VMState
 runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
   whenM isDebugEnabled $ liftIO $ putStrLn "runCodeForTransaction: ContractCreationTX"
 
-  --Create the new account
   let newAddress = getNewAddress tAddr $ tNonce ut
-  --lift $ putAddressState newAddress blankAddressState
-  pay "transfer value1" tAddr newAddress (value ut)
-
   addressState <- lift $ getAddressState tAddr
 
-  if availableGas*gasPrice ut < balance addressState
-    then do
-    pay "pre-VM fees1" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
+  success <- pay "pre-VM fees1" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
 
+  if success
+    then do
     (result, newVMState') <- create b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas newAddress (tInit ut)
 
     newVMState <-
@@ -142,16 +138,6 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
           whenM isDebugEnabled $ liftIO $ putStrLn $ CL.red $ show e
           return newVMState'{vmException = Just e}
         Right x -> return newVMState'
-      
-    newAddressState <- lift $ getAddressState newAddress
-    case returnVal newVMState of
-      Just codeBytes ->
-        lift $ putAddressState newAddress newAddressState{codeHash=hash codeBytes}
-      Nothing -> return ()
-    
------------------
-
-    
 
     return newVMState
     else do

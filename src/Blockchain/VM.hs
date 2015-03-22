@@ -763,8 +763,13 @@ create b callDepth' sender origin value' gasPrice' availableGas newAddress init'
   vmState <- liftIO $ startingState env
 
   result <-
-    flip runStateT vmState{callDepth=callDepth', vmGasRemaining=availableGas} $ runEitherT $
-    create' callDepth'
+    flip runStateT vmState{callDepth=callDepth', vmGasRemaining=availableGas} $
+    runEitherT $ do
+      --This next line will actually create the account addressState data....
+      --In the extremely unlikely even that the address already exists, it will preserve
+      --the existing balance.
+      pay' "transfer value" sender newAddress $ fromIntegral value'
+      create' callDepth'
 
   whenM isDebugEnabled $ liftIO $ putStrLn "VM has finished running"
 
@@ -779,15 +784,23 @@ create' callDepth' = do
 
   vmState <- lift get
   
-  let result = fromMaybe B.empty $ returnVal vmState
-  whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ "Result: " ++ show result
+  let codeBytes = fromMaybe B.empty $ returnVal vmState
+  whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ "Result: " ++ show codeBytes
   --Not sure which way this is supposed to go....  I'll keep going back and forth until I figure it out
 
-  useGas $ gCREATEDATA * toInteger (B.length result)
+  useGas $ gCREATEDATA * toInteger (B.length codeBytes)
 
-  lift $ lift $ lift $ addCode result
+  lift $ lift $ lift $ addCode codeBytes
 
-  return $ Code result
+  owner <- getEnvVar envOwner
+  newAddressState <- lift $ lift $ lift $ getAddressState owner
+  lift $ lift $ lift $ putAddressState owner newAddressState{codeHash=hash codeBytes}
+
+
+  return $ Code codeBytes
+
+
+
 
 --bool Executive::call(Address _receiveAddress, Address _codeAddress, Address _senderAddress, u256 _value, u256 _gasPrice, bytesConstRef _data, u256 _gas, Address _originAddress)
 
@@ -860,9 +873,6 @@ create_debugWrapper block owner value initCodeBytes = do
   if fromIntegral value > balance addressState
     then return Nothing
     else do
-      whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn "transfer value"
-      lift $ lift $ addToBalance owner (-fromIntegral value)
-
       let initCode = Code initCodeBytes
       
       origin <- getEnvVar envOrigin
@@ -872,15 +882,11 @@ create_debugWrapper block owner value initCodeBytes = do
 
       currentCallDepth <- getCallDepth
 
-      --This next line will actually create the account addressState data....
-      --In the extremely unlikely even that the address already exists, it will preserve
-      --the existing balance.
-      addToBalance' newAddress $ fromIntegral value
-      lift $ lift $ incrementNonce owner
-
       (result, finalVMState) <- 
         lift $ lift $
           create block currentCallDepth owner origin (toInteger value) gasPrice gasRemaining newAddress initCode
+
+      lift $ lift $ incrementNonce owner
 
       setGasRemaining $ vmGasRemaining finalVMState
 
@@ -892,8 +898,6 @@ create_debugWrapper block owner value initCodeBytes = do
 
           forM_ (reverse $ logs finalVMState) addLog
           forM_ (reverse $ suicideList finalVMState) addSuicideList
-          addressState' <- lift $ lift $ lift $ getAddressState newAddress
-          lift $ lift $ lift $ putAddressState newAddress addressState'{codeHash = hash codeBytes'}
 
           return $ Just newAddress
 
