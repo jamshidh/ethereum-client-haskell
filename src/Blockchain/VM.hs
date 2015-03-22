@@ -744,13 +744,6 @@ runCodeFromStart callDepth' = do
     then left CallStackTooDeep
     else runCode 0
 
-  newVMState <- lift get
-
-  whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList newVMState)
-
-  forM_ (suicideList newVMState) $ lift . lift . lift . deleteAddressState
-
-
 
 --bool Executive::create(Address _sender, u256 _endowment, u256 _gasPrice, u256 _gas, bytesConstRef _init, Address _origin)
 
@@ -897,6 +890,8 @@ create_debugWrapper block owner value initCodeBytes = do
           return Nothing
         Right (Code codeBytes') -> do
 
+          forM_ (reverse $ logs finalVMState) addLog
+          forM_ (reverse $ suicideList finalVMState) addSuicideList
           addressState' <- lift $ lift $ lift $ getAddressState newAddress
           lift $ lift $ lift $ putAddressState newAddress addressState'{codeHash = hash codeBytes'}
 
@@ -922,6 +917,7 @@ nestedRun_debugWrapper gas receiveAddress (Address address') sender value inputD
   case result of
         Right retVal -> do
           forM_ (reverse $ logs finalVMState) addLog
+          forM_ (reverse $ suicideList finalVMState) addSuicideList
           whenM (lift $ lift isDebugEnabled) $
             liftIO $ putStrLn $ "Refunding: " ++ show (vmGasRemaining finalVMState)
           useGas (- vmGasRemaining finalVMState)

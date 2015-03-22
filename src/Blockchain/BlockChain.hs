@@ -156,7 +156,7 @@ runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
     return newVMState
     else do
     liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*gasPrice ut) ++ ", have " ++ show (balance addressState)
-    return VMState{vmException=Just InsufficientFunds, vmGasRemaining=0, refund=0, debugCallCreates=Nothing, logs=[]}
+    return VMState{vmException=Just InsufficientFunds, vmGasRemaining=0, refund=0, debugCallCreates=Nothing, suicideList=[], logs=[]}
     
 runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
   whenM isDebugEnabled $ liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ to ut)
@@ -173,12 +173,21 @@ runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
       recipientAddressState <- lift $ getAddressState (to ut)
       contractCode <- lift $ fromMaybe B.empty <$> getCode (codeHash recipientAddressState)
 
-      pay "pre-VM fees2" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
+      --pay "pre-VM fees2" tAddr (coinbase $ blockData b) (availableGas*gasPrice ut)
+      addToBalance tAddr (-availableGas*gasPrice ut)
 
       (result, newVMState') <- call b 0 (to ut) (to ut) tAddr
                                (fromIntegral $ value ut) (fromIntegral $ gasPrice ut) (tData ut) (fromIntegral availableGas) tAddr
--------------------------
 
+      addToBalance (coinbase $ blockData b) (availableGas*gasPrice ut)
+
+
+      -------------------------
+
+
+      whenM isDebugEnabled $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList newVMState')
+
+      forM_ (suicideList newVMState') $ lift . deleteAddressState
 
       
       newVMState <-
@@ -235,12 +244,15 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
      valid
     then do
     incrementNonce signAddress
-    pay "intrinsic gas payment" signAddress (coinbase $ blockData b) (intrinsicGas' * gasPrice ut)
+    --pay "intrinsic gas payment" signAddress (coinbase $ blockData b) (intrinsicGas' * gasPrice ut)
+    addToBalance signAddress (-intrinsicGas' * gasPrice ut)
     whenM isDebugEnabled $ liftIO $ putStrLn "running code"
 
     let tAddr = whoSignedThisTransaction t
 
     newVMState <- runCodeForTransaction b (tGasLimit ut - intrinsicGas') tAddr ut
+
+    addToBalance (coinbase $ blockData b) (intrinsicGas' * gasPrice ut)
 
     whenM isDebugEnabled $
       liftIO $ putStrLn $ "gasRemaining: " ++ show (vmGasRemaining newVMState)
@@ -272,11 +284,12 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
       (
         VMState{
            vmException=Just InsufficientFunds,
-           logs=[],
            debugCallCreates=Nothing,
            vmGasRemaining=error "undefined vmGasRemaining",
            pc=error "undefined pc",
-           memory=error "undefined memory"
+           memory=error "undefined memory",
+           suicideList=[],
+           logs=[]
            },
         remainingBlockGas
       )
