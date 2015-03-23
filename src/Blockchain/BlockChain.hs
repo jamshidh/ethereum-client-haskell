@@ -194,22 +194,18 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
 
   whenM (lift isDebugEnabled) $ liftIO $ putStrLn "running code"
 
-  (newVMState, remainingBlockGas') <- 
-      if success
+  if success
       then do
         (result, newVMState') <- lift $ runCodeForTransaction b (tGasLimit ut - intrinsicGas') tAddr ut
-        lift $ addToBalance (coinbase $ blockData b) (intrinsicGas' * gasPrice ut)
+        lift $ addToBalance (coinbase $ blockData b) (tGasLimit ut * gasPrice ut)
 
         case result of
           Left e -> do
-            lift $ addToBalance (coinbase $ blockData b) (availableGas*gasPrice ut)
             whenM (lift isDebugEnabled) $ liftIO $ putStrLn $ CL.red $ show e
             return (newVMState'{vmException = Just e}, remainingBlockGas - tGasLimit ut)
           Right x -> do
             let realRefund =
                   min (refund newVMState') ((tGasLimit ut - vmGasRemaining newVMState') `div` 2)
-
-            lift $ addToBalance (coinbase $ blockData b) (availableGas*gasPrice ut)
 
             success <- lift $ pay "VM refund fees" (coinbase $ blockData b) tAddr ((realRefund + vmGasRemaining newVMState') * gasPrice ut)
 
@@ -226,8 +222,6 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
         liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*gasPrice ut) ++ ", have " ++ show (balance addressState)
         return (VMState{vmException=Just InsufficientFunds, vmGasRemaining=0, refund=0, debugCallCreates=Nothing, suicideList=[], logs=[], returnVal=Nothing}, remainingBlockGas)
 
-  return (newVMState, remainingBlockGas')
-    
       
 addTransactions::Block->Integer->[SignedTransaction]->ContextM ()
 addTransactions _ _ [] = return ()
