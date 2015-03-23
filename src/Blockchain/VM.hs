@@ -428,10 +428,13 @@ runOperation CREATE = do
 
   vmState <- lift get
 
+  callDepth <- getCallDepth
+
   result <-
-    case debugCallCreates vmState of
-      Nothing -> create_debugWrapper block owner value initCodeBytes
-      Just _ -> do
+    case (callDepth > 1023, debugCallCreates vmState) of
+      (True, _) -> return Nothing
+      (_, Nothing) -> create_debugWrapper block owner value initCodeBytes
+      (_, Just _) -> do
         addressState <- lift $ lift $ lift $ getAddressState owner
         let newAddress = getNewAddress owner (addressStateNonce addressState)
 
@@ -471,13 +474,18 @@ runOperation CALL = do
   let stipend = if value > 0 then gCALLSTIPEND  else 0
 
   addressState <- lift $ lift $ lift $ getAddressState owner
-  
+
+  callDepth <- getCallDepth
+
   (result, maybeBytes) <-
-    case (fromIntegral value > balance addressState, debugCallCreates vmState) of
-      (True, _) -> return (0, Nothing)
-      (_, Nothing) -> do
+    case (callDepth > 1023, fromIntegral value > balance addressState, debugCallCreates vmState) of
+      (True, _, _) -> do
+        addGas $ fromIntegral gas
+        return (0, Nothing)
+      (_, True, _) -> return (0, Nothing)
+      (_, _, Nothing) -> do
         nestedRun_debugWrapper (gas + stipend) to to owner value inputData 
-      (_, Just _) -> do
+      (_, _, Just _) -> do
         addGas $ fromIntegral stipend
         addToBalance' owner (-fromIntegral value)
         addGas $ fromIntegral gas
@@ -520,17 +528,23 @@ runOperation CALLCODE = do
 --  useGas $ fromIntegral newAccountCost
 
   addressState <- lift $ lift $ lift $ getAddressState owner
-  
+
+
+  callDepth <- getCallDepth
+
   (result, maybeBytes) <-
-    case (fromIntegral value > balance addressState, debugCallCreates vmState) of
-      (True, _) -> do
+    case (callDepth > 1023, fromIntegral value > balance addressState, debugCallCreates vmState) of
+      (True, _, _) -> do
+        addGas $ fromIntegral gas
+        return (0, Nothing)
+      (_, True, _) -> do
         addGas $ fromIntegral gas
         addGas $ fromIntegral stipend
         whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ CL.red "Insufficient balance"
         return (0, Nothing)
-      (_, Nothing) -> do
+      (_, _, Nothing) -> do
         nestedRun_debugWrapper (gas+stipend) owner to owner value inputData 
-      (_, Just _) -> do
+      (_, _, Just _) -> do
         addToBalance' owner (-fromIntegral value)
         addGas $ fromIntegral stipend
         addGas $ fromIntegral gas
@@ -616,13 +630,15 @@ opGasPriceAndRefund CALL = do
 
   toAccountExists <- lift $ lift $ lift $ addressStateExists $ Address $ fromIntegral to
 
+  callDepth <- getCallDepth
+
   return $ (fromIntegral $
-                       fromIntegral gas +
-                       fromIntegral gCALL +
-                       (if toAccountExists then 0 else gCALLNEWACCOUNT) +
+                   fromIntegral gas +
+                   fromIntegral gCALL +
+                   (if toAccountExists then 0 else gCALLNEWACCOUNT) +
 --                       (if toAccountExists || to < 5 then 0 else gCALLNEWACCOUNT) +
-                       (if val > 0 then gCALLVALUETRANSFER else 0),
-                0)
+                   (if val > 0 then gCALLVALUETRANSFER else 0),
+                   0)
 
 
 opGasPriceAndRefund CALLCODE = do
@@ -738,9 +754,10 @@ runCodeFromStart callDepth' = do
 
   addressState <- lift $ lift $ lift $ getAddressState (envOwner env)
 
-  if callDepth' > 1024
-    then left CallStackTooDeep
-    else runCode 0
+--  if callDepth' > 1024
+  --  then left CallStackTooDeep
+--    else 
+  runCode 0
 
 
 runVMM::Int->Environment->Integer->VMM a->ContextM (Either VMException a, VMState)
@@ -801,7 +818,6 @@ create' callDepth' = do
   
   let codeBytes = fromMaybe B.empty $ returnVal vmState
   whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ "Result: " ++ show codeBytes
-  --Not sure which way this is supposed to go....  I'll keep going back and forth until I figure it out
 
   useGas $ gCREATEDATA * toInteger (B.length codeBytes)
 
@@ -810,7 +826,6 @@ create' callDepth' = do
   owner <- getEnvVar envOwner
   newAddressState <- lift $ lift $ lift $ getAddressState owner
   lift $ lift $ lift $ putAddressState owner newAddressState{codeHash=hash codeBytes}
-
 
   return $ Code codeBytes
 
@@ -898,7 +913,7 @@ create_debugWrapper block owner value initCodeBytes = do
 
       (result, finalVMState) <- 
         lift $ lift $
-          create block currentCallDepth owner origin (toInteger value) gasPrice gasRemaining newAddress initCode
+          create block (currentCallDepth+1) owner origin (toInteger value) gasPrice gasRemaining newAddress initCode
 
       lift $ lift $ incrementNonce owner
 
@@ -930,7 +945,7 @@ nestedRun_debugWrapper gas receiveAddress (Address address') sender value inputD
 
   (result, finalVMState) <- 
     lift $ lift $
-      call (envBlock env) currentCallDepth receiveAddress (Address address') sender value (fromIntegral $ envGasPrice env) inputData gas (envOrigin env)
+      call (envBlock env) (currentCallDepth+1) receiveAddress (Address address') sender value (fromIntegral $ envGasPrice env) inputData gas (envOrigin env)
 
   case result of
         Right retVal -> do
