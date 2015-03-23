@@ -471,7 +471,7 @@ runOperation CALL = do
 
   vmState <- lift get
 
-  let stipend = if value > 0 then gCALLSTIPEND  else 0
+  let stipend = if value > 0 then fromIntegral gCALLSTIPEND  else 0
 
   addressState <- lift $ lift $ lift $ getAddressState owner
 
@@ -484,7 +484,7 @@ runOperation CALL = do
         return (0, Nothing)
       (_, True, _) -> return (0, Nothing)
       (_, _, Nothing) -> do
-        nestedRun_debugWrapper (gas + stipend) to to owner value inputData 
+        nestedRun_debugWrapper (fromIntegral gas + stipend) to to owner value inputData 
       (_, _, Just _) -> do
         addGas $ fromIntegral stipend
         addToBalance' owner (-fromIntegral value)
@@ -492,7 +492,7 @@ runOperation CALL = do
         addDebugCallCreate DebugCallCreate {
           ccData=inputData,
           ccDestination=Just to,
-          ccGasLimit=fromIntegral (gas + stipend),
+          ccGasLimit=fromIntegral gas + stipend,
           ccValue=fromIntegral value
           }
         return (1, Nothing)
@@ -519,7 +519,7 @@ runOperation CALLCODE = do
 
   vmState <- lift get
 
-  let stipend = if value > 0 then gCALLSTIPEND  else 0
+  let stipend = if value > 0 then fromIntegral gCALLSTIPEND  else 0
 
 --  toAddressExists <- lift $ lift $ lift $ addressStateExists to
 
@@ -543,7 +543,7 @@ runOperation CALLCODE = do
         whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ CL.red "Insufficient balance"
         return (0, Nothing)
       (_, _, Nothing) -> do
-        nestedRun_debugWrapper (gas+stipend) owner to owner value inputData 
+        nestedRun_debugWrapper (fromIntegral gas+stipend) owner to owner value inputData 
       (_, _, Just _) -> do
         addToBalance' owner (-fromIntegral value)
         addGas $ fromIntegral stipend
@@ -551,7 +551,7 @@ runOperation CALLCODE = do
         addDebugCallCreate DebugCallCreate {
           ccData=inputData,
           ccDestination=Just $  owner,
-          ccGasLimit=fromIntegral $ gas + stipend,
+          ccGasLimit=fromIntegral gas + stipend,
           ccValue=fromIntegral value
           }
         return (1, Nothing)
@@ -632,13 +632,13 @@ opGasPriceAndRefund CALL = do
 
   callDepth <- getCallDepth
 
-  return $ (fromIntegral $
-                   fromIntegral gas +
-                   fromIntegral gCALL +
-                   (if toAccountExists then 0 else gCALLNEWACCOUNT) +
+  return $ (
+    fromIntegral gas +
+    fromIntegral gCALL +
+    (if toAccountExists then 0 else fromIntegral gCALLNEWACCOUNT) +
 --                       (if toAccountExists || to < 5 then 0 else gCALLNEWACCOUNT) +
-                   (if val > 0 then gCALLVALUETRANSFER else 0),
-                   0)
+    (if val > 0 then fromIntegral gCALLVALUETRANSFER else 0),
+    0)
 
 
 opGasPriceAndRefund CALLCODE = do
@@ -729,6 +729,7 @@ runCode c = do
   --liftIO $ putStrLn $ "EVM [ 19:22" ++ show op ++ " #" ++ show c ++ " (" ++ show (vmGasRemaining state) ++ ")"
 
   (val, theRefund) <- opGasPriceAndRefund op
+
   useGas val
   addToRefund theRefund
 
@@ -834,7 +835,7 @@ create' callDepth' = do
 
 --bool Executive::call(Address _receiveAddress, Address _codeAddress, Address _senderAddress, u256 _value, u256 _gasPrice, bytesConstRef _data, u256 _gas, Address _originAddress)
 
-call::Block->Int->Address->Address->Address->Word256->Word256->B.ByteString->Word256->Address->ContextM (Either VMException B.ByteString, VMState)
+call::Block->Int->Address->Address->Address->Word256->Word256->B.ByteString->Integer->Address->ContextM (Either VMException B.ByteString, VMState)
 call b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' theData availableGas origin = do
 
   addressState <- lift $ getAddressState $ Address codeAddress
@@ -862,7 +863,7 @@ call b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' t
 
   if success
     then runVMM callDepth' env (fromIntegral availableGas) $ 
-         if codeAddress < 5
+         if codeAddress > 0 && codeAddress < 5
          then callPrecompiledContract codeAddress theData
          else call' callDepth'
     else return (Left InsufficientFunds, nestedVMState)
@@ -934,7 +935,7 @@ create_debugWrapper block owner value initCodeBytes = do
 
 
 
-nestedRun_debugWrapper::Word256->Address->Address->Address->Word256->B.ByteString->VMM (Int, Maybe B.ByteString)
+nestedRun_debugWrapper::Integer->Address->Address->Address->Word256->B.ByteString->VMM (Int, Maybe B.ByteString)
 nestedRun_debugWrapper gas receiveAddress (Address address') sender value inputData = do
   
 --  theAddressExists <- lift $ lift $ lift $ addressStateExists (Address address')
