@@ -526,7 +526,7 @@ runOperation CALLCODE = do
       (True, _) -> do
         addGas $ fromIntegral gas
         addGas $ fromIntegral stipend
-        liftIO $ putStrLn $ CL.red "Insufficient balance"
+        whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ CL.red "Insufficient balance"
         return (0, Nothing)
       (_, Nothing) -> do
         nestedRun_debugWrapper (gas+stipend) owner to owner value inputData 
@@ -758,6 +758,9 @@ runVMM callDepth' env availableGas f = do
         lift $ put cxtAfter{stateDB=stateDB cxtBefore}
       _ -> return ()
 
+
+  whenM isDebugEnabled $ liftIO $ putStrLn "VM has finished running"
+
   return result
 
 --bool Executive::create(Address _sender, u256 _endowment, u256 _gasPrice, u256 _gas, bytesConstRef _init, Address _origin)
@@ -785,24 +788,7 @@ create b callDepth' sender origin value' gasPrice' availableGas newAddress init'
   success <- pay "transfer value" sender newAddress $ fromIntegral value'
 
   if success
-    then do
-    cxtBefore <- lift get
-    result <-
-      flip runStateT vmState{callDepth=callDepth', vmGasRemaining=availableGas} $
-      runEitherT $ do
-        create' callDepth'
-
-    case result of
-      (Left _, _) -> do
-        cxtAfter <- lift get
-        lift $ put cxtAfter{stateDB=stateDB cxtBefore}
-      _ -> return ()
-
-    return result
-
-    whenM isDebugEnabled $ liftIO $ putStrLn "VM has finished running"
-
-    return result
+    then runVMM callDepth' env availableGas $ create' callDepth'
     else return (Left InsufficientFunds, vmState)
 
 
@@ -834,7 +820,7 @@ create' callDepth' = do
 --bool Executive::call(Address _receiveAddress, Address _codeAddress, Address _senderAddress, u256 _value, u256 _gasPrice, bytesConstRef _data, u256 _gas, Address _originAddress)
 
 call::Block->Int->Address->Address->Address->Word256->Word256->B.ByteString->Word256->Address->ContextM (Either VMException B.ByteString, VMState)
-call b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' theData gas origin = do
+call b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' theData availableGas origin = do
 
   addressState <- lift $ getAddressState $ Address codeAddress
   code <- lift $ Code <$> fromMaybe B.empty <$> getCode (codeHash addressState)
@@ -860,24 +846,10 @@ call b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' t
   cxtBefore <- lift get
 
   if success
-    then do
-    result <-
-      flip runStateT nestedVMState{callDepth=callDepth', vmGasRemaining=fromIntegral gas} $
-      runEitherT $ do
-
-        if codeAddress < 5
-          then callPrecompiledContract codeAddress theData
-          else call' callDepth'
-
-    case result of
-      (Left _, _) -> do
-        cxtAfter <- lift get
-        lift $ put cxtAfter{stateDB=stateDB cxtBefore}
-      _ -> return ()
-
-    whenM isDebugEnabled $ liftIO $ putStrLn "VM has finished running"
-
-    return result
+    then runVMM callDepth' env (fromIntegral availableGas) $ 
+         if codeAddress < 5
+         then callPrecompiledContract codeAddress theData
+         else call' callDepth'
     else return (Left InsufficientFunds, nestedVMState)
     
     
@@ -934,7 +906,7 @@ create_debugWrapper block owner value initCodeBytes = do
 
       case result of
         Left e -> do
-          liftIO $ putStrLn $ CL.red $ show e
+          whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ CL.red $ show e
           return Nothing
         Right (Code codeBytes') -> do
 
