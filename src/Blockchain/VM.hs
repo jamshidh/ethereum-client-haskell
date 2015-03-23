@@ -743,6 +743,23 @@ runCodeFromStart callDepth' = do
     else runCode 0
 
 
+runVMM::Int->Environment->Integer->VMM a->ContextM (Either VMException a, VMState)
+runVMM callDepth' env availableGas f = do
+  vmState <- liftIO $ startingState env
+
+  cxtBefore <- lift get
+  result <-
+      flip runStateT vmState{callDepth=callDepth', vmGasRemaining=availableGas} $
+      runEitherT f
+
+  case result of
+      (Left _, _) -> do
+        cxtAfter <- lift get
+        lift $ put cxtAfter{stateDB=stateDB cxtBefore}
+      _ -> return ()
+
+  return result
+
 --bool Executive::create(Address _sender, u256 _endowment, u256 _gasPrice, u256 _gas, bytesConstRef _init, Address _origin)
 
 create::Block->Int->Address->Address->Integer->Integer->Integer->Address->Code->ContextM (Either VMException Code, VMState)
@@ -762,19 +779,31 @@ create b callDepth' sender origin value' gasPrice' availableGas newAddress init'
 
   vmState <- liftIO $ startingState env
 
-  result <-
-    flip runStateT vmState{callDepth=callDepth', vmGasRemaining=availableGas} $
-    runEitherT $ do
-      --This next line will actually create the account addressState data....
-      --In the extremely unlikely even that the address already exists, it will preserve
-      --the existing balance.
-      pay' "transfer value" sender newAddress $ fromIntegral value'
-      create' callDepth'
+  --This next line will actually create the account addressState data....
+  --In the extremely unlikely even that the address already exists, it will preserve
+  --the existing balance.
+  success <- pay "transfer value" sender newAddress $ fromIntegral value'
 
-  whenM isDebugEnabled $ liftIO $ putStrLn "VM has finished running"
+  if success
+    then do
+    cxtBefore <- lift get
+    result <-
+      flip runStateT vmState{callDepth=callDepth', vmGasRemaining=availableGas} $
+      runEitherT $ do
+        create' callDepth'
 
-  return result
+    case result of
+      (Left _, _) -> do
+        cxtAfter <- lift get
+        lift $ put cxtAfter{stateDB=stateDB cxtBefore}
+      _ -> return ()
 
+    return result
+
+    whenM isDebugEnabled $ liftIO $ putStrLn "VM has finished running"
+
+    return result
+    else return (Left InsufficientFunds, vmState)
 
 
 create'::Int->VMM Code
@@ -826,19 +855,32 @@ call b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' t
   
   nestedVMState <- liftIO $ startingState env
 
-  result <-
-    flip runStateT nestedVMState{callDepth=callDepth', vmGasRemaining=fromIntegral gas} $
-    runEitherT $ do
-      pay' "call value transfer" sender receiveAddress (fromIntegral value')
+  success <- pay "call value transfer" sender receiveAddress (fromIntegral value')
 
-      if codeAddress < 5
-        then callPrecompiledContract codeAddress theData
-        else call' callDepth'
+  cxtBefore <- lift get
 
-  whenM isDebugEnabled $ liftIO $ putStrLn "VM has finished running"
+  if success
+    then do
+    result <-
+      flip runStateT nestedVMState{callDepth=callDepth', vmGasRemaining=fromIntegral gas} $
+      runEitherT $ do
 
-  return result
+        if codeAddress < 5
+          then callPrecompiledContract codeAddress theData
+          else call' callDepth'
 
+    case result of
+      (Left _, _) -> do
+        cxtAfter <- lift get
+        lift $ put cxtAfter{stateDB=stateDB cxtBefore}
+      _ -> return ()
+
+    whenM isDebugEnabled $ liftIO $ putStrLn "VM has finished running"
+
+    return result
+    else return (Left InsufficientFunds, nestedVMState)
+    
+    
 
 --bool Executive::call(Address _receiveAddress, Address _codeAddress, Address _senderAddress, u256 _value, u256 _gasPrice, bytesConstRef _data, u256 _gas, Address _originAddress)
 

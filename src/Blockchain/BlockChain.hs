@@ -189,7 +189,6 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
 
   lift $ incrementNonce tAddr
   
-  --lift $ pay "intrinsic gas payment" signAddress (coinbase $ blockData b) (intrinsicGas' * gasPrice ut)
   success <- lift $ addToBalance tAddr (-tGasLimit ut * gasPrice ut)
 
   whenM (lift isDebugEnabled) $ liftIO $ putStrLn "running code"
