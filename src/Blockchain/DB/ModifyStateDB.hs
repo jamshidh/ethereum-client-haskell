@@ -8,7 +8,6 @@ module Blockchain.DB.ModifyStateDB (
 
 import Control.Monad
 import Control.Monad.Trans
-import Control.Monad.IO.Class
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Blockchain.Context
@@ -17,10 +16,17 @@ import Blockchain.Data.AddressState
 
 --import Debug.Trace
 
-addToBalance::Address->Integer->ContextM ()
+addToBalance::Address->Integer->ContextM Bool
 addToBalance address val = do
   addressState <- lift $ getAddressState address
-  lift $ putAddressState address addressState{ balance = balance addressState + fromIntegral val }
+  let newVal = balance addressState + val
+  if newVal < 0
+    then return False
+    else do
+    lift $ putAddressState address addressState{balance = newVal}
+    return True
+
+
 
 incrementNonce::Address->ContextM ()
 incrementNonce address = do
@@ -43,8 +49,8 @@ pay description fromAddr toAddr val = do
   if balance fromAddressState < val
     then return False
     else do
-    addToBalance fromAddr (-val)
-    addToBalance toAddr val
+    _ <- addToBalance fromAddr (-val)
+    _ <- addToBalance toAddr val
     return True
 
 

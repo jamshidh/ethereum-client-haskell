@@ -155,9 +155,9 @@ pay' reason from to val = do
 
 addToBalance'::Address->Integer->VMM ()
 addToBalance' address' val = do
-  addressState <- lift $ lift $ lift $ getAddressState address'
-  if balance addressState + val >= 0
-    then lift $ lift $ addToBalance address' val
+  success <- lift $ lift $ addToBalance address' val
+  if success
+    then return ()
     else left InsufficientFunds
 
 getStorageKeyVal::Word256->VMM Word256
