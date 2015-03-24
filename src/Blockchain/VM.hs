@@ -214,7 +214,7 @@ runOperation BYTE = binaryAction getByte
 runOperation SHA3 = do
   p <- pop
   size <- pop
-  theData <- mLoadByteString p size
+  theData <- unsafeSliceByteString p size
   let SHA theHash = hash theData
   push $ theHash
 
@@ -421,7 +421,7 @@ runOperation CREATE = do
   owner <- getEnvVar envOwner
   block <- getEnvVar envBlock
 
-  initCodeBytes <- mLoadByteString input size
+  initCodeBytes <- unsafeSliceByteString input size
 
   vmState <- lift get
 
@@ -463,8 +463,8 @@ runOperation CALL = do
 
   owner <- getEnvVar envOwner
 
-  inputData <- mLoadByteString inOffset inSize
-  _ <- mLoadByteString outOffset outSize --needed to charge for memory
+  inputData <- unsafeSliceByteString inOffset inSize
+  _ <- unsafeSliceByteString outOffset outSize --needed to charge for memory
 
   vmState <- lift get
 
@@ -512,8 +512,8 @@ runOperation CALLCODE = do
 
   owner <- getEnvVar envOwner
 
-  inputData <- mLoadByteString inOffset inSize
-  _ <- mLoadByteString outOffset outSize --needed to charge for memory
+  inputData <- unsafeSliceByteString inOffset inSize
+  _ <- unsafeSliceByteString outOffset outSize --needed to charge for memory
 
   vmState <- lift get
 

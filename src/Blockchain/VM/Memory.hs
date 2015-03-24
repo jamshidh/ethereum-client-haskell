@@ -27,6 +27,7 @@ import Data.Word
 import Foreign
 --import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
+import qualified Blockchain.Colors as CL
 import Blockchain.ExtWord
 import Blockchain.Util
 import Blockchain.VM.OpcodePrices
@@ -96,8 +97,12 @@ setNewMaxSize newSize' = do
     if newSize > oldLength
       then do
         state' <- lift get
+        when (newSize > 100000000) $ liftIO $ putStrLn $ CL.red ("Warning, memory needs to grow to a huge value: " ++ show (fromIntegral newSize/1000000) ++ "MB")
         arr' <- liftIO $ V.grow (mVector $ memory state') $ fromIntegral $ (newSize+1000000)
-        liftIO $ forM_ [oldLength..(newSize+1000000)-1] $ \p -> V.write arr' (fromIntegral p) 0
+        when (newSize > 100000000) $ liftIO $ putStrLn $ CL.red $ "clearing out memory"
+        --liftIO $ forM_ [oldLength..(newSize+1000000)-1] $ \p -> V.write arr' (fromIntegral p) 0
+        liftIO $ V.set (V.unsafeSlice (fromIntegral oldLength) (fromIntegral newSize+1000000) arr') 0
+        when (newSize > 100000000) $ liftIO $ putStrLn $ CL.red $ "Finished growing memory"
         lift $ put $ state'{memory=(memory state'){mVector = arr'}}
       else return ()
 
@@ -136,9 +141,7 @@ mLoadByteString p size = do
 
 unsafeSliceByteString::Word256->Word256->VMM B.ByteString
 unsafeSliceByteString p size = do
-  liftIO $ putStrLn $ "Setting new max size: " ++ show size
   setNewMaxSize (fromIntegral p+fromIntegral size)
-  liftIO $ putStrLn "Finished"
   state <- lift get
   let (fptr, len) = V.unsafeToForeignPtr0 (V.slice (fromIntegral p) (fromIntegral size) $ mVector $ memory state)
   liftIO $ withForeignPtr fptr $ \ptr ->
