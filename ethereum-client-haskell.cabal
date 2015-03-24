@@ -54,6 +54,7 @@ executable ethereumH
     C-sources: fastNonceFinder/nonceFinder.c
     ghc-options: -Wall -O2
     buildable: True
+    extra-libraries: pthread
     hs-source-dirs: exec_src
 
 library
