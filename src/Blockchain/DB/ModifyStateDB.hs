@@ -2,7 +2,6 @@
 
 module Blockchain.DB.ModifyStateDB (
   addToBalance,
-  incrementNonce,
   pay
 ) where
 
@@ -25,13 +24,6 @@ addToBalance address val = do
     else do
     lift $ putAddressState address addressState{balance = newVal}
     return True
-
-
-
-incrementNonce::Address->ContextM ()
-incrementNonce address = do
-  addressState <- lift $ getAddressState address
-  lift $ putAddressState address addressState{ addressStateNonce = addressStateNonce addressState + 1 }
 
 pay::String->Address->Address->Integer->ContextM Bool
 pay description fromAddr toAddr val = do

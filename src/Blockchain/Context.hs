@@ -8,16 +8,19 @@ module Blockchain.Context (
   getStorageKeyVal',
   getAllStorageKeyVals',
   putStorageKeyVal',
-  deleteStorageKey'
+  deleteStorageKey',
+  incrementNonce,
+  getNewAddress
   ) where
 
 
+import Control.Monad.IfElse
 import Control.Monad.IO.Class
 import Control.Monad.State
 import Control.Monad.Trans.Resource
 import System.Directory
 import System.FilePath
---import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
 
 import Blockchain.Constants
 import Blockchain.DBM
@@ -93,8 +96,18 @@ deleteStorageKey' owner key = do
   newContractRoot <- fmap MPDB.stateRoot $ lift $ lift $ MPDB.deleteKey mpdb (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes key)
   lift $ putAddressState owner addressState{contractRoot=newContractRoot}
 
+incrementNonce::Address->ContextM ()
+incrementNonce address = do
+  addressState <- lift $ getAddressState address
+  lift $ putAddressState address addressState{ addressStateNonce = addressStateNonce addressState + 1 }
 
-
+getNewAddress::Address->ContextM Address
+getNewAddress address = do
+  addressState <- lift $ getAddressState address
+  whenM isDebugEnabled $ liftIO $ putStrLn $ "Creating new account: owner=" ++ show (pretty address) ++ ", nonce=" ++ show (addressStateNonce addressState)
+  let newAddress = getNewAddress_unsafe address (addressStateNonce addressState)
+  incrementNonce address
+  return newAddress
 
 
 

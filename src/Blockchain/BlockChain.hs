@@ -120,21 +120,19 @@ checkValidity b = do
 -}
 
 
-runCodeForTransaction::Block->Integer->Address->Transaction->ContextM (Either VMException B.ByteString, VMState)
-runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
+runCodeForTransaction::Block->Integer->Address->Address->Transaction->ContextM (Either VMException B.ByteString, VMState)
+runCodeForTransaction b availableGas tAddr newAddress ut@ContractCreationTX{} = do
   whenM isDebugEnabled $ liftIO $ putStrLn "runCodeForTransaction: ContractCreationTX"
-
-  let newAddress = getNewAddress tAddr $ tNonce ut
 
   (result, vmState) <-
     create b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas newAddress (tInit ut)
 
   return (const B.empty <$> result, vmState)
 
-runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
+runCodeForTransaction b availableGas tAddr owner ut@MessageTX{} = do
   whenM isDebugEnabled $ liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ to ut)
 
-  call b 0 (to ut) (to ut) tAddr
+  call b 0 owner owner tAddr
           (fromIntegral $ value ut) (fromIntegral $ gasPrice ut)
           (tData ut) (fromIntegral availableGas) tAddr
 
@@ -187,7 +185,13 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
 
   let availableGas = tGasLimit ut - intrinsicGas'    
 
-  lift $ incrementNonce tAddr
+  theAddress <-
+    case ut of
+      ContractCreationTX{} -> do
+        lift $ getNewAddress tAddr
+      MessageTX{} -> do
+        lift $ incrementNonce tAddr
+        return $ to ut
   
   success <- lift $ addToBalance tAddr (-tGasLimit ut * gasPrice ut)
 
@@ -195,9 +199,10 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
 
   if success
       then do
-        (result, newVMState') <- lift $ runCodeForTransaction b (tGasLimit ut - intrinsicGas') tAddr ut
-        lift $ addToBalance (coinbase $ blockData b) (tGasLimit ut * gasPrice ut)
+        (result, newVMState') <- lift $ runCodeForTransaction b (tGasLimit ut - intrinsicGas') tAddr theAddress ut
 
+        lift $ addToBalance (coinbase $ blockData b) (tGasLimit ut * gasPrice ut)
+        
         case result of
           Left e -> do
             whenM (lift isDebugEnabled) $ liftIO $ putStrLn $ CL.red $ show e

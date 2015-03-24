@@ -20,7 +20,6 @@ import qualified Data.ByteString.Char8 as BC
 import Data.Char
 import Data.Function
 import Data.Functor
-import Data.List
 import Data.Maybe
 import Data.Time.Clock.POSIX
 import Numeric
@@ -33,11 +32,9 @@ import Blockchain.Data.AddressState
 import Blockchain.Data.Block
 import Blockchain.Data.Code
 import Blockchain.Data.Log
-import Blockchain.Data.RLP
 import Blockchain.DB.CodeDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
-import Blockchain.ExtDBs
 import Blockchain.ExtWord
 import Blockchain.Format
 import Blockchain.SHA
@@ -428,17 +425,16 @@ runOperation CREATE = do
 
   vmState <- lift get
 
-  callDepth <- getCallDepth
+  callDepth' <- getCallDepth
 
   result <-
-    case (callDepth > 1023, debugCallCreates vmState) of
+    case (callDepth' > 1023, debugCallCreates vmState) of
       (True, _) -> return Nothing
       (_, Nothing) -> create_debugWrapper block owner value initCodeBytes
       (_, Just _) -> do
-        addressState <- lift $ lift $ lift $ getAddressState owner
-        let newAddress = getNewAddress owner (addressStateNonce addressState)
-
         addressState' <- lift $ lift $ lift $ getAddressState owner
+
+        let newAddress = getNewAddress_unsafe owner $ addressStateNonce addressState'
         
         if balance addressState' < fromIntegral value
           then return Nothing
@@ -468,6 +464,7 @@ runOperation CALL = do
   owner <- getEnvVar envOwner
 
   inputData <- mLoadByteString inOffset inSize
+  _ <- mLoadByteString outOffset outSize --needed to charge for memory
 
   vmState <- lift get
 
@@ -475,10 +472,10 @@ runOperation CALL = do
 
   addressState <- lift $ lift $ lift $ getAddressState owner
 
-  callDepth <- getCallDepth
+  callDepth' <- getCallDepth
 
   (result, maybeBytes) <-
-    case (callDepth > 1023, fromIntegral value > balance addressState, debugCallCreates vmState) of
+    case (callDepth' > 1023, fromIntegral value > balance addressState, debugCallCreates vmState) of
       (True, _, _) -> do
         addGas $ fromIntegral gas
         return (0, Nothing)
@@ -516,6 +513,7 @@ runOperation CALLCODE = do
   owner <- getEnvVar envOwner
 
   inputData <- mLoadByteString inOffset inSize
+  _ <- mLoadByteString outOffset outSize --needed to charge for memory
 
   vmState <- lift get
 
@@ -530,10 +528,10 @@ runOperation CALLCODE = do
   addressState <- lift $ lift $ lift $ getAddressState owner
 
 
-  callDepth <- getCallDepth
+  callDepth' <- getCallDepth
 
   (result, maybeBytes) <-
-    case (callDepth > 1023, fromIntegral value > balance addressState, debugCallCreates vmState) of
+    case (callDepth' > 1023, fromIntegral value > balance addressState, debugCallCreates vmState) of
       (True, _, _) -> do
         addGas $ fromIntegral gas
         return (0, Nothing)
@@ -566,7 +564,8 @@ runOperation RETURN = do
   address' <- pop
   size <- pop
   
-  retVal <- mLoadByteString address' size
+  --retVal <- mLoadByteString address' size
+  retVal <- unsafeSliceByteString address' size
   setDone True
   setReturnVal $ Just retVal
 
@@ -629,8 +628,6 @@ opGasPriceAndRefund CALL = do
   val <- getStackItem 2::VMM Word256
 
   toAccountExists <- lift $ lift $ lift $ addressStateExists $ Address $ fromIntegral to
-
-  callDepth <- getCallDepth
 
   return $ (
     fromIntegral gas +
@@ -746,18 +743,12 @@ runCode c = do
       incrementPC len
       runCode (c+1)
 
-runCodeFromStart::Int->VMM ()
-runCodeFromStart callDepth' = do
+runCodeFromStart::VMM ()
+runCodeFromStart = do
   env <- lift $ fmap environment get
 
   whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty $ envCode env)))
 
-
-  addressState <- lift $ lift $ lift $ getAddressState (envOwner env)
-
---  if callDepth' > 1024
-  --  then left CallStackTooDeep
---    else 
   runCode 0
 
 
@@ -806,29 +797,29 @@ create b callDepth' sender origin value' gasPrice' availableGas newAddress init'
   success <- pay "transfer value" sender newAddress $ fromIntegral value'
 
   if success
-    then runVMM callDepth' env availableGas $ create' callDepth'
+    then runVMM callDepth' env availableGas create'
     else return (Left InsufficientFunds, vmState)
 
 
-create'::Int->VMM Code
-create' callDepth' = do
+create'::VMM Code
+create' = do
 
-  runCodeFromStart callDepth'
+  runCodeFromStart
 
   vmState <- lift get
   
-  let codeBytes = fromMaybe B.empty $ returnVal vmState
-  whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ "Result: " ++ show codeBytes
+  let codeBytes' = fromMaybe B.empty $ returnVal vmState
+  whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ "Result: " ++ show codeBytes'
 
-  useGas $ gCREATEDATA * toInteger (B.length codeBytes)
+  useGas $ gCREATEDATA * toInteger (B.length codeBytes')
 
-  lift $ lift $ lift $ addCode codeBytes
+  lift $ lift $ lift $ addCode codeBytes'
 
   owner <- getEnvVar envOwner
   newAddressState <- lift $ lift $ lift $ getAddressState owner
-  lift $ lift $ lift $ putAddressState owner newAddressState{codeHash=hash codeBytes}
+  lift $ lift $ lift $ putAddressState owner newAddressState{codeHash=hash codeBytes'}
 
-  return $ Code codeBytes
+  return $ Code codeBytes'
 
 
 
@@ -859,32 +850,30 @@ call b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' t
 
   success <- pay "call value transfer" sender receiveAddress (fromIntegral value')
 
-  cxtBefore <- lift get
-
   if success
     then runVMM callDepth' env (fromIntegral availableGas) $ 
          if codeAddress > 0 && codeAddress < 5
          then callPrecompiledContract codeAddress theData
-         else call' callDepth'
+         else call'
     else return (Left InsufficientFunds, nestedVMState)
     
     
 
 --bool Executive::call(Address _receiveAddress, Address _codeAddress, Address _senderAddress, u256 _value, u256 _gasPrice, bytesConstRef _data, u256 _gas, Address _originAddress)
 
-call'::Int->VMM B.ByteString
+call'::VMM B.ByteString
 --call' callDepth' address codeAddress sender value' gasPrice' theData availableGas origin = do
-call' callDepth' = do
+call' = do
 
   --whenM isDebugEnabled $ liftIO $ putStrLn $ "availableGas: " ++ show availableGas
 
-  runCodeFromStart callDepth'
+  runCodeFromStart
 
   vmState <- lift get
 
   whenM (lift $ lift isDebugEnabled) $ liftIO $ do
       let result = fromMaybe B.empty $ returnVal vmState
-      putStrLn $ "Result: " ++ format result
+      --putStrLn $ "Result: " ++ format result
       putStrLn $ "Gas remaining: " ++ show (vmGasRemaining vmState) ++ ", needed: " ++ show (5*toInteger (B.length result))
       --putStrLn $ show (pretty address) ++ ": " ++ format result
 
@@ -898,11 +887,13 @@ create_debugWrapper::Block->Address->Word256->B.ByteString->VMM (Maybe Address)
 create_debugWrapper block owner value initCodeBytes = do
 
   addressState <- lift $ lift $ lift $ getAddressState owner
-  let newAddress = getNewAddress owner (addressStateNonce addressState)
 
   if fromIntegral value > balance addressState
     then return Nothing
     else do
+      newAddress <- lift $ lift $ getNewAddress owner
+
+
       let initCode = Code initCodeBytes
       
       origin <- getEnvVar envOrigin
@@ -916,15 +907,13 @@ create_debugWrapper block owner value initCodeBytes = do
         lift $ lift $
           create block (currentCallDepth+1) owner origin (toInteger value) gasPrice gasRemaining newAddress initCode
 
-      lift $ lift $ incrementNonce owner
-
       setGasRemaining $ vmGasRemaining finalVMState
 
       case result of
         Left e -> do
           whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ CL.red $ show e
           return Nothing
-        Right (Code codeBytes') -> do
+        Right _ -> do
 
           forM_ (reverse $ logs finalVMState) addLog
           forM_ (reverse $ suicideList finalVMState) addSuicideList
@@ -957,4 +946,6 @@ nestedRun_debugWrapper gas receiveAddress (Address address') sender value inputD
           useGas (- vmGasRemaining finalVMState)
           addToRefund (refund finalVMState)
           return (1, Just retVal)
-        Left _ -> return (0, Nothing)
+        Left e -> do
+          whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ CL.red $ show e
+          return (0, Nothing)

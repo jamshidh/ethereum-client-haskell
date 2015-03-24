@@ -18,7 +18,8 @@ import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Trans.Either
 import Control.Monad.Trans.State hiding (state)
-import qualified Data.Vector.Storable.Mutable as V
+import qualified Data.Vector.Unboxed.Mutable as V
+import qualified Data.Vector.Storable as V2
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import Data.Functor
@@ -135,14 +136,10 @@ mLoadByteString p size = do
   return val
 
 unsafeSliceByteString::Word256->Word256->VMM B.ByteString
-unsafeSliceByteString p size = do
-  liftIO $ putStrLn $ "Setting new max size: " ++ show size
-  setNewMaxSize (fromIntegral p+fromIntegral size)
-  liftIO $ putStrLn "Finished"
-  state <- lift get
-  let (fptr, len) = V.unsafeToForeignPtr0 (V.slice (fromIntegral p) (fromIntegral size) $ mVector $ memory state)
-  liftIO $ withForeignPtr fptr $ \ptr ->
-    B.packCStringLen (castPtr ptr, len * sizeOf (undefined :: Word8))
+unsafeSliceByteString = do
+  let (fptr, len) = V.unsafeToForeignPtr0 v
+  withForeignPtr fptr $ \ptr ->
+    BS.packCStringLen (castPtr ptr, len * sizeOf (undefined :: Int))
     
 
 mStore::Word256->Word256->VMM ()
