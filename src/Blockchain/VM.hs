@@ -28,10 +28,11 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import qualified Blockchain.Colors as CL
 import Blockchain.Context
 import Blockchain.Data.Address
-import Blockchain.Data.AddressState
-import Blockchain.Data.Block
+import Blockchain.Data.AddressStateDB
+import Blockchain.Data.BlockDB
 import Blockchain.Data.Code
 import Blockchain.Data.Log
+import Blockchain.Data.DataDefs
 import Blockchain.DB.CodeDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
@@ -226,7 +227,7 @@ runOperation BALANCE = do
   if exists
     then do
     addressState <- lift $ lift $ lift $ getAddressState address'
-    push $ balance addressState
+    push $ addressStateBalance addressState
     else do
     accountCreationHack address' --needed hack to get the tests working
     push (0::Word256)
@@ -272,7 +273,7 @@ runOperation EXTCODESIZE = do
   address' <- pop
   accountCreationHack address' --needed hack to get the tests working
   addressState <- lift $ lift $ lift $ getAddressState address'
-  code <- lift $ lift $ lift $ fromMaybe B.empty <$> getCode (codeHash addressState)
+  code <- lift $ lift $ lift $ fromMaybe B.empty <$> getCode (addressStateCodeHash addressState)
   push $ (fromIntegral (B.length code)::Word256)
 
 runOperation EXTCODECOPY = do
@@ -283,7 +284,7 @@ runOperation EXTCODECOPY = do
   size <- pop
   
   addressState <- lift $ lift $ lift $ getAddressState address'
-  code <- lift $ lift $ lift $ fromMaybe B.empty <$> getCode (codeHash addressState)
+  code <- lift $ lift $ lift $ fromMaybe B.empty <$> getCode (addressStateCodeHash addressState)
   mStoreByteString memOffset (safeTake size $ safeDrop codeOffset $ code)
   push $ (fromIntegral (B.length code)::Word256)
 
@@ -293,22 +294,22 @@ runOperation BLOCKHASH = do
   
   let SHA h = hash $ BC.pack $ show $ toInteger number'
 
-  let blockNumber = number (blockData block)
+  let blockNumber = blockDataNumber (blockBlockData block)
       
   if toInteger number' >= blockNumber || toInteger number' < blockNumber - 256
     then push (0::Word256)
     else push h
 
-runOperation COINBASE = pushEnvVar (coinbase . blockData . envBlock)
+runOperation COINBASE = pushEnvVar (blockDataCoinbase . blockBlockData . envBlock)
 runOperation TIMESTAMP = do
   VMState{environment=env} <- lift get
-  push $ ((round . utcTimeToPOSIXSeconds . timestamp . blockData . envBlock) env::Word256)
+  push $ ((round . utcTimeToPOSIXSeconds . blockDataTimestamp . blockBlockData . envBlock) env::Word256)
 
 
   
-runOperation NUMBER = pushEnvVar (number . blockData . envBlock)
-runOperation DIFFICULTY = pushEnvVar (difficulty . blockData . envBlock)
-runOperation GASLIMIT = pushEnvVar (gasLimit . blockData . envBlock)
+runOperation NUMBER = pushEnvVar (blockDataNumber . blockBlockData . envBlock)
+runOperation DIFFICULTY = pushEnvVar (blockDataDifficulty . blockBlockData . envBlock)
+runOperation GASLIMIT = pushEnvVar (blockDataGasLimit . blockBlockData . envBlock)
 
 runOperation POP = do
   _ <- pop::VMM Word256
@@ -436,7 +437,7 @@ runOperation CREATE = do
 
         let newAddress = getNewAddress_unsafe owner $ addressStateNonce addressState'
         
-        if balance addressState' < fromIntegral value
+        if addressStateBalance addressState' < fromIntegral value
           then return Nothing
           else do
           addToBalance' owner (-fromIntegral value)
@@ -475,7 +476,7 @@ runOperation CALL = do
   callDepth' <- getCallDepth
 
   (result, maybeBytes) <-
-    case (callDepth' > 1023, fromIntegral value > balance addressState, debugCallCreates vmState) of
+    case (callDepth' > 1023, fromIntegral value > addressStateBalance addressState, debugCallCreates vmState) of
       (True, _, _) -> do
         addGas $ fromIntegral gas
         return (0, Nothing)
@@ -531,7 +532,7 @@ runOperation CALLCODE = do
   callDepth' <- getCallDepth
 
   (result, maybeBytes) <-
-    case (callDepth' > 1023, fromIntegral value > balance addressState, debugCallCreates vmState) of
+    case (callDepth' > 1023, fromIntegral value > addressStateBalance addressState, debugCallCreates vmState) of
       (True, _, _) -> do
         addGas $ fromIntegral gas
         return (0, Nothing)
@@ -574,7 +575,7 @@ runOperation SUICIDE = do
   owner <- getEnvVar envOwner
   addressState <- lift $ lift $ lift $ getAddressState $ owner
 
-  let allFunds = balance addressState
+  let allFunds = addressStateBalance addressState
   pay' "transferring all funds upon suicide" owner address' allFunds
   addSuicideList owner
   setDone True
@@ -817,7 +818,7 @@ create' = do
 
   owner <- getEnvVar envOwner
   newAddressState <- lift $ lift $ lift $ getAddressState owner
-  lift $ lift $ lift $ putAddressState owner newAddressState{codeHash=hash codeBytes'}
+  lift $ lift $ lift $ putAddressState owner newAddressState{addressStateCodeHash=hash codeBytes'}
 
   return $ Code codeBytes'
 
@@ -830,7 +831,7 @@ call::Block->Int->Address->Address->Address->Word256->Word256->B.ByteString->Int
 call b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' theData availableGas origin = do
 
   addressState <- lift $ getAddressState $ Address codeAddress
-  code <- lift $ Code <$> fromMaybe B.empty <$> getCode (codeHash addressState)
+  code <- lift $ Code <$> fromMaybe B.empty <$> getCode (addressStateCodeHash addressState)
 
   let env =
         Environment{
@@ -888,7 +889,7 @@ create_debugWrapper block owner value initCodeBytes = do
 
   addressState <- lift $ lift $ lift $ getAddressState owner
 
-  if fromIntegral value > balance addressState
+  if fromIntegral value > addressStateBalance addressState
     then return Nothing
     else do
       newAddress <- lift $ lift $ getNewAddress owner

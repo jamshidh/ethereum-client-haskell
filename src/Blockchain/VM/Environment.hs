@@ -4,7 +4,7 @@ module Blockchain.VM.Environment where
 import qualified Data.ByteString as B
 
 import Blockchain.Data.Address
-import Blockchain.Data.Block
+import Blockchain.Data.DataDefs
 import Blockchain.Data.Code
 import Blockchain.ExtWord
 

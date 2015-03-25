@@ -27,7 +27,8 @@ import Blockchain.Communication
 import Blockchain.Constants
 import Blockchain.Context
 import Blockchain.Data.Address
-import Blockchain.Data.Block
+import Blockchain.Data.BlockDB
+import Blockchain.Data.DataDefs
 --import Blockchain.Data.SignedTransaction
 --import Blockchain.Data.Transaction
 import Blockchain.Data.Wire
@@ -55,36 +56,36 @@ Just prvKey = makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061
 getNextBlock::Block->UTCTime->ContextM Block
 getNextBlock b ts = do
   let theCoinbase = prvKey2Address prvKey
-  lift $ setStateRoot $ bStateRoot bd
+  lift $ setStateRoot $ blockDataStateRoot bd
   addToBalance theCoinbase (1500*finney)
 
   dbs <- lift get
 
   return Block{
-               blockData=testGetNextBlockData $ stateRoot $ stateDB dbs,
-               receiptTransactions=[],
-               blockUncles=[]
+               blockBlockData=testGetNextBlockData $ stateRoot $ stateDB dbs,
+               blockReceiptTransactions=[],
+               blockBlockUncles=[]
              }
   where
     testGetNextBlockData::SHAPtr->BlockData
     testGetNextBlockData sr =
       BlockData {
-        parentHash=blockHash b,
-        unclesHash=hash $ B.pack [0xc0],
-        coinbase=prvKey2Address prvKey,
-        bStateRoot = sr,
-        transactionsRoot = emptyTriePtr,
-        receiptsRoot = emptyTriePtr,
-        logBloom = B.pack [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],         
-        difficulty = nextDifficulty (difficulty bd) (timestamp bd) ts,
-        number = number bd + 1,
-        gasLimit = max 125000 ((gasLimit bd * 1023 + gasUsed bd *6 `quot` 5) `quot` 1024),
-        gasUsed = 0,
-        timestamp = ts,  
-        extraData = 0,
-        nonce = SHA 5
+        blockDataParentHash=blockHash b,
+        blockDataUnclesHash=hash $ B.pack [0xc0],
+        blockDataCoinbase=prvKey2Address prvKey,
+        blockDataStateRoot = sr,
+        blockDataTransactionsRoot = emptyTriePtr,
+        blockDataReceiptsRoot = emptyTriePtr,
+        blockDataLogBloom = B.pack [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],         
+        blockDataDifficulty = nextDifficulty (blockDataDifficulty bd) (blockDataTimestamp bd) ts,
+        blockDataNumber = blockDataNumber bd + 1,
+        blockDataGasLimit = max 125000 ((blockDataGasLimit bd * 1023 + blockDataGasUsed bd *6 `quot` 5) `quot` 1024),
+        blockDataGasUsed = 0,
+        blockDataTimestamp = ts,  
+        blockDataExtraData = 0,
+        blockDataNonce = SHA 5
         }
-    bd = blockData b
+    bd = blockBlockData b
 
 
 submitNextBlock::Handle->Integer->Block->ContextM ()
@@ -95,7 +96,7 @@ submitNextBlock handle baseDifficulty b = do
 
         --let theBytes = headerHashWithoutNonce newBlock `B.append` B.pack (integer2Bytes n)
         let theNewBlock = addNonceToBlock newBlock n
-        sendMessage handle $ NewBlockPacket theNewBlock (baseDifficulty + difficulty (blockData theNewBlock))
+        sendMessage handle $ NewBlockPacket theNewBlock (baseDifficulty + blockDataDifficulty (blockBlockData theNewBlock))
         addBlocks [theNewBlock]
 
 ifBlockInDBSubmitNextBlock::Handle->Integer->Block->ContextM ()
@@ -191,7 +192,7 @@ doit::Handle->ContextM ()
 doit handle = do
   lift $ addCode B.empty --This is probably a bad place to do this, but I can't think of a more natural place to do it....  Empty code is used all over the place, and it needs to be in the database.
   sendMessage handle =<< (liftIO mkHello)
-  lift . setStateRoot . bStateRoot . blockData =<< getBestBlock
+  lift . setStateRoot . blockDataStateRoot . blockBlockData =<< getBestBlock
 
   --signedTx <- createTransaction simpleTX
   --signedTx <- createTransaction outOfGasTX

@@ -9,7 +9,7 @@ import qualified Data.ByteString as B
 
 import Blockchain.Context
 import Blockchain.Data.Address
-import Blockchain.Data.AddressState
+import Blockchain.Data.AddressStateDB
 import Blockchain.Data.Log
 import qualified Blockchain.Database.MerklePatricia as MPDB
 import Blockchain.DB.ModifyStateDB

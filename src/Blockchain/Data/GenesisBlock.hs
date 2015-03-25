@@ -17,10 +17,11 @@ import Data.Time.Clock.POSIX
 import Blockchain.Database.MerklePatricia
 
 import Blockchain.Constants
-import Blockchain.Data.Block
+import Blockchain.Data.BlockDB
 import Blockchain.Context
 import Blockchain.Data.Address
-import Blockchain.Data.AddressState
+import Blockchain.Data.AddressStateDB
+import Blockchain.Data.DataDefs
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
 import Blockchain.SHA
@@ -60,32 +61,32 @@ initializeStateDB = do
         ]
 
   forM_ addressInfo $ \(address, balance) -> 
-    lift $ putAddressState (Address address) blankAddressState{balance=balance}
+    lift $ putAddressState (Address address) blankAddressState{addressStateBalance=balance}
 
 initializeGenesisBlock::ContextM Block
 initializeGenesisBlock = do
   initializeStateDB
   dbs <- lift get
   let genesisBlock = Block {
-               blockData = 
+               blockBlockData = 
                    BlockData {
-                       parentHash = SHA 0,
-                       unclesHash = hash (B.pack [0xc0]), 
-                       coinbase = Address 0,
-                       bStateRoot = stateRoot $ stateDB dbs,
-                       transactionsRoot = emptyTriePtr,
-                       receiptsRoot = emptyTriePtr,
-                       logBloom = B.pack [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],         
-                       difficulty = 0x020000, --1 << 17
-                       number = 0,
-                       gasLimit = 1000000,
-                       gasUsed = 0,
-                       timestamp = posixSecondsToUTCTime 0,
-                       extraData = 0,
-                       nonce = hash $ B.pack [42]
+                       blockDataParentHash = SHA 0,
+                       blockDataUnclesHash = hash (B.pack [0xc0]), 
+                       blockDataCoinbase = Address 0,
+                       blockDataStateRoot = stateRoot $ stateDB dbs,
+                       blockDataTransactionsRoot = emptyTriePtr,
+                       blockDataReceiptsRoot = emptyTriePtr,
+                       blockDataLogBloom = B.pack [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],         
+                       blockDataDifficulty = 0x020000, --1 << 17
+                       blockDataNumber = 0,
+                       blockDataGasLimit = 1000000,
+                       blockDataGasUsed = 0,
+                       blockDataTimestamp = posixSecondsToUTCTime 0,
+                       blockDataExtraData = 0,
+                       blockDataNonce = hash $ B.pack [42]
                },
-               receiptTransactions=[],
-               blockUncles=[]
+               blockReceiptTransactions=[],
+               blockBlockUncles=[]
              }
   lift $ putBlock genesisBlock
   return genesisBlock
