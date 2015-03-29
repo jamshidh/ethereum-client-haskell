@@ -9,6 +9,7 @@ import Blockchain.Data.Address
 import Blockchain.Data.Code
 import Blockchain.Data.Transaction
 import Blockchain.Constants
+import Blockchain.ExtWord
 import Blockchain.JCommand
 import Blockchain.Util
 import Blockchain.VM.Code
