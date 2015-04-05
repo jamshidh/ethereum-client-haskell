@@ -8,6 +8,7 @@ module Blockchain.Data.Wire (
 
 import Data.Functor
 import Data.List
+import Data.Word
 import Network.Haskoin.Crypto
 import Numeric
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
@@ -161,17 +162,17 @@ instance Format Message where
   format (WhisperProtocolVersion ver) = CL.blue "WhisperProtocolVersion " ++ show ver
 
 
-obj2WireMessage::RLPObject->Message
-obj2WireMessage (RLPArray [RLPString "", ver, cId, RLPArray cap, p, nId]) =
+obj2WireMessage::Word8->RLPObject->Message
+obj2WireMessage 0x0 (RLPArray [ver, cId, RLPArray cap, p, nId]) =
   Hello (fromInteger $ rlpDecode ver) (rlpDecode cId) (rlpDecode <$> cap) (fromInteger $ rlpDecode p) $ rlp2Word512 nId
-obj2WireMessage (RLPArray [RLPScalar 0x01, reason]) =
+obj2WireMessage 0x1 (RLPArray [RLPScalar 0x01, reason]) =
   Disconnect (numberToTerminationReason $ rlpDecode reason)
-obj2WireMessage (RLPArray [RLPScalar 0x02]) = Ping
-obj2WireMessage (RLPArray [RLPScalar 0x02, RLPArray []]) = Ping
-obj2WireMessage (RLPArray [RLPScalar 0x03]) = Pong
-obj2WireMessage (RLPArray [RLPScalar 0x04]) = GetPeers
-obj2WireMessage (RLPArray (RLPScalar 0x05:peers)) = Peers $ rlpDecode <$> peers
-obj2WireMessage (RLPArray [RLPScalar 0x10, ver, nID, d, lh, gh]) = 
+obj2WireMessage 0x2 (RLPArray [RLPScalar 0x02]) = Ping
+obj2WireMessage 0x2 (RLPArray [RLPScalar 0x02, RLPArray []]) = Ping
+obj2WireMessage 0x3 (RLPArray [RLPScalar 0x03]) = Pong
+obj2WireMessage 0x4 (RLPArray [RLPScalar 0x04]) = GetPeers
+obj2WireMessage 0x5 (RLPArray (RLPScalar 0x05:peers)) = Peers $ rlpDecode <$> peers
+obj2WireMessage 0x10 (RLPArray [RLPScalar 0x10, ver, nID, d, lh, gh]) = 
     Status {
   protocolVersion=fromInteger $ rlpDecode ver,
   networkID = rlpDecode nID,
@@ -179,88 +180,81 @@ obj2WireMessage (RLPArray [RLPScalar 0x10, ver, nID, d, lh, gh]) =
   latestHash=rlpDecode lh,
   genesisHash=rlpDecode gh
 }
-obj2WireMessage (RLPArray [RLPScalar 0x10, ver]) = 
+obj2WireMessage 0x10 (RLPArray [RLPScalar 0x10, ver]) = 
     QqqqStatus $ fromInteger $ rlpDecode ver
 
-obj2WireMessage (RLPArray [RLPScalar 0x11]) = GetTransactions
-obj2WireMessage (RLPArray (RLPScalar 0x12:transactions)) =
+obj2WireMessage 0x11 (RLPArray [RLPScalar 0x11]) = GetTransactions
+obj2WireMessage 0x12 (RLPArray (RLPScalar 0x12:transactions)) =
   Transactions $ rlpDecode <$> transactions
 
 
-obj2WireMessage (RLPArray (RLPScalar 0x13:items)) =
+obj2WireMessage 0x13 (RLPArray (RLPScalar 0x13:items)) =
   GetBlockHashes (rlpDecode <$> init items) $ rlpDecode $ last items
-obj2WireMessage (RLPArray (RLPScalar 0x14:items)) =
+obj2WireMessage 0x14 (RLPArray (RLPScalar 0x14:items)) =
   BlockHashes $ rlpDecode <$> items
 
 
-obj2WireMessage (RLPArray (RLPScalar 0x15:items)) =
+obj2WireMessage 0x15 (RLPArray (RLPScalar 0x15:items)) =
   GetBlocks $ rlpDecode <$> items
-obj2WireMessage (RLPArray (RLPScalar 0x16:blocks)) =
+obj2WireMessage 0x16 (RLPArray (RLPScalar 0x16:blocks)) =
   Blocks $ rlpDecode <$> blocks
-obj2WireMessage (RLPArray [RLPScalar 0x17, block, td]) =
+obj2WireMessage 0x17 (RLPArray [RLPScalar 0x17, block, td]) =
   NewBlockPacket (rlpDecode block) (rlpDecode td)
-obj2WireMessage (RLPArray [RLPScalar 0x18, c]) =
+obj2WireMessage 0x18 (RLPArray [RLPScalar 0x18, c]) =
   PacketCount $ rlpDecode c
-obj2WireMessage (RLPArray [RLPScalar 0x19]) =
+obj2WireMessage 0x19 (RLPArray [RLPScalar 0x19]) =
   QqqqPacket
 
-obj2WireMessage (RLPArray [RLPScalar 0x20, ver]) =
+obj2WireMessage 0x20 (RLPArray [RLPScalar 0x20, ver]) =
   WhisperProtocolVersion $ fromInteger $ rlpDecode ver
 
-obj2WireMessage x = error ("Missing case in obj2WireMessage: " ++ show (pretty x))
+obj2WireMessage x y = error ("Missing case in obj2WireMessage: " ++ show x ++ ", " ++ show (pretty y))
 
 
 
 
 
 
-wireMessage2Obj::Message->RLPObject
+wireMessage2Obj::Message->(Word8, RLPObject)
 wireMessage2Obj Hello { version = ver,
                         clientId = cId,
                         capability = cap,
                         port = p,
                         nodeId = nId } =
-  RLPArray [
-    RLPString [],
-    rlpEncode $ toInteger ver,
-    rlpEncode cId,
-    RLPArray $ rlpEncode <$> cap,
-    rlpEncode $ toInteger p,
-    word5122RLP nId
-    ]
-wireMessage2Obj (Disconnect reason) =
-  RLPArray [RLPScalar 0x1, rlpEncode $ terminationReasonToNumber reason]
-wireMessage2Obj Ping = RLPArray [RLPScalar 0x2]
-wireMessage2Obj Pong = RLPArray [RLPScalar 0x3]
-wireMessage2Obj GetPeers = RLPArray [RLPScalar 0x4]
-wireMessage2Obj (Peers peers) = RLPArray $ RLPScalar 0x5:(rlpEncode <$> peers)
-
+  (0x0, RLPArray [
+           rlpEncode $ toInteger ver,
+           rlpEncode cId,
+           RLPArray $ rlpEncode <$> cap,
+           rlpEncode $ toInteger p,
+           word5122RLP nId
+          ])
+wireMessage2Obj (Disconnect reason) = (0x0, RLPArray [rlpEncode $ terminationReasonToNumber reason])
+wireMessage2Obj Ping = (0x2, RLPArray [])
+wireMessage2Obj Pong = (0x3, RLPArray [])
+wireMessage2Obj GetPeers = (0x4, RLPArray [])
+wireMessage2Obj (Peers peers) = (0x5, RLPArray $ (rlpEncode <$> peers))
 wireMessage2Obj (Status ver nID d lh gh) =
-    RLPArray [RLPScalar 0x10, rlpEncode $ toInteger ver, rlpEncode nID, rlpEncode $ toInteger d, rlpEncode lh, rlpEncode gh]
-wireMessage2Obj (QqqqStatus ver) =
-    RLPArray [RLPScalar 0x10, rlpEncode $ toInteger ver]
-wireMessage2Obj GetTransactions = RLPArray [RLPScalar 0x11]
-wireMessage2Obj (Transactions transactions) =
-  RLPArray (RLPScalar 0x12:(rlpEncode <$> transactions))
+    (0x10, RLPArray [rlpEncode $ toInteger ver, rlpEncode nID, rlpEncode $ toInteger d, rlpEncode lh, rlpEncode gh])
+wireMessage2Obj (QqqqStatus ver) = (0x10, RLPArray [rlpEncode $ toInteger ver])
+wireMessage2Obj GetTransactions = (0x11, RLPArray [])
+wireMessage2Obj (Transactions transactions) = (0x12, RLPArray (rlpEncode <$> transactions))
 wireMessage2Obj (GetBlockHashes pSHAs numChildren) = 
-  RLPArray $ [RLPScalar 0x13] ++
-  (rlpEncode <$> pSHAs) ++
-  [rlpEncode numChildren]
+    (0x13, RLPArray $ (rlpEncode <$> pSHAs) ++ [rlpEncode numChildren])
 wireMessage2Obj (BlockHashes shas) = 
-  RLPArray $ RLPScalar 0x14:(rlpEncode <$> shas)
+  (0x14, RLPArray (rlpEncode <$> shas))
 wireMessage2Obj (GetBlocks shas) = 
-  RLPArray $ RLPScalar 0x15:(rlpEncode <$> shas)
+  (0x15, RLPArray (rlpEncode <$> shas))
 wireMessage2Obj (Blocks blocks) =
-  RLPArray (RLPScalar 0x16:(rlpEncode <$> blocks))
+  (0x16, RLPArray (rlpEncode <$> blocks))
 wireMessage2Obj (NewBlockPacket block d) =
-  RLPArray [RLPScalar 0x17, rlpEncode block, rlpEncode d]
+  (0x17, RLPArray [rlpEncode block, rlpEncode d])
 wireMessage2Obj (PacketCount c) =
-  RLPArray [RLPScalar 0x18, rlpEncode c]
+  (0x18, RLPArray [rlpEncode c])
 wireMessage2Obj QqqqPacket =
-  RLPArray [RLPScalar 0x19]
+  (0x19, RLPArray [])
 
 wireMessage2Obj (WhisperProtocolVersion ver) = 
-  RLPArray [RLPScalar 0x20, rlpEncode $ toInteger ver]
+  (0x20, RLPArray [rlpEncode $ toInteger ver])
 
 
 

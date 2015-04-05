@@ -112,8 +112,8 @@ handlePayload::Handle->B.ByteString->ContextM ()
 handlePayload handle payload = do
   --liftIO $ print $ payload
   --liftIO $ putStrLn $ show $ pretty $ rlpDeserialize payload
-  let rlpObject = rlpDeserialize payload
-  let msg = obj2WireMessage rlpObject
+  let rlpObject = rlpDeserialize $ B.tail payload
+  let msg = obj2WireMessage (B.head payload) rlpObject
   displayMessage False msg
   case msg of
     Hello{} -> do

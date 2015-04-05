@@ -31,4 +31,5 @@ sendCommand handle payload = do
 sendMessage::Handle->Message->ContextM ()
 sendMessage handle msg = do
   displayMessage True msg
-  liftIO $ sendCommand handle $ rlpSerialize $ wireMessage2Obj msg
+  let (pType, pData) = wireMessage2Obj msg
+  liftIO $ sendCommand handle $ B.cons pType $ rlpSerialize pData
