@@ -7,19 +7,18 @@ module Main (
 import Control.Monad.IO.Class
 import Control.Monad.State
 import Control.Monad.Trans.Resource
-import Data.Bits
+import Crypto.PubKey.ECC.DH
+import Crypto.Types.PubKey.ECC
+import Crypto.Random
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as BL
 import Data.Time.Clock
-import Data.Word
-import Network
 import Network.Haskoin.Crypto hiding (Address)
 import System.Entropy
 import System.Environment
-import System.IO
 
-
-import Blockchain.Data.RLP
+import Blockchain.Frame
+import Blockchain.UDP
+import Blockchain.RLPx
 
 import Blockchain.BlockChain
 import Blockchain.BlockSynchronizer
@@ -44,28 +43,6 @@ import Blockchain.SHA
 import Blockchain.Util
 
 --import Debug.Trace
-
-
-import Crypto.PubKey.ECC.DH
-import Crypto.Types.PubKey.ECC
-import Crypto.Random
-import Data.Maybe
---import qualified Network.Haskoin.Internals as H
-
-import Blockchain.Format
-
-import Blockchain.Frame
-import Blockchain.UDP
-import Blockchain.RLPx
-
-
-
-
-
-
-
-
-
 
 prvKey::PrvKey
 Just prvKey = makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
@@ -164,14 +141,6 @@ handleMsg m = do
       return ()
       
     _-> return ()
-
-getPayloads::[Word8]->[[Word8]]
-getPayloads [] = []
-getPayloads (0x22:0x40:0x08:0x91:s1:s2:s3:s4:remainder) =
-  take payloadLength remainder:getPayloads (drop payloadLength remainder)
-  where
-    payloadLength = shift (fromIntegral s1) 24 + shift (fromIntegral s2) 16 + shift (fromIntegral s3) 8 + fromIntegral s4
-getPayloads _ = error "Malformed data sent to getPayloads"
 
 readAndOutput::EthCryptM ContextM ()
 readAndOutput = do
