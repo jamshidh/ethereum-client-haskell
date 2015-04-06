@@ -30,11 +30,15 @@ executable ethereumH
                  , bytestring
                  , containers
                  , cryptohash
+                 , crypto-pubkey
+                 , crypto-pubkey-types
+                 , crypto-random
                  , data-default
                  , directory
                  , either
                  , entropy
                  , ethereum-data-leveldb
+                 , ethereum-encryption
                  , ethereum-merkle-patricia-db
                  , ethereum-rlp
                  , filepath
@@ -70,6 +74,7 @@ library
                  , either
                  , entropy
                  , ethereum-data-leveldb
+                 , ethereum-encryption
                  , ethereum-merkle-patricia-db
                  , ethereum-rlp
                  , filepath
@@ -96,7 +101,6 @@ library
                    Blockchain.Data.Wire
                    Blockchain.DB.ModifyStateDB
                    Blockchain.Display
-                   Blockchain.ExtendedECDSA
                    Blockchain.JCommand
                    Blockchain.PeerUrls
                    Blockchain.SampleTransactions

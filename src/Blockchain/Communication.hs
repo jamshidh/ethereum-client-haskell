@@ -1,9 +1,11 @@
 
 module Blockchain.Communication (
-  sendMessage
+  recvMsg,
+  sendMsg
   ) where
 
 import Control.Monad.IO.Class
+import Control.Monad.Trans
 import Data.Binary.Put
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
@@ -14,6 +16,8 @@ import Blockchain.Data.RLP
 import Blockchain.Context
 import Blockchain.Display
 import Blockchain.Data.Wire
+import Blockchain.Frame
+import Blockchain.RLPx
 
 ethereumHeader::B.ByteString->Put
 ethereumHeader payload = do
@@ -30,6 +34,21 @@ sendCommand handle payload = do
 
 sendMessage::Handle->Message->ContextM ()
 sendMessage handle msg = do
-  displayMessage True msg
   let (pType, pData) = wireMessage2Obj msg
   liftIO $ sendCommand handle $ B.cons pType $ rlpSerialize pData
+
+sendMsg::Message->EthCryptM ContextM ()
+sendMsg msg = do
+  lift $ displayMessage True msg
+  let (pType, pData) = wireMessage2Obj msg
+  encryptAndPutFrame $
+    B.cons pType $ rlpSerialize pData
+
+recvMsg::EthCryptM ContextM Message
+recvMsg = do
+  frameData <- getAndDecryptFrame
+
+  let packetType = fromInteger $ rlpDecode $ rlpDeserialize $ B.take 1 frameData
+      packetData = rlpDeserialize $ B.drop 1 frameData
+
+  return $ obj2WireMessage packetType packetData

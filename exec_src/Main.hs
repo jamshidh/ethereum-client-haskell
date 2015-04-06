@@ -46,6 +46,52 @@ import Blockchain.Util
 --import Debug.Trace
 
 
+
+
+
+
+
+
+
+
+
+
+
+import Control.Monad.IO.Class
+import Crypto.PubKey.ECC.DH
+import Crypto.Types.PubKey.ECC
+import Crypto.Random
+import qualified Data.ByteString as B
+--import qualified Data.ByteString.Base16 as B16
+--import qualified Data.ByteString.Char8 as BC
+import Data.Maybe
+import qualified Network.Haskoin.Internals as H
+--import Numeric
+
+import Blockchain.Format
+import Blockchain.Data.RLP
+import Blockchain.Data.Wire
+import Blockchain.SHA (SHA(..))
+
+import Blockchain.Frame
+import Blockchain.UDP
+import Blockchain.RLPx
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 prvKey::PrvKey
 Just prvKey = makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
 --Just prvKey = makePrvKey 0xd69bceff85f3bc2d0a13bcc43b7caf6bd54a21ad0c1997ae623739216710ca19 --cpp client prvKey
@@ -88,59 +134,61 @@ getNextBlock b ts = do
     bd = blockBlockData b
 
 
-submitNextBlock::Handle->Integer->Block->ContextM ()
-submitNextBlock handle baseDifficulty b = do
+submitNextBlock::Integer->Block->EthCryptM ContextM ()
+submitNextBlock baseDifficulty b = do
         ts <- liftIO getCurrentTime
-        newBlock <- getNextBlock b ts
+        newBlock <- lift $ getNextBlock b ts
         n <- liftIO $ fastFindNonce newBlock
 
         --let theBytes = headerHashWithoutNonce newBlock `B.append` B.pack (integer2Bytes n)
         let theNewBlock = addNonceToBlock newBlock n
-        sendMessage handle $ NewBlockPacket theNewBlock (baseDifficulty + blockDataDifficulty (blockBlockData theNewBlock))
-        addBlocks [theNewBlock]
+        sendMsg $ NewBlockPacket theNewBlock (baseDifficulty + blockDataDifficulty (blockBlockData theNewBlock))
+        lift $ addBlocks [theNewBlock]
 
-ifBlockInDBSubmitNextBlock::Handle->Integer->Block->ContextM ()
-ifBlockInDBSubmitNextBlock handle baseDifficulty b = do
-  maybeBlock <- lift $ getBlock (blockHash b)
+ifBlockInDBSubmitNextBlock::Integer->Block->EthCryptM ContextM ()
+ifBlockInDBSubmitNextBlock baseDifficulty b = do
+  maybeBlock <- lift $ lift $ getBlock (blockHash b)
   case maybeBlock of
     Nothing -> return ()
-    _ -> submitNextBlock handle baseDifficulty b
+    _ -> submitNextBlock baseDifficulty b
 
 
 
-handlePayload::Handle->B.ByteString->ContextM ()
-handlePayload handle payload = do
-  --liftIO $ print $ payload
-  --liftIO $ putStrLn $ show $ pretty $ rlpDeserialize payload
-  let rlpObject = rlpDeserialize $ B.tail payload
-  let msg = obj2WireMessage (B.head payload) rlpObject
-  displayMessage False msg
-  case msg of
+handleMsg::Message->EthCryptM ContextM ()
+handleMsg m = do
+  lift $ displayMessage False m
+  case m of
     Hello{} -> do
-             bestBlock <- getBestBlock
-             genesisBlockHash <- getGenesisBlockHash
-             sendMessage handle Status{protocolVersion=fromIntegral ethVersion, networkID="", totalDifficulty=0, latestHash=blockHash bestBlock, genesisHash=genesisBlockHash}
+             bestBlock <- lift getBestBlock
+             genesisBlockHash <- lift getGenesisBlockHash
+             sendMsg Status{
+               protocolVersion=fromIntegral ethVersion,
+               networkID="",
+               totalDifficulty=0,
+               latestHash=blockHash bestBlock,
+               genesisHash=genesisBlockHash
+               }
     Ping -> do
-      addPingCount
-      sendMessage handle Pong
+      lift addPingCount
+      sendMsg Pong
     GetPeers -> do
-      sendMessage handle $ Peers []
-      sendMessage handle GetPeers
+      sendMsg $ Peers []
+      sendMsg GetPeers
     (Peers thePeers) -> do
-      setPeers thePeers
-    BlockHashes blockHashes -> handleNewBlockHashes handle blockHashes
+      lift $ setPeers thePeers
+    BlockHashes blockHashes -> handleNewBlockHashes blockHashes
     Blocks blocks -> do
-      handleNewBlocks handle blocks
+      handleNewBlocks blocks
     NewBlockPacket block baseDifficulty -> do
-      addBlocks [block]
-      ifBlockInDBSubmitNextBlock handle baseDifficulty block
+      lift $ addBlocks [block]
+      ifBlockInDBSubmitNextBlock baseDifficulty block
 
     Status{latestHash=lh, genesisHash=gh} -> do
-      genesisBlockHash <- getGenesisBlockHash
+      genesisBlockHash <- lift getGenesisBlockHash
       when (gh /= genesisBlockHash) $ error "Wrong genesis block hash!!!!!!!!"
-      handleNewBlockHashes handle [lh]
+      handleNewBlockHashes [lh]
     GetTransactions -> do
-      sendMessage handle $ Transactions []
+      sendMsg $ Transactions []
       --liftIO $ sendMessage handle GetTransactions
       return ()
       
@@ -154,15 +202,20 @@ getPayloads (0x22:0x40:0x08:0x91:s1:s2:s3:s4:remainder) =
     payloadLength = shift (fromIntegral s1) 24 + shift (fromIntegral s2) 16 + shift (fromIntegral s3) 8 + fromIntegral s4
 getPayloads _ = error "Malformed data sent to getPayloads"
 
-readAndOutput::Handle->ContextM ()
-readAndOutput handle = do
-  payloads <- liftIO $ BL.hGetContents handle
-  handleAllPayloads handle $ getPayloads $ BL.unpack payloads
+readAndOutput::EthCryptM ContextM ()
+readAndOutput = do
+  msg <- recvMsg
+  handleMsg msg
+  readAndOutput
+  
+{-
+handleAllPayloads $ getPayloads $ BL.unpack payloads
   where
-    handleAllPayloads _ [] = error "Server has closed the connection"
-    handleAllPayloads handle' (pl:rest) = do
-      handlePayload handle $ B.pack pl
-      handleAllPayloads handle' rest
+    handleAllPayloads [] = error "Server has closed the connection"
+    handleAllPayloads (pl:rest) = do
+      handlePayload $ B.pack pl
+      handleAllPayloads rest
+-}
 
 mkHello::IO Message
 mkHello = do
@@ -188,11 +241,13 @@ createTransactions transactions = do
       liftIO $ withSource devURandom $ signTransaction prvKey t{tNonce=n}
 -}
 
-doit::Handle->ContextM ()
-doit handle = do
-  lift $ addCode B.empty --This is probably a bad place to do this, but I can't think of a more natural place to do it....  Empty code is used all over the place, and it needs to be in the database.
-  sendMessage handle =<< (liftIO mkHello)
-  lift . setStateRoot . blockDataStateRoot . blockBlockData =<< getBestBlock
+doit2::EthCryptM ContextM ()
+doit2 = do
+    liftIO $ putStrLn "Connected"
+
+    lift $ lift $ addCode B.empty --This is probably a bad place to do this, but I can't think of a more natural place to do it....  Empty code is used all over the place, and it needs to be in the database.
+    sendMsg =<< (liftIO mkHello)
+    lift (lift . setStateRoot . blockDataStateRoot . blockBlockData =<< getBestBlock)
 
   --signedTx <- createTransaction simpleTX
   --signedTx <- createTransaction outOfGasTX
@@ -215,11 +270,38 @@ doit handle = do
   --liftIO $ sendMessage socket $ Transactions signedTxs
 
 
-  readAndOutput handle
+    readAndOutput
+
+doit::String->PortNumber->ContextM ()
+doit ipAddress thePort = do
+  entropyPool <- liftIO createEntropyPool
+
+  let g = cprgCreate entropyPool :: SystemRNG
+      (myPriv, _) = generatePrivate g $ getCurveByName SEC_p256k1
+
+  liftIO $ putStrLn $ "Attempting to connect to " ++ show ipAddress ++ ":" ++ show thePort
+  
+  otherPubKey <- liftIO $ fmap hPubKeyToPubKey $ getServerPubKey ipAddress thePort
+
+  runEthCryptM myPriv otherPubKey ipAddress (fromIntegral thePort) doit2
+
+
+
+--I need to use two definitions of PubKey (internally they represent the same thing)
+--The one in the Haskoin package allows me to recover signatures.
+--The one in the crypto packages let me do AES encryption.
+--At some point I have to convert from one PubKey to the other, this function
+--lets me to that.
+hPubKeyToPubKey::H.PubKey->Point
+hPubKeyToPubKey (H.PubKey hPoint) =
+  Point (fromIntegral x) (fromIntegral y)
+  where
+    x = fromMaybe (error "getX failed in prvKey2Address") $ H.getX hPoint
+    y = fromMaybe (error "getY failed in prvKey2Address") $ H.getY hPoint
+hPubKeyToPubKey (H.PubKeyU _) = error "PubKeyU not supported in hPubKeyToPUbKey yet"
 
 main::IO ()    
 main = do
-
   args <- getArgs
 
   let ipNum =
@@ -229,11 +311,39 @@ main = do
 
   let (ipAddress, thePort) = ipAddresses !! read ipNum
 
-  handle <- connectTo ipAddress (PortNumber thePort)
-
-  putStrLn "Connected"
+  putStrLn $ "Attempting to connect to " ++ show ipAddress ++ ":" ++ show thePort
+  putStrLn $ "Attempting to connect to " ++ show ipAddress ++ ":" ++ show ipNum
 
   runResourceT $ do
-         cxt <- openDBs "h"
-         _ <- runStateT (runStateT (doit handle) (Context [] 0 [] False)) cxt
-         return ()
+      cxt <- openDBs "h"
+      _ <- runStateT (runStateT (doit ipAddress thePort) (Context [] 0 [] False)) cxt
+      return ()
+
+{-
+    sendMsg Hello {
+      version=3,
+      clientId="dummyClient",
+      capability=[ETH 60],
+      port=30303,
+      nodeId=0x1
+      }
+    liftIO . putStrLn . format =<< recvMsg
+    sendMsg Ping
+    liftIO . putStrLn . format =<< recvMsg
+    sendMsg Pong
+    liftIO . putStrLn . format =<< recvMsg
+    sendMsg Status{
+      protocolVersion=60,
+      networkID="",
+      totalDifficulty=131072,
+      latestHash=SHA 0,
+      genesisHash=SHA 0xfd4af92a79c7fc2fd8bf0d342f2e832e1d4f485c85b9152d2039e03bc604fdca
+      }
+    liftIO . putStrLn . format =<< recvMsg
+    liftIO . putStrLn . format =<< recvMsg
+    liftIO . putStrLn . format =<< recvMsg
+
+
+  return ()
+
+-}
