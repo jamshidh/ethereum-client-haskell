@@ -165,14 +165,14 @@ instance Format Message where
 obj2WireMessage::Word8->RLPObject->Message
 obj2WireMessage 0x0 (RLPArray [ver, cId, RLPArray cap, p, nId]) =
   Hello (fromInteger $ rlpDecode ver) (rlpDecode cId) (rlpDecode <$> cap) (fromInteger $ rlpDecode p) $ rlp2Word512 nId
-obj2WireMessage 0x1 (RLPArray [RLPScalar 0x01, reason]) =
+obj2WireMessage 0x1 (RLPArray [reason]) =
   Disconnect (numberToTerminationReason $ rlpDecode reason)
-obj2WireMessage 0x2 (RLPArray [RLPScalar 0x02]) = Ping
-obj2WireMessage 0x2 (RLPArray [RLPScalar 0x02, RLPArray []]) = Ping
-obj2WireMessage 0x3 (RLPArray [RLPScalar 0x03]) = Pong
-obj2WireMessage 0x4 (RLPArray [RLPScalar 0x04]) = GetPeers
-obj2WireMessage 0x5 (RLPArray (RLPScalar 0x05:peers)) = Peers $ rlpDecode <$> peers
-obj2WireMessage 0x10 (RLPArray [RLPScalar 0x10, ver, nID, d, lh, gh]) = 
+obj2WireMessage 0x2 (RLPArray []) = Ping
+obj2WireMessage 0x2 (RLPArray [RLPArray []]) = Ping
+obj2WireMessage 0x3 (RLPArray []) = Pong
+obj2WireMessage 0x4 (RLPArray []) = GetPeers
+obj2WireMessage 0x5 (RLPArray peers) = Peers $ rlpDecode <$> peers
+obj2WireMessage 0x10 (RLPArray [ver, nID, d, lh, gh]) = 
     Status {
   protocolVersion=fromInteger $ rlpDecode ver,
   networkID = rlpDecode nID,
@@ -180,32 +180,32 @@ obj2WireMessage 0x10 (RLPArray [RLPScalar 0x10, ver, nID, d, lh, gh]) =
   latestHash=rlpDecode lh,
   genesisHash=rlpDecode gh
 }
-obj2WireMessage 0x10 (RLPArray [RLPScalar 0x10, ver]) = 
+obj2WireMessage 0x10 (RLPArray [ver]) = 
     QqqqStatus $ fromInteger $ rlpDecode ver
 
-obj2WireMessage 0x11 (RLPArray [RLPScalar 0x11]) = GetTransactions
-obj2WireMessage 0x12 (RLPArray (RLPScalar 0x12:transactions)) =
+obj2WireMessage 0x11 (RLPArray []) = GetTransactions
+obj2WireMessage 0x12 (RLPArray transactions) =
   Transactions $ rlpDecode <$> transactions
 
 
-obj2WireMessage 0x13 (RLPArray (RLPScalar 0x13:items)) =
+obj2WireMessage 0x13 (RLPArray items) =
   GetBlockHashes (rlpDecode <$> init items) $ rlpDecode $ last items
-obj2WireMessage 0x14 (RLPArray (RLPScalar 0x14:items)) =
+obj2WireMessage 0x14 (RLPArray items) =
   BlockHashes $ rlpDecode <$> items
 
 
-obj2WireMessage 0x15 (RLPArray (RLPScalar 0x15:items)) =
+obj2WireMessage 0x15 (RLPArray items) =
   GetBlocks $ rlpDecode <$> items
-obj2WireMessage 0x16 (RLPArray (RLPScalar 0x16:blocks)) =
+obj2WireMessage 0x16 (RLPArray blocks) =
   Blocks $ rlpDecode <$> blocks
-obj2WireMessage 0x17 (RLPArray [RLPScalar 0x17, block, td]) =
+obj2WireMessage 0x17 (RLPArray [block, td]) =
   NewBlockPacket (rlpDecode block) (rlpDecode td)
-obj2WireMessage 0x18 (RLPArray [RLPScalar 0x18, c]) =
+obj2WireMessage 0x18 (RLPArray [c]) =
   PacketCount $ rlpDecode c
-obj2WireMessage 0x19 (RLPArray [RLPScalar 0x19]) =
+obj2WireMessage 0x19 (RLPArray []) =
   QqqqPacket
 
-obj2WireMessage 0x20 (RLPArray [RLPScalar 0x20, ver]) =
+obj2WireMessage 0x20 (RLPArray [ver]) =
   WhisperProtocolVersion $ fromInteger $ rlpDecode ver
 
 obj2WireMessage x y = error ("Missing case in obj2WireMessage: " ++ show x ++ ", " ++ show (pretty y))
