@@ -64,14 +64,16 @@ initializeBlockChain = do
 -}
 
 nextDifficulty::Integer->UTCTime->UTCTime->Integer
-nextDifficulty oldDifficulty oldTime newTime =
-    if round (utcTimeToPOSIXSeconds newTime) >=
-           (round (utcTimeToPOSIXSeconds oldTime) + 8::Integer)
-      then oldDifficulty - oldDifficulty `shiftR` 11
-      else oldDifficulty + oldDifficulty `shiftR` 11
+nextDifficulty oldDifficulty oldTime newTime = max nextDiff' minimumDifficulty
+    where
+      nextDiff' = 
+          if round (utcTimeToPOSIXSeconds newTime) >=
+                 (round (utcTimeToPOSIXSeconds oldTime) + 8::Integer)
+          then oldDifficulty - oldDifficulty `shiftR` 11
+          else oldDifficulty + oldDifficulty `shiftR` 11
 
 nextGasLimit::Integer->Integer->Integer
-nextGasLimit oldGasLimit oldGasUsed = max 125000 ((oldGasLimit * 1023 + oldGasUsed *6 `quot` 5) `quot` 1024)
+nextGasLimit oldGasLimit oldGasUsed = max (max 125000 3141592) ((oldGasLimit * 1023 + oldGasUsed *6 `quot` 5) `quot` 1024)
 
 checkUnclesHash::Block->Bool
 checkUnclesHash b = blockDataUnclesHash (blockBlockData b) == hash (rlpSerialize $ RLPArray (rlpEncode <$> blockBlockUncles b))
@@ -106,7 +108,7 @@ checkValidity b = do
   case maybeParentBlock of
     Just parentBlock -> do
           checkParentChildValidity b parentBlock
-          unless (nonceIsValid b) $ fail $ "Block nonce is wrong: " ++ format b
+          --unless (nonceIsValid b) $ fail $ "Block nonce is wrong: " ++ format b
           unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"
           stateRootExists <- verifyStateRootExists b
           unless stateRootExists $ fail ("Block stateRoot does not exist: " ++ show (pretty $ blockDataStateRoot $ blockBlockData b))
