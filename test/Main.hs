@@ -18,7 +18,7 @@ import Test.HUnit
 
 import qualified Data.NibbleString as N
 
-import Data.Address
+import Blockchain.Data.Address
 import Format
 import DB.ModifyStateDB
 import Database.MerklePatricia

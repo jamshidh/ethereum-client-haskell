@@ -133,3 +133,9 @@ Test-Suite test-ethereumH
                     , test-framework-hunit
                     , HUnit
                     , containers
+                    , transformers
+                    , resourcet
+                    , bytestring
+                    , data-default
+                    , nibblestring
+                    
