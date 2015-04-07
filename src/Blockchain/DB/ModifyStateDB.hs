@@ -2,7 +2,6 @@
 
 module Blockchain.DB.ModifyStateDB (
   addToBalance,
-  incrementNonce,
   pay
 ) where
 
@@ -12,26 +11,20 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Blockchain.Context
 import Blockchain.Data.Address
-import Blockchain.Data.AddressState
+import Blockchain.Data.AddressStateDB
+import Blockchain.Data.DataDefs
 
 --import Debug.Trace
 
 addToBalance::Address->Integer->ContextM Bool
 addToBalance address val = do
   addressState <- lift $ getAddressState address
-  let newVal = balance addressState + val
+  let newVal = addressStateBalance addressState + val
   if newVal < 0
     then return False
     else do
-    lift $ putAddressState address addressState{balance = newVal}
+    lift $ putAddressState address addressState{addressStateBalance = newVal}
     return True
-
-
-
-incrementNonce::Address->ContextM ()
-incrementNonce address = do
-  addressState <- lift $ getAddressState address
-  lift $ putAddressState address addressState{ addressStateNonce = addressStateNonce addressState + 1 }
 
 pay::String->Address->Address->Integer->ContextM Bool
 pay description fromAddr toAddr val = do
@@ -39,14 +32,14 @@ pay description fromAddr toAddr val = do
   when debug $ do
     liftIO $ putStrLn $ "payment: from " ++ show (pretty fromAddr) ++ " to " ++ show (pretty toAddr) ++ ": " ++ show val ++ ", " ++ description
     fromAddressState <- lift $ getAddressState fromAddr
-    liftIO $ putStrLn $ "from Funds: " ++ show (balance fromAddressState)
+    liftIO $ putStrLn $ "from Funds: " ++ show (addressStateBalance fromAddressState)
     toAddressState <- lift $ getAddressState toAddr
-    liftIO $ putStrLn $ "to Funds: " ++ show (balance toAddressState)
-    when (balance fromAddressState < val) $
+    liftIO $ putStrLn $ "to Funds: " ++ show (addressStateBalance toAddressState)
+    when (addressStateBalance fromAddressState < val) $
        liftIO $ putStrLn "insufficient funds"
 
   fromAddressState <- lift $ getAddressState fromAddr
-  if balance fromAddressState < val
+  if addressStateBalance fromAddressState < val
     then return False
     else do
     _ <- addToBalance fromAddr (-val)

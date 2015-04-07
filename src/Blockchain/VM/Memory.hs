@@ -8,6 +8,7 @@ module Blockchain.VM.Memory (
   mLoad,
   mLoad8,
   mLoadByteString,
+  unsafeSliceByteString,
   mStore,
   mStore8,
   mStoreByteString
@@ -17,14 +18,16 @@ import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Trans.Either
 import Control.Monad.Trans.State hiding (state)
-import qualified Data.Vector.Unboxed.Mutable as V
+import qualified Data.Vector.Storable.Mutable as V
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import Data.Functor
 import Data.IORef
 import Data.Word
+import Foreign
 --import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
+import qualified Blockchain.Colors as CL
 import Blockchain.ExtWord
 import Blockchain.Util
 import Blockchain.VM.OpcodePrices
@@ -94,8 +97,12 @@ setNewMaxSize newSize' = do
     if newSize > oldLength
       then do
         state' <- lift get
-        arr' <- liftIO $ V.grow (mVector $ memory state') $ fromIntegral $ 2*newSize
-        liftIO $ forM_ [oldLength..2*newSize-1] $ \p -> V.write arr' (fromIntegral p) 0
+        when (newSize > 100000000) $ liftIO $ putStrLn $ CL.red ("Warning, memory needs to grow to a huge value: " ++ show (fromIntegral newSize/1000000) ++ "MB")
+        arr' <- liftIO $ V.grow (mVector $ memory state') $ fromIntegral $ (newSize+1000000)
+        when (newSize > 100000000) $ liftIO $ putStrLn $ CL.red $ "clearing out memory"
+        --liftIO $ forM_ [oldLength..(newSize+1000000)-1] $ \p -> V.write arr' (fromIntegral p) 0
+        liftIO $ V.set (V.unsafeSlice (fromIntegral oldLength) (fromIntegral newSize+1000000) arr') 0
+        when (newSize > 100000000) $ liftIO $ putStrLn $ CL.red $ "Finished growing memory"
         lift $ put $ state'{memory=(memory state'){mVector = arr'}}
       else return ()
 
@@ -131,6 +138,15 @@ mLoadByteString p size = do
   state <- lift get
   val <- liftIO $ fmap B.pack $ sequence $ safeRead (mVector $ memory state) <$> fromIntegral <$> safeRange p size 
   return val
+
+unsafeSliceByteString::Word256->Word256->VMM B.ByteString
+unsafeSliceByteString p size = do
+  setNewMaxSize (fromIntegral p+fromIntegral size)
+  state <- lift get
+  let (fptr, len) = V.unsafeToForeignPtr0 (V.slice (fromIntegral p) (fromIntegral size) $ mVector $ memory state)
+  liftIO $ withForeignPtr fptr $ \ptr ->
+    B.packCStringLen (castPtr ptr, len * sizeOf (undefined :: Word8))
+    
 
 mStore::Word256->Word256->VMM ()
 mStore p val = do

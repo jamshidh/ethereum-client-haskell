@@ -10,7 +10,7 @@ module Blockchain.VM.VMState (
   ) where
 
 import Control.Monad
-import qualified Data.Vector.Unboxed.Mutable as V
+import qualified Data.Vector.Storable.Mutable as V
 import qualified Data.ByteString as B
 import Data.IORef
 import Data.Word

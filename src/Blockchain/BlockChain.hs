@@ -31,9 +31,10 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import qualified Blockchain.Colors as CL
 import Blockchain.Context
 import Blockchain.Data.Address
-import Blockchain.Data.AddressState
-import Blockchain.Data.Block
+import Blockchain.Data.AddressStateDB
+import Blockchain.Data.BlockDB
 import Blockchain.Data.Code
+import Blockchain.Data.DataDefs
 import Blockchain.Data.RLP
 import Blockchain.Data.SignedTransaction
 import Blockchain.Data.Transaction
@@ -73,7 +74,7 @@ nextGasLimit::Integer->Integer->Integer
 nextGasLimit oldGasLimit oldGasUsed = max 125000 ((oldGasLimit * 1023 + oldGasUsed *6 `quot` 5) `quot` 1024)
 
 checkUnclesHash::Block->Bool
-checkUnclesHash b = unclesHash (blockData b) == hash (rlpSerialize $ RLPArray (rlpEncode <$> blockUncles b))
+checkUnclesHash b = blockDataUnclesHash (blockBlockData b) == hash (rlpSerialize $ RLPArray (rlpEncode <$> blockBlockUncles b))
 
 --data BlockValidityError = BlockDifficultyWrong Integer Integer | BlockNumberWrong Integer Integer | BlockGasLimitWrong Integer Integer | BlockNonceWrong | BlockUnclesHashWrong
 {-
@@ -84,33 +85,33 @@ instance Format BlockValidityError where
 
 verifyStateRootExists::Block->ContextM Bool
 verifyStateRootExists b = do
-  val <- lift $ stateDBGet (BL.toStrict $ encode $ bStateRoot $ blockData b)
+  val <- lift $ stateDBGet (BL.toStrict $ encode $ blockDataStateRoot $ blockBlockData b)
   case val of
     Nothing -> return False
     Just _ -> return True
 
 checkParentChildValidity::(Monad m)=>Block->Block->m ()
-checkParentChildValidity Block{blockData=c} Block{blockData=p} = do
-    unless (difficulty c == nextDifficulty (difficulty p) (timestamp p) ( timestamp c))
-             $ fail $ "Block difficulty is wrong: got '" ++ show (difficulty c) ++ "', expected '" ++ show (nextDifficulty (difficulty p) (timestamp p) ( timestamp c)) ++ "'"
-    unless (number c == number p + 1) 
-             $ fail $ "Block number is wrong: got '" ++ show (number c) ++ ", expected '" ++ show (number p + 1) ++ "'"
-    unless (gasLimit c == nextGasLimit (gasLimit p) (gasUsed p))
-             $ fail $ "Block gasLimit is wrong: got '" ++ show (gasLimit c) ++ "', expected '" ++ show (nextGasLimit (gasLimit p) (gasUsed p)) ++ "'"
+checkParentChildValidity Block{blockBlockData=c} Block{blockBlockData=p} = do
+    unless (blockDataDifficulty c == nextDifficulty (blockDataDifficulty p) (blockDataTimestamp p) (blockDataTimestamp c))
+             $ fail $ "Block difficulty is wrong: got '" ++ show (blockDataDifficulty c) ++ "', expected '" ++ show (nextDifficulty (blockDataDifficulty p) (blockDataTimestamp p) (blockDataTimestamp c)) ++ "'"
+    unless (blockDataNumber c == blockDataNumber p + 1) 
+             $ fail $ "Block number is wrong: got '" ++ show (blockDataNumber c) ++ ", expected '" ++ show (blockDataNumber p + 1) ++ "'"
+    unless (blockDataGasLimit c == nextGasLimit (blockDataGasLimit p) (blockDataGasUsed p))
+             $ fail $ "Block gasLimit is wrong: got '" ++ show (blockDataGasLimit c) ++ "', expected '" ++ show (nextGasLimit (blockDataGasLimit p) (blockDataGasUsed p)) ++ "'"
     return ()
 
 checkValidity::Monad m=>Block->ContextM (m ())
 checkValidity b = do
-  maybeParentBlock <- lift $ getBlock (parentHash $ blockData b)
+  maybeParentBlock <- lift $ getBlock (blockDataParentHash $ blockBlockData b)
   case maybeParentBlock of
     Just parentBlock -> do
           checkParentChildValidity b parentBlock
           unless (nonceIsValid b) $ fail $ "Block nonce is wrong: " ++ format b
           unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"
           stateRootExists <- verifyStateRootExists b
-          unless stateRootExists $ fail ("Block stateRoot does not exist: " ++ show (pretty $ bStateRoot $ blockData b))
+          unless stateRootExists $ fail ("Block stateRoot does not exist: " ++ show (pretty $ blockDataStateRoot $ blockBlockData b))
           return $ return ()
-    Nothing -> fail ("Parent Block does not exist: " ++ show (pretty $ parentHash $ blockData b))
+    Nothing -> fail ("Parent Block does not exist: " ++ show (pretty $ blockDataParentHash $ blockBlockData b))
 
 
 {-
@@ -120,21 +121,19 @@ checkValidity b = do
 -}
 
 
-runCodeForTransaction::Block->Integer->Address->Transaction->ContextM (Either VMException B.ByteString, VMState)
-runCodeForTransaction b availableGas tAddr ut@ContractCreationTX{} = do
+runCodeForTransaction::Block->Integer->Address->Address->Transaction->ContextM (Either VMException B.ByteString, VMState)
+runCodeForTransaction b availableGas tAddr newAddress ut@ContractCreationTX{} = do
   whenM isDebugEnabled $ liftIO $ putStrLn "runCodeForTransaction: ContractCreationTX"
-
-  let newAddress = getNewAddress tAddr $ tNonce ut
 
   (result, vmState) <-
     create b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas newAddress (tInit ut)
 
   return (const B.empty <$> result, vmState)
 
-runCodeForTransaction b availableGas tAddr ut@MessageTX{} = do
+runCodeForTransaction b availableGas tAddr owner ut@MessageTX{} = do
   whenM isDebugEnabled $ liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ to ut)
 
-  call b 0 (to ut) (to ut) tAddr
+  call b 0 owner owner tAddr
           (fromIntegral $ value ut) (fromIntegral $ gasPrice ut)
           (tData ut) (fromIntegral availableGas) tAddr
 
@@ -180,14 +179,20 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
 
   addressState <- lift $ lift $ getAddressState tAddr
 
-  when (tGasLimit ut * gasPrice ut + value ut > balance addressState) $ left "sender doesn't have high enough balance"
+  when (tGasLimit ut * gasPrice ut + value ut > addressStateBalance addressState) $ left "sender doesn't have high enough balance"
   when (intrinsicGas' > tGasLimit ut) $ left "intrinsic gas higher than transaction gas limit"
   when (tGasLimit ut > remainingBlockGas) $ left "block gas has run out"
   when (not valid) $ left "nonce incorrect"
 
   let availableGas = tGasLimit ut - intrinsicGas'    
 
-  lift $ incrementNonce tAddr
+  theAddress <-
+    case ut of
+      ContractCreationTX{} -> do
+        lift $ getNewAddress tAddr
+      MessageTX{} -> do
+        lift $ incrementNonce tAddr
+        return $ to ut
   
   success <- lift $ addToBalance tAddr (-tGasLimit ut * gasPrice ut)
 
@@ -195,9 +200,10 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
 
   if success
       then do
-        (result, newVMState') <- lift $ runCodeForTransaction b (tGasLimit ut - intrinsicGas') tAddr ut
-        lift $ addToBalance (coinbase $ blockData b) (tGasLimit ut * gasPrice ut)
+        (result, newVMState') <- lift $ runCodeForTransaction b (tGasLimit ut - intrinsicGas') tAddr theAddress ut
 
+        lift $ addToBalance (blockDataCoinbase $ blockBlockData b) (tGasLimit ut * gasPrice ut)
+        
         case result of
           Left e -> do
             whenM (lift isDebugEnabled) $ liftIO $ putStrLn $ CL.red $ show e
@@ -206,7 +212,7 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
             let realRefund =
                   min (refund newVMState') ((tGasLimit ut - vmGasRemaining newVMState') `div` 2)
 
-            success <- lift $ pay "VM refund fees" (coinbase $ blockData b) tAddr ((realRefund + vmGasRemaining newVMState') * gasPrice ut)
+            success <- lift $ pay "VM refund fees" (blockDataCoinbase $ blockBlockData b) tAddr ((realRefund + vmGasRemaining newVMState') * gasPrice ut)
 
             when (not success) $ error "oops, refund was too much"
 
@@ -216,9 +222,9 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
 
             return (newVMState', remainingBlockGas - (tGasLimit ut - realRefund - vmGasRemaining newVMState'))
       else do
-        lift $ addToBalance (coinbase $ blockData b) (intrinsicGas' * gasPrice ut)
+        lift $ addToBalance (blockDataCoinbase $ blockBlockData b) (intrinsicGas' * gasPrice ut)
         addressState <- lift $ lift $ getAddressState tAddr
-        liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*gasPrice ut) ++ ", have " ++ show (balance addressState)
+        liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*gasPrice ut) ++ ", have " ++ show (addressStateBalance addressState)
         return (VMState{vmException=Just InsufficientFunds, vmGasRemaining=0, refund=0, debugCallCreates=Nothing, suicideList=[], logs=[], returnVal=Nothing}, remainingBlockGas)
 
       
@@ -226,11 +232,11 @@ addTransactions::Block->Integer->[SignedTransaction]->ContextM ()
 addTransactions _ _ [] = return ()
 addTransactions b blockGas (t@SignedTransaction{unsignedTransaction=ut}:rest) = do
   liftIO $ putStrLn "=========================================="
-  liftIO $ putStrLn $ "Coinbase: " ++ show (pretty $ coinbase $ blockData b)
+  liftIO $ putStrLn $ "Coinbase: " ++ show (pretty $ blockDataCoinbase $ blockBlockData b)
   liftIO $ putStrLn $ "Transaction signed by: " ++ show (pretty $ whoSignedThisTransaction t)
   addressState <- lift $ getAddressState $ whoSignedThisTransaction t
   liftIO $ do
-    putStrLn $ "User balance: " ++ show (balance $ addressState)
+    putStrLn $ "User balance: " ++ show (addressStateBalance $ addressState)
     putStrLn $ "tGasLimit ut: " ++ show (tGasLimit ut)
     putStrLn $ "blockGas: " ++ show blockGas
   
@@ -248,30 +254,30 @@ addTransactions b blockGas (t@SignedTransaction{unsignedTransaction=ut}:rest) = 
   addTransactions b remainingBlockGas rest
   
 addBlock::Block->ContextM ()
-addBlock b@Block{blockData=bd, blockUncles=uncles} = do
-  liftIO $ putStrLn $ "Attempting to insert block #" ++ show (number bd) ++ " (" ++ show (pretty $ blockHash b) ++ ")."
-  maybeParent <- lift $ getBlock $ parentHash bd
+addBlock b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
+  liftIO $ putStrLn $ "Attempting to insert block #" ++ show (blockDataNumber bd) ++ " (" ++ show (pretty $ blockHash b) ++ ")."
+  maybeParent <- lift $ getBlock $ blockDataParentHash bd
   case maybeParent of
     Nothing ->
-      liftIO $ putStrLn $ "Missing parent block in addBlock: " ++ show (pretty $ parentHash bd) ++ "\n" ++
+      liftIO $ putStrLn $ "Missing parent block in addBlock: " ++ show (pretty $ blockDataParentHash bd) ++ "\n" ++
       "Block will not be added now, but will be requested and added later"
     Just parentBlock -> do
-      lift $ setStateRoot $ bStateRoot $ blockData parentBlock
+      lift $ setStateRoot $ blockDataStateRoot $ blockBlockData parentBlock
       let rewardBase = 1500 * finney
-      addToBalance (coinbase bd) rewardBase
+      addToBalance (blockDataCoinbase bd) rewardBase
 
       forM_ uncles $ \uncle -> do
-                          addToBalance (coinbase bd) (rewardBase `quot` 32)
-                          addToBalance (coinbase uncle) (rewardBase*15 `quot` 16)
+                          addToBalance (blockDataCoinbase bd) (rewardBase `quot` 32)
+                          addToBalance (blockDataCoinbase uncle) (rewardBase*15 `quot` 16)
 
-      let transactions = receiptTransactions b
-      addTransactions b (gasLimit $ blockData b) transactions
+      let transactions = blockReceiptTransactions b
+      addTransactions b (blockDataGasLimit $ blockBlockData b) transactions
 
       dbs <- lift get
       liftIO $ putStrLn $ "newStateRoot: " ++ show (pretty $ stateRoot $ stateDB dbs)
 
-      when (bStateRoot (blockData b) /= stateRoot (stateDB dbs)) $ do
-        error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ show (pretty $ bStateRoot $ blockData b)
+      when (blockDataStateRoot (blockBlockData b) /= stateRoot (stateDB dbs)) $ do
+        error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ show (pretty $ blockDataStateRoot $ blockBlockData b)
 
       valid <- checkValidity b
       case valid of
@@ -305,7 +311,7 @@ getBestBlock = do
 replaceBestIfBetter::Block->ContextM ()
 replaceBestIfBetter b = do
   best <- getBestBlock
-  if number (blockData best) >= number (blockData b) 
+  if blockDataNumber (blockBlockData best) >= blockDataNumber (blockBlockData b) 
        then return ()
        else lift $ detailsDBPut "best" (BL.toStrict $ encode $ blockHash b)
 
