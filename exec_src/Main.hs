@@ -77,7 +77,7 @@ getNextBlock b ts = do
         blockDataGasUsed = 0,
         blockDataTimestamp = ts,  
         blockDataExtraData = 0,
-        blockDataNonce = SHA 5
+        blockDataNonce = 5
         }
     bd = blockBlockData b
 
