@@ -90,7 +90,7 @@ initializeGenesisBlock = do
                        blockDataGasUsed = 0,
                        blockDataTimestamp = posixSecondsToUTCTime 0,
                        blockDataExtraData = 0,
-                       blockMixHash = SHA 0,
+                       blockDataMixHash = SHA 0,
                        blockDataNonce = 42 -- hash $ B.pack [42]
                },
                blockReceiptTransactions=[],
