@@ -286,7 +286,7 @@ addBlock b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
         Right () -> return ()
         Left err -> error err
       let bytes = rlpSerialize $ rlpEncode b
-      lift $ blockDBPut (BL.toStrict $ encode $ blockHash b) bytes
+      lift $ putBlock b
       replaceBestIfBetter b
 
 getBestBlockHash::ContextM SHA
