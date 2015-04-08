@@ -269,10 +269,13 @@ addBlock b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
       addToBalance (blockDataCoinbase bd) rewardBase
 
       forM_ uncles $ \uncle -> do
-                          addToBalance (blockDataCoinbase bd) (rewardBase `quot` 32)
-                          addToBalance (blockDataCoinbase uncle) (rewardBase*15 `quot` 16)
+        addToBalance (blockDataCoinbase bd) (rewardBase `quot` 32)
+        addToBalance
+          (blockDataCoinbase uncle)
+          ((rewardBase*(8+blockDataNumber uncle - blockDataNumber bd )) `quot` 8)
 
       let transactions = blockReceiptTransactions b
+
       addTransactions b (blockDataGasLimit $ blockBlockData b) transactions
 
       dbs <- lift get
