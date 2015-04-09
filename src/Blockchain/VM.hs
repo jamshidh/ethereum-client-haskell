@@ -159,6 +159,18 @@ accountCreationHack address' = do
       lift $ lift $ lift $ putAddressState address' blankAddressState
 
 
+
+getBlockWithNumber::Integer->Block->VMM (Maybe Block)
+getBlockWithNumber num b | num == blockDataNumber (blockBlockData b) = return $ Just b
+getBlockWithNumber num b | num > blockDataNumber (blockBlockData b) = return Nothing
+getBlockWithNumber num b = do
+  parentBlock <- lift $ lift $ lift $ getBlock $ blockDataParentHash $ blockBlockData b
+  getBlockWithNumber num $
+    fromMaybe (error "missing parent block in call to getBlockWithNumber") parentBlock
+
+
+
+
 --TODO- This really should be in its own monad!
 --The monad should manage everything in the VM and environment (extending the ContextM), and have pop and push operations, perhaps even automating pc incrementing, gas charges, etc.
 --The code would simplify greatly, but I don't feel motivated to make the change now since things work.
@@ -290,15 +302,18 @@ runOperation EXTCODECOPY = do
 
 runOperation BLOCKHASH = do
   number' <- pop::VMM Word256
-  block <- getEnvVar envBlock
-  
-  let SHA h = hash $ BC.pack $ show $ toInteger number'
 
-  let blockNumber = blockDataNumber (blockBlockData block)
-      
-  if toInteger number' >= blockNumber || toInteger number' < blockNumber - 256
+  currentBlock <- getEnvVar envBlock
+  let currentBlockNumber = blockDataNumber . blockBlockData $ currentBlock
+
+  if toInteger number' >= currentBlockNumber || toInteger number' < currentBlockNumber - 256
     then push (0::Word256)
-    else push h
+    else do
+      maybeBlock <- getBlockWithNumber (fromIntegral number') currentBlock
+      --let SHA h = hash $ BC.pack $ show $ toInteger number'
+      case maybeBlock of
+        Nothing -> push (0::Word256)
+        Just theBlock -> push $ blockHash theBlock
 
 runOperation COINBASE = pushEnvVar (blockDataCoinbase . blockBlockData . envBlock)
 runOperation TIMESTAMP = do
@@ -344,6 +359,7 @@ runOperation SLOAD = do
 runOperation SSTORE = do
   p <- pop
   val <- pop::VMM Word256
+
   if val == 0
     then deleteStorageKey p
     else putStorageKeyVal p val
@@ -708,13 +724,15 @@ printDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState-
 printDebugInfo env memBefore memAfter c op stateBefore stateAfter = do
   liftIO $ putStrLn $ "EVM [ eth | " ++ show (callDepth stateBefore) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc stateBefore)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining stateBefore) ++ " | " ++ show (vmGasRemaining stateAfter - vmGasRemaining stateBefore) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
   liftIO $ putStrLn $ "EVM [ eth ] "
---  memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
+  memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
   liftIO $ putStrLn "    STACK"
   liftIO $ putStr $ unlines (padZeros 64 <$> flip showHex "" <$> (reverse $ stack stateAfter))
---  liftIO $ putStr $ "    MEMORY\n" ++ showMem 0 (B.unpack $ memByteString)
+  liftIO $ putStr $ "    MEMORY\n" ++ showMem 0 (B.unpack $ memByteString)
   liftIO $ putStrLn $ "    STORAGE"
   kvs <- getAllStorageKeyVals
   liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (fromIntegral v)) kvs)
+
+
 
 runCode::Int->VMM ()
 runCode c = do
@@ -753,6 +771,8 @@ runCodeFromStart = do
   runCode 0
 
 
+
+
 runVMM::Int->Environment->Integer->VMM a->ContextM (Either VMException a, VMState)
 runVMM callDepth' env availableGas f = do
   vmState <- liftIO $ startingState env
@@ -763,7 +783,8 @@ runVMM callDepth' env availableGas f = do
       runEitherT f
 
   case result of
-      (Left _, _) -> do
+      (Left e, _) -> do
+        liftIO $ putStrLn $ CL.red $ "Exception caught (" ++ show e ++ "), reverting state"
         cxtAfter <- lift get
         lift $ put cxtAfter{stateDB=stateDB cxtBefore}
       _ -> return ()
@@ -792,15 +813,18 @@ create b callDepth' sender origin value' gasPrice' availableGas newAddress init'
 
   vmState <- liftIO $ startingState env
 
-  --This next line will actually create the account addressState data....
-  --In the extremely unlikely even that the address already exists, it will preserve
-  --the existing balance.
-  success <- pay "transfer value" sender newAddress $ fromIntegral value'
+  success <- 
+    if fromIntegral value' > 0
+    then do
+    --This next line will actually create the account addressState data....
+    --In the extremely unlikely even that the address already exists, it will preserve
+    --the existing balance.
+    pay "transfer value" sender newAddress $ fromIntegral value'
+    else return True
 
   if success
     then runVMM callDepth' env availableGas create'
     else return (Left InsufficientFunds, vmState)
-
 
 create'::VMM Code
 create' = do
@@ -812,16 +836,21 @@ create' = do
   let codeBytes' = fromMaybe B.empty $ returnVal vmState
   whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ "Result: " ++ show codeBytes'
 
-  useGas $ gCREATEDATA * toInteger (B.length codeBytes')
+  if vmGasRemaining vmState < gCREATEDATA * toInteger (B.length codeBytes')
+    then return $ Code ""
+    else do
+      owner <- getEnvVar envOwner
+      useGas $ gCREATEDATA * toInteger (B.length codeBytes')
+      assignCode codeBytes' owner
+      return $ Code codeBytes'
 
-  lift $ lift $ lift $ addCode codeBytes'
-
-  owner <- getEnvVar envOwner
-  newAddressState <- lift $ lift $ lift $ getAddressState owner
-  lift $ lift $ lift $ putAddressState owner newAddressState{addressStateCodeHash=hash codeBytes'}
-
-  return $ Code codeBytes'
-
+  where
+    assignCode::B.ByteString->Address->VMM ()
+    assignCode codeBytes' address = do
+      lift $ lift $ lift $ addCode codeBytes'
+      newAddressState <- lift $ lift $ lift $ getAddressState address
+      lift $ lift $ lift $
+        putAddressState address newAddressState{addressStateCodeHash=hash codeBytes'}
 
 
 
