@@ -96,8 +96,6 @@ initializeGenesisBlock = do
                blockReceiptTransactions=[],
                blockBlockUncles=[]
              }
-  liftIO $ putStrLn $ format genesisBlock
-  liftIO $ putStrLn $ format $ rlpSerialize $ rlpEncode $  genesisBlock
   lift $ putBlock genesisBlock
   return genesisBlock
 
