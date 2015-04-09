@@ -78,7 +78,7 @@ getAllStorageKeyVals' owner = do
   addressState <- lift $ getAddressState owner
   dbs <- lift get
   let mpdb = (stateDB dbs){MPDB.stateRoot=addressStateContractRoot addressState}
-  kvs <- lift $ lift $ MPDB.getKeyVals mpdb ""
+  kvs <- lift $ lift $ MPDB.unsafeGetKeyVals mpdb ""
   return $ map (fmap $ fromInteger . rlpDecode . rlpDeserialize . rlpDecode) kvs
 
 putStorageKeyVal'::Address->Word256->Word256->ContextM ()
