@@ -832,14 +832,19 @@ create' = do
   runCodeFromStart
 
   vmState <- lift get
+
+  owner <- getEnvVar envOwner
   
   let codeBytes' = fromMaybe B.empty $ returnVal vmState
   whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ "Result: " ++ show codeBytes'
 
+  
   if vmGasRemaining vmState < gCREATEDATA * toInteger (B.length codeBytes')
-    then return $ Code ""
+    then do
+      liftIO $ putStrLn $ CL.red "Not enough ether to create contract, contract being thrown away (account was created though)"
+      assignCode "" owner
+      return $ Code ""
     else do
-      owner <- getEnvVar envOwner
       useGas $ gCREATEDATA * toInteger (B.length codeBytes')
       assignCode codeBytes' owner
       return $ Code codeBytes'
