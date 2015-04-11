@@ -25,8 +25,10 @@ import Data.Functor
 import Data.List
 import Data.Maybe
 import Data.Time
+import Data.Time.Clock
 import Data.Time.Clock.POSIX
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Text.Printf
 
 import qualified Blockchain.Colors as CL
 import Blockchain.Context
@@ -233,16 +235,15 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
 addTransactions::Block->Integer->[SignedTransaction]->ContextM ()
 addTransactions _ _ [] = return ()
 addTransactions b blockGas (t@SignedTransaction{unsignedTransaction=ut}:rest) = do
-  liftIO $ putStrLn "=========================================="
-  liftIO $ putStrLn $ "Coinbase: " ++ show (pretty $ blockDataCoinbase $ blockBlockData b)
-  liftIO $ putStrLn $ "Transaction signed by: " ++ show (pretty $ whoSignedThisTransaction t)
-  addressState <- lift $ getAddressState $ whoSignedThisTransaction t
-  liftIO $ do
-    putStrLn $ "User balance: " ++ show (addressStateBalance $ addressState)
-    putStrLn $ "tGasLimit ut: " ++ show (tGasLimit ut)
-    putStrLn $ "blockGas: " ++ show blockGas
-  
+  liftIO $ putStrLn $ CL.magenta "    =========================================================================="
+  liftIO $ putStrLn $ CL.magenta "    |" ++ " Adding transaction signed by: " ++ show (pretty $ whoSignedThisTransaction t) ++ CL.magenta " |"
+
+  before <- liftIO $ getPOSIXTime 
   result <- runEitherT $ addTransaction b blockGas t
+  after <- liftIO $ getPOSIXTime 
+
+  liftIO $ putStrLn $ CL.magenta "    |" ++ " Δt = " ++ printf "%.2f" (realToFrac $ after - before::Double) ++ "s                                                             " ++ CL.magenta "|"
+  liftIO $ putStrLn $ CL.magenta "    =========================================================================="
 
   remainingBlockGas <-
     case result of
@@ -251,13 +252,11 @@ addTransactions b blockGas (t@SignedTransaction{unsignedTransaction=ut}:rest) = 
         return blockGas
       Right (_, g') -> return g'
 
-  liftIO $ putStrLn $ "remainingBlockGas: " ++ show remainingBlockGas
-
   addTransactions b remainingBlockGas rest
   
 addBlock::Block->ContextM ()
 addBlock b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
-  liftIO $ putStrLn $ "Attempting to insert block #" ++ show (blockDataNumber bd) ++ " (" ++ show (pretty $ blockHash b) ++ ")."
+  liftIO $ putStrLn $ "Inserting block #" ++ show (blockDataNumber bd) ++ " (" ++ show (pretty $ blockHash b) ++ ")."
   maybeParent <- lift $ getBlock $ blockDataParentHash bd
   case maybeParent of
     Nothing ->
@@ -279,9 +278,8 @@ addBlock b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
       addTransactions b (blockDataGasLimit $ blockBlockData b) transactions
 
       dbs <- lift get
-      liftIO $ putStrLn $ "newStateRoot: " ++ show (pretty $ stateRoot $ stateDB dbs)
-
       when (blockDataStateRoot (blockBlockData b) /= stateRoot (stateDB dbs)) $ do
+        liftIO $ putStrLn $ "newStateRoot: " ++ show (pretty $ stateRoot $ stateDB dbs)
         error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ show (pretty $ blockDataStateRoot $ blockBlockData b)
 
       valid <- checkValidity b
