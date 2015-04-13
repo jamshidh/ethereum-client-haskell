@@ -235,8 +235,17 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
 addTransactions::Block->Integer->[SignedTransaction]->ContextM ()
 addTransactions _ _ [] = return ()
 addTransactions b blockGas (t@SignedTransaction{unsignedTransaction=ut}:rest) = do
+  let tAddr = whoSignedThisTransaction t
+  nonce <- lift $ fmap addressStateNonce $ getAddressState $ whoSignedThisTransaction t
   liftIO $ putStrLn $ CL.magenta "    =========================================================================="
-  liftIO $ putStrLn $ CL.magenta "    |" ++ " Adding transaction signed by: " ++ show (pretty $ whoSignedThisTransaction t) ++ CL.magenta " |"
+  liftIO $ putStrLn $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " |"
+  liftIO $ putStrLn $ CL.magenta "    |    " ++
+    (
+      case ut of
+        (MessageTX _ _ _ to _ _) -> "MessageTX to " ++ show (pretty to) ++ "              "
+        (ContractCreationTX _ _ _ _ _) ->
+          "Create Contract "  ++ show (pretty $ getNewAddress_unsafe tAddr nonce)
+    ) ++ CL.magenta " |"
 
   before <- liftIO $ getPOSIXTime 
   result <- runEitherT $ addTransaction b blockGas t
