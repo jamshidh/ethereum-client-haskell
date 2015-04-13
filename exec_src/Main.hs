@@ -126,11 +126,13 @@ handleMsg m = do
     (Peers thePeers) -> do
       lift $ setPeers thePeers
     BlockHashes blockHashes -> handleNewBlockHashes blockHashes
+    GetBlocks blocks -> do
+      sendMsg $ Blocks []
     Blocks blocks -> do
       handleNewBlocks blocks
     NewBlockPacket block baseDifficulty -> do
-      lift $ addBlocks [block]
-      ifBlockInDBSubmitNextBlock baseDifficulty block
+      handleNewBlocks [block]
+      --ifBlockInDBSubmitNextBlock baseDifficulty block
 
     Status{latestHash=lh, genesisHash=gh} -> do
       genesisBlockHash <- lift getGenesisBlockHash

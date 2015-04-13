@@ -14,11 +14,13 @@ import Data.Maybe
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Blockchain.BlockChain
+import qualified Blockchain.Colors as CL
 import Blockchain.Communication
 import Blockchain.Context
+import Blockchain.Data.BlockDB
 import Blockchain.Data.DataDefs
-import Blockchain.ExtDBs
 import Blockchain.Data.Wire
+import Blockchain.ExtDBs
 import Blockchain.Frame
 
 --import Debug.Trace
@@ -64,8 +66,23 @@ askForSomeBlocks = do
 
 
 handleNewBlocks::[Block]->EthCryptM ContextM ()
+handleNewBlocks [] = error "handleNewBlocks called with empty block list"
 handleNewBlocks blocks = do
-  liftIO $ putStrLn "Submitting new blocks"
-  lift $ addBlocks $ sortBy (compare `on` blockDataNumber . blockBlockData) blocks
-  liftIO $ putStrLn $ show (length blocks) ++ " blocks have been submitted"
-  askForSomeBlocks
+  let orderedBlocks =
+        sortBy (compare `on` blockDataNumber . blockBlockData) blocks
+
+  maybeParentBlock <- lift $ lift $ getBlock (blockDataParentHash $ blockBlockData $ head $ orderedBlocks)
+
+  cxt <- lift get
+
+  case (neededBlockHashes cxt, maybeParentBlock) of
+    ([], Nothing) -> do
+      liftIO $ putStrLn $ CL.red $ "Resynching!!!!!!!!"
+      handleNewBlockHashes [blockHash $ head orderedBlocks]
+    (_, Nothing) ->
+      liftIO $ putStrLn $ CL.red "Warning: a new block has arrived before another block sync is in progress.  This block will be thrown away for now, and re-requested later."
+    (_, Just _) -> do
+      liftIO $ putStrLn "Submitting new blocks"
+      lift $ addBlocks $ sortBy (compare `on` blockDataNumber . blockBlockData) blocks
+      liftIO $ putStrLn $ show (length blocks) ++ " blocks have been submitted"
+      askForSomeBlocks
