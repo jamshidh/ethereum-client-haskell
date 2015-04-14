@@ -883,15 +883,19 @@ call b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' t
   
   nestedVMState <- liftIO $ startingState env
 
-  success <- pay "call value transfer" sender receiveAddress (fromIntegral value')
+  ret <-
+    runVMM callDepth' env (fromIntegral availableGas) $ 
+    if codeAddress > 0 && codeAddress < 5
+      then callPrecompiledContract codeAddress theData
+      else call'
 
-  if success
-    then runVMM callDepth' env (fromIntegral availableGas) $ 
-         if codeAddress > 0 && codeAddress < 5
-         then callPrecompiledContract codeAddress theData
-         else call'
-    else return (Left InsufficientFunds, nestedVMState)
-    
+  case ret of
+    r@(Right _, _) -> do
+      success <- pay "call value transfer" sender receiveAddress (fromIntegral value')
+      if success
+        then return ret
+        else return (Left InsufficientFunds, nestedVMState)
+    r -> return r
     
 
 --bool Executive::call(Address _receiveAddress, Address _codeAddress, Address _senderAddress, u256 _value, u256 _gasPrice, bytesConstRef _data, u256 _gas, Address _originAddress)
