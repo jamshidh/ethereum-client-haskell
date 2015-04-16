@@ -40,7 +40,7 @@ setPeers p = do
 
 prefix::Bool->String
 prefix True = CL.green "msg>>>>>: "
-prefix False = CL.red "msg<<<<: "
+prefix False = CL.cyan "msg<<<<: "
        
   
 displayMessage::Bool->Message->ContextM ()
