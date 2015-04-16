@@ -16,7 +16,6 @@ import Control.Monad.Trans.Either
 import Control.Monad.Trans.State
 import Data.Bits
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as BC
 import Data.Char
 import Data.Function
 import Data.Functor
@@ -37,7 +36,6 @@ import Blockchain.DB.CodeDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
 import Blockchain.ExtWord
-import Blockchain.Format
 import Blockchain.SHA
 import Blockchain.Util
 import Blockchain.VM.Code
@@ -770,9 +768,6 @@ runCodeFromStart = do
 
   runCode 0
 
-
-
-
 runVMM::Int->Environment->Integer->VMM a->ContextM (Either VMException a, VMState)
 runVMM callDepth' env availableGas f = do
   vmState <- liftIO $ startingState env
@@ -814,7 +809,7 @@ create b callDepth' sender origin value' gasPrice' availableGas newAddress init'
   vmState <- liftIO $ startingState env
 
   success <- 
-    if fromIntegral value' > 0
+    if toInteger value' > 0
     then do
     --This next line will actually create the account addressState data....
     --In the extremely unlikely even that the address already exists, it will preserve
@@ -851,11 +846,11 @@ create' = do
 
   where
     assignCode::B.ByteString->Address->VMM ()
-    assignCode codeBytes' address = do
+    assignCode codeBytes' address' = do
       lift $ lift $ lift $ addCode codeBytes'
-      newAddressState <- lift $ lift $ lift $ getAddressState address
+      newAddressState <- lift $ lift $ lift $ getAddressState address'
       lift $ lift $ lift $
-        putAddressState address newAddressState{addressStateCodeHash=hash codeBytes'}
+        putAddressState address' newAddressState{addressStateCodeHash=hash codeBytes'}
 
 
 
@@ -881,8 +876,6 @@ call b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' t
           }
 
   
-  nestedVMState <- liftIO $ startingState env
-
   success <- pay "call value transfer" sender receiveAddress (fromIntegral value')
 
   ret <-
@@ -892,12 +885,12 @@ call b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' t
       else call'
 
   case ret of
-    ret@(Left _, _) -> do
+    (Left _, _) -> do
       --if there was an error, addressStates were reverted, so the receiveAddress still should
       --have the value, and I can revert without checking for success.
-      pay "revert value transfer" receiveAddress sender (fromIntegral value')
+      _ <- pay "revert value transfer" receiveAddress sender (fromIntegral value')
       return ret
-    ret -> return ret
+    _ -> return ret
 
       
 

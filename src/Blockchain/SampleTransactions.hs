@@ -11,7 +11,6 @@ import Blockchain.Data.Transaction
 import Blockchain.Constants
 import Blockchain.ExtWord
 import Blockchain.JCommand
-import Blockchain.Util
 import Blockchain.VM.Code
 import Blockchain.VM.Labels
 import Blockchain.VM.Opcodes

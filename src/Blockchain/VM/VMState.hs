@@ -35,11 +35,6 @@ data VMException =
   CallStackTooDeep |
   InvalidJump deriving (Show)
 
-addErr::String->Code->VMState->IO VMState
-addErr message' c state = do
-  let (op, _) = getOperationAt c (pc state)
-  return state{vmException=Just $ VMException $ message' ++ " for a call to " ++ show op}
-
 data Memory =
   Memory {
     mVector::V.IOVector Word8,

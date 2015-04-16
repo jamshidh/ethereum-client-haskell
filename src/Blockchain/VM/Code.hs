@@ -32,7 +32,7 @@ getValidJUMPDESTs (Code bytes) =
   map fst $ filter ((== JUMPDEST) . snd) $ getOps bytes 0
   where
     getOps::B.ByteString->Word256->[(Word256, Operation)]
-    getOps bytes p | p > fromIntegral (B.length bytes) = []
+    getOps bytes' p | p > fromIntegral (B.length bytes') = []
     getOps code p = (p, op):getOps code (p+len)
       where
         (op, len) = getOperationAt' code p

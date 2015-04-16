@@ -23,7 +23,7 @@ import Blockchain.Format
 import Blockchain.SHA
 import Blockchain.Util
 
-import Debug.Trace
+--import Debug.Trace
 
 data Capability = ETH Integer | SHH Integer deriving (Show)
 
