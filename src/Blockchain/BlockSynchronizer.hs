@@ -7,6 +7,7 @@ module Blockchain.BlockSynchronizer (
 import Control.Monad.IO.Class
 import Control.Monad.State
 import qualified Data.Binary as Bin
+import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.Function
 import Data.List
@@ -20,16 +21,32 @@ import Blockchain.Context
 import Blockchain.Data.BlockDB
 import Blockchain.Data.DataDefs
 import Blockchain.Data.Wire
+import Blockchain.DBM
 import Blockchain.ExtDBs
 import Blockchain.Frame
+import Blockchain.Data.RLP
 
 --import Debug.Trace
 
 data GetBlockHashesResult = NeedMore SHA | NeededHashes [SHA] deriving (Show)
 
+--Only use for debug purposes, to trick the peer to rerun VM code for a particular block
+debug_blockDBGet::B.ByteString->DBM (Maybe B.ByteString)
+debug_blockDBGet hash = do
+  maybeBlockBytes <- blockDBGet hash
+  case maybeBlockBytes of
+    Nothing -> return Nothing
+    Just blockBytes -> do
+      let theBlock = rlpDecode . rlpDeserialize $ blockBytes
+      if blockDataNumber (blockBlockData theBlock) > 99263
+        then return Nothing
+        else return maybeBlockBytes
+
+
 findFirstHashAlreadyInDB::[SHA]->ContextM (Maybe SHA)
 findFirstHashAlreadyInDB hashes = do
   items <- lift $ filterM (fmap (not . isNothing) . blockDBGet . BL.toStrict . Bin.encode) hashes
+  --items <- lift $ filterM (fmap (not . isNothing) . debug_blockDBGet . BL.toStrict . Bin.encode) hashes
   return $ safeHead items
   where
     safeHead::[a]->Maybe a
