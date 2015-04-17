@@ -251,7 +251,7 @@ addTransactions b blockGas (t@SignedTransaction{unsignedTransaction=ut}:rest) = 
   result <- runEitherT $ addTransaction b blockGas t
   after <- liftIO $ getPOSIXTime 
 
-  liftIO $ putStrLn $ CL.magenta "    |" ++ " Δt = " ++ printf "%.2f" (realToFrac $ after - before::Double) ++ "s                                                             " ++ CL.magenta "|"
+  liftIO $ putStrLn $ CL.magenta "    |" ++ " t = " ++ printf "%.2f" (realToFrac $ after - before::Double) ++ "s                                                              " ++ CL.magenta "|"
   liftIO $ putStrLn $ CL.magenta "    =========================================================================="
 
   remainingBlockGas <-
