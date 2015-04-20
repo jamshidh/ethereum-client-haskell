@@ -6,6 +6,8 @@ module Blockchain.Data.Wire (
   wireMessage2Obj
   ) where
 
+import Crypto.Types.PubKey.ECC
+import qualified Data.ByteString as B
 import Data.Functor
 import Data.List
 import Data.Word
@@ -19,6 +21,7 @@ import Blockchain.Data.DataDefs
 import Blockchain.Data.Peer
 import Blockchain.Data.RLP
 import Blockchain.Data.SignedTransaction
+import Blockchain.ExtWord
 import Blockchain.Format
 import Blockchain.SHA
 import Blockchain.Util
@@ -94,7 +97,7 @@ terminationReasonToNumber OtherSubprotocolReason = 0x0c
 
 
 data Message =
-  Hello { version::Int, clientId::String, capability::[Capability], port::Int, nodeId::Word512 } |
+  Hello { version::Int, clientId::String, capability::[Capability], port::Int, nodeId::Point } |
   Disconnect TerminationReason |
   Ping |
   Pong |
@@ -113,6 +116,9 @@ data Message =
   QqqqPacket |
   WhisperProtocolVersion Int deriving (Show)
 
+instance Format Point where
+  format (Point x y) = padZeros 64 (showHex x "") ++ padZeros 64 (showHex y "")
+
 instance Format Message where
   format Hello{version=ver, clientId=c, capability=cap, port=p, nodeId=n} =
     CL.blue "Hello" ++
@@ -120,7 +126,7 @@ instance Format Message where
       "    cliendId: " ++ show c ++ "\n" ++
       "    capability: " ++ intercalate ", " (show <$> cap) ++ "\n" ++
       "    port: " ++ show p ++ "\n" ++
-      "    nodeId: " ++ take 20 (padZeros 64 (showHex n "")) ++ "...."
+      "    nodeId: " ++ take 20 (format n) ++ "...."
   format (Disconnect reason) = CL.blue "Disconnect" ++ "(" ++ show reason ++ ")"
   format Ping = CL.blue "Ping"
   format Pong = CL.blue "Pong"
@@ -162,9 +168,17 @@ instance Format Message where
   format (WhisperProtocolVersion ver) = CL.blue "WhisperProtocolVersion " ++ show ver
 
 
+instance RLPSerializable Point where
+  rlpEncode (Point x y) =
+    rlpEncode $ B.pack $ (word256ToBytes $ fromInteger x) ++ (word256ToBytes $ fromInteger y)
+  rlpDecode o =
+    Point (toInteger $ bytesToWord256 $ B.unpack x) (toInteger $ bytesToWord256 $ B.unpack y)
+    where
+      (x, y) = B.splitAt 32 $ rlpDecode o
+
 obj2WireMessage::Word8->RLPObject->Message
 obj2WireMessage 0x0 (RLPArray [ver, cId, RLPArray cap, p, nId]) =
-  Hello (fromInteger $ rlpDecode ver) (rlpDecode cId) (rlpDecode <$> cap) (fromInteger $ rlpDecode p) $ rlp2Word512 nId
+  Hello (fromInteger $ rlpDecode ver) (rlpDecode cId) (rlpDecode <$> cap) (fromInteger $ rlpDecode p) (rlpDecode nId)
 obj2WireMessage 0x1 (RLPArray [reason]) =
   Disconnect (numberToTerminationReason $ rlpDecode reason)
 obj2WireMessage 0x2 (RLPArray []) = Ping
@@ -226,7 +240,7 @@ wireMessage2Obj Hello { version = ver,
            rlpEncode cId,
            RLPArray $ rlpEncode <$> cap,
            rlpEncode $ toInteger p,
-           word5122RLP nId
+           rlpEncode nId
           ])
 wireMessage2Obj (Disconnect reason) = (0x0, RLPArray [rlpEncode $ terminationReasonToNumber reason])
 wireMessage2Obj Ping = (0x2, RLPArray [])
