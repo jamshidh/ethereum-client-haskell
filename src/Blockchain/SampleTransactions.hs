@@ -4,11 +4,13 @@ module Blockchain.SampleTransactions where
 import Prelude  hiding (EQ)
 
 import qualified Data.ByteString as B
+import Network.Haskoin.Internals hiding (Address)
 
 import Blockchain.Data.Address
 import Blockchain.Data.Code
 import Blockchain.Data.Transaction
 import Blockchain.Constants
+import Blockchain.ExtendedECDSA
 import Blockchain.ExtWord
 import Blockchain.JCommand
 import Blockchain.VM.Code
@@ -17,28 +19,16 @@ import Blockchain.VM.Opcodes
 
 --import Debug.Trace
 
-createContract::Integer->Integer->Code->Transaction
-createContract val gl code = ContractCreationTX  {
-  tNonce = 0,
-  gasPrice = 0x9184e72a000,
-  tGasLimit = gl,
-  value = val,
-  tInit = code
-  }
+createContract::Monad m=>Integer->Integer->Code->PrvKey->SecretT m Transaction
+createContract val gl code prvKey = 
+    createContractCreationTX 0 0x9184e72a000 gl val code prvKey
 
-createMessage::Integer->Integer->Address->B.ByteString->Transaction
-createMessage val gl toAddr theData = MessageTX  {
-  tNonce = 0,
-  gasPrice = 0x9184e72a000,
-  tGasLimit = gl,
-  to = toAddr,
-  value = val,
-  tData = theData
-  }
+createMessage::Monad m=>Integer->Integer->Address->B.ByteString->PrvKey->SecretT m Transaction
+createMessage val gl toAddr theData prvKey = createMessageTX 0 0x9184e72a000 gl toAddr val theData prvKey
 
 ----------------------
 
-simpleTX::Transaction
+simpleTX::Monad m=>PrvKey->SecretT m Transaction
 simpleTX =
   createContract 0 550
   $ compile
@@ -51,7 +41,7 @@ simpleTX =
       RETURN
     ]
 
-outOfGasTX::Transaction
+outOfGasTX::Monad m=>PrvKey->SecretT m Transaction
 outOfGasTX =
   createContract 3 522
   $ compile
@@ -61,7 +51,7 @@ outOfGasTX =
       MSTORE
     ]
 
-simpleStorageTX::Transaction
+simpleStorageTX::Monad m=>PrvKey->SecretT m Transaction
 simpleStorageTX =
   createContract 3 1000
   $ compile 
@@ -76,7 +66,7 @@ createInit initFunc contract = -- trace (intercalate "-" $ show <$> contract) $
 --                               trace (intercalate "\n    " $ fmap show $ snd $ jcompile $ initFunc ++ [ReturnCode contract]) $  do
   compile $ lcompile $ snd $ jcompile $ initFunc ++ [ReturnCode $ compile $ lcompile $ snd $ jcompile contract]
 
-createContractTX::Transaction
+createContractTX::Monad m=>PrvKey->SecretT m Transaction
 createContractTX =
   createContract (1000*finney) 1000
   $ createInit []
@@ -84,14 +74,14 @@ createContractTX =
      PermStorage (Number 0) :=: Input 0
     ]
 
-sendMessageTX::Transaction
+sendMessageTX::Monad m=>PrvKey->SecretT m Transaction
 sendMessageTX =
   createMessage (1000*finney) 1000 (Address 0x9f840fe058ce3d84e319b8c747accc1e52f69426)
-  (B.pack $ word256ToBytes 0x1234)
+                    (B.pack $ word256ToBytes 0x1234)
 
 
 
-paymentContract::Transaction
+paymentContract::Monad m=>PrvKey->SecretT m Transaction
 paymentContract =
   createContract (1000*finney) 2000
                      $ createInit
@@ -114,7 +104,7 @@ paymentContract =
                               ]
                            )
 
-sendCoinTX::Transaction
+sendCoinTX::Monad m=>PrvKey->SecretT m Transaction
 sendCoinTX =
   createMessage 0 2000 (Address 0x9f840fe058ce3d84e319b8c747accc1e52f69426)
   (B.pack $ word256ToBytes 0x1 ++ word256ToBytes 500)
@@ -122,7 +112,7 @@ sendCoinTX =
 
 
 
-keyValuePublisher::Transaction
+keyValuePublisher::Monad m=>PrvKey->SecretT m Transaction
 keyValuePublisher = 
   createContract (1000*finney) 2000
                      $ createInit
@@ -148,10 +138,11 @@ keyValuePublisher =
                            )
 
 
-sendKeyVal::Transaction
-sendKeyVal =
+sendKeyVal::Monad m=>PrvKey->SecretT m Transaction
+sendKeyVal prvKey =
   createMessage 0 2000 (Address 0x9f840fe058ce3d84e319b8c747accc1e52f69426)
-  (B.pack $ word256ToBytes 1000 ++ word256ToBytes 2000 ++ word256ToBytes 1234 ++ word256ToBytes 1)
+                    (B.pack $ word256ToBytes 1000 ++ word256ToBytes 2000 ++ word256ToBytes 1234 ++ word256ToBytes 1)
+                    prvKey
 
 
 
@@ -600,11 +591,6 @@ mysteryCode =
     CALLCODE
   ]
 
-createMysteryContract::Transaction
-createMysteryContract = ContractCreationTX  {
-  tNonce = 0,
-  gasPrice = 0x9184e72a000,
-  tGasLimit = 8000,
-  value = 0,
-  tInit = compile mysteryCode
-  }
+createMysteryContract::Monad m=>PrvKey->SecretT m Transaction
+createMysteryContract prvKey = 
+    createContractCreationTX  0 0x9184e72a000 8000 0 (compile mysteryCode) prvKey

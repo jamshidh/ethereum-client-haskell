@@ -18,7 +18,8 @@ import Blockchain.Data.BlockDB
 import Blockchain.Data.DataDefs
 import Blockchain.Data.Peer
 import Blockchain.Data.RLP
-import Blockchain.Data.SignedTransaction
+import Blockchain.Data.Transaction
+import Blockchain.ExtWord
 import Blockchain.Format
 import Blockchain.SHA
 import Blockchain.Util
@@ -102,7 +103,7 @@ data Message =
   Peers [Peer] |
   Status { protocolVersion::Int, networkID::String, totalDifficulty::Int, latestHash::SHA, genesisHash:: SHA } |
   QqqqStatus Int |
-  Transactions [SignedTransaction] | 
+  Transactions [Transaction] | 
   GetBlocks [SHA] |
   Blocks [Block] |
   BlockHashes [SHA] |
@@ -164,7 +165,7 @@ instance Format Message where
 
 obj2WireMessage::Word8->RLPObject->Message
 obj2WireMessage 0x0 (RLPArray [ver, cId, RLPArray cap, p, nId]) =
-  Hello (fromInteger $ rlpDecode ver) (rlpDecode cId) (rlpDecode <$> cap) (fromInteger $ rlpDecode p) $ rlp2Word512 nId
+  Hello (fromInteger $ rlpDecode ver) (rlpDecode cId) (rlpDecode <$> cap) (fromInteger $ rlpDecode p) $ rlpDecode nId
 obj2WireMessage 0x1 (RLPArray [reason]) =
   Disconnect (numberToTerminationReason $ rlpDecode reason)
 obj2WireMessage 0x2 (RLPArray []) = Ping
@@ -226,7 +227,7 @@ wireMessage2Obj Hello { version = ver,
            rlpEncode cId,
            RLPArray $ rlpEncode <$> cap,
            rlpEncode $ toInteger p,
-           word5122RLP nId
+           rlpEncode nId
           ])
 wireMessage2Obj (Disconnect reason) = (0x0, RLPArray [rlpEncode $ terminationReasonToNumber reason])
 wireMessage2Obj Ping = (0x2, RLPArray [])

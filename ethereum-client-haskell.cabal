@@ -41,6 +41,7 @@ executable ethereumH
                  , ethereum-encryption
                  , ethereum-merkle-patricia-db
                  , ethereum-rlp
+                 , ethereum-util
                  , filepath
                  , haskoin
                  , leveldb-haskell
@@ -77,6 +78,7 @@ library
                  , ethereum-encryption
                  , ethereum-merkle-patricia-db
                  , ethereum-rlp
+                 , ethereum-util
                  , filepath
                  , haskoin
                  , IfElse
@@ -104,7 +106,6 @@ library
                    Blockchain.JCommand
                    Blockchain.PeerUrls
                    Blockchain.SampleTransactions
-                   Blockchain.SigningTools
                    Blockchain.VM.Code
                    Blockchain.VM.Environment
                    Blockchain.VM.Labels
