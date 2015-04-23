@@ -151,15 +151,15 @@ readAndOutput = do
   handleMsg msg
   readAndOutput
   
-mkHello::IO Message
-mkHello = do
-  peerId <- getEntropy 64
+mkHello::Point->IO Message
+mkHello peerId = do
+  --let peerId = B.replicate 64 0xFF -- getEntropy 64
   return Hello {
                version = 3,
                clientId = "Ethereum(G)/v0.6.4//linux/Haskell",
                capability = [ETH ethVersion], -- , SHH shhVersion],
                port = 30303,
-               nodeId = fromIntegral $ byteString2Integer peerId
+               nodeId = peerId
              }
 
 {-
@@ -180,7 +180,6 @@ doit = do
     liftIO $ putStrLn "Connected"
 
     lift $ lift $ addCode B.empty --This is probably a bad place to do this, but I can't think of a more natural place to do it....  Empty code is used all over the place, and it needs to be in the database.
-    sendMsg =<< (liftIO mkHello)
     lift (lift . setStateRoot . blockDataStateRoot . blockBlockData =<< getBestBlock)
 
   --signedTx <- createTransaction simpleTX
@@ -206,6 +205,8 @@ doit = do
 
     readAndOutput
 
+theCurve::Curve
+theCurve = getCurveByName SEC_p256k1
 
 
 main::IO ()    
@@ -232,6 +233,9 @@ main = do
       cxt <- openDBs "h"
       _ <- flip runStateT cxt $
            flip runStateT (Context [] 0 [] False) $
-           runEthCryptM myPriv otherPubKey ipAddress (fromIntegral thePort) doit
+           runEthCryptM myPriv otherPubKey ipAddress (fromIntegral thePort) $ do
+             let myPublic = calculatePublic theCurve myPriv
+             sendMsg =<< liftIO (mkHello myPublic)
+             doit
       return ()
 
