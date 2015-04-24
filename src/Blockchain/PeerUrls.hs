@@ -12,6 +12,7 @@ ipAddresses =
     ("poc-9.ethdev.com", 30303),
     ("poc-8.ethdev.com", 30303),
     ("api.blockapps.net", 30303),
+    ("gav.ethdev.com", 30303),
     ("207.12.89.180", 30303),
     ("24.90.136.85", 40404), 
     ("185.43.109.23", 30303),
