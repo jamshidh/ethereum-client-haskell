@@ -821,9 +821,22 @@ create b callDepth' sender origin value' gasPrice' availableGas newAddress init'
     pay "transfer value" sender newAddress $ fromIntegral value'
     else return True
 
-  if success
-    then runVMM callDepth' env availableGas create'
-    else return (Left InsufficientFunds, vmState)
+  ret <- 
+    if success
+      then runVMM callDepth' env availableGas create'
+      else return (Left InsufficientFunds, vmState)
+
+
+  case ret of
+    (Left _, _) -> do
+      --if there was an error, addressStates were reverted, so the receiveAddress still should
+      --have the value, and I can revert without checking for success.
+      _ <- pay "revert value transfer" newAddress sender (fromIntegral value')
+      lift $ deleteAddressState newAddress
+      return ret
+    _ -> return ret
+
+
 
 create'::VMM Code
 create' = do

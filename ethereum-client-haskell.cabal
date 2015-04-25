@@ -57,7 +57,7 @@ executable ethereumH
                  , ethereum-client-haskell
     main-is: Main.hs
     C-sources: fastNonceFinder/nonceFinder.c
-    ghc-options: -Wall -O2 -j8
+    ghc-options: -Wall -O2
     buildable: True
     hs-source-dirs: exec_src
 
@@ -118,7 +118,7 @@ library
                    Blockchain.VM.VMState
                    Blockchain.VM
     C-sources: fastNonceFinder/nonceFinder.c
-    ghc-options: -Wall -O2 -j8
+    ghc-options: -Wall -O2
     buildable: True
     hs-source-dirs: src
 
