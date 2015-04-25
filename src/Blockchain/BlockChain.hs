@@ -38,7 +38,6 @@ import Blockchain.Data.BlockDB
 import Blockchain.Data.Code
 import Blockchain.Data.DataDefs
 import Blockchain.Data.RLP
-import Blockchain.Data.SignedTransaction
 import Blockchain.Data.Transaction
 import Blockchain.Database.MerklePatricia
 import Blockchain.DB.CodeDB
@@ -49,7 +48,6 @@ import Blockchain.ExtDBs
 import Blockchain.Format
 import Blockchain.Data.GenesisBlock
 import Blockchain.SHA
-import Blockchain.SigningTools
 import Blockchain.VM
 import Blockchain.VM.Code
 import Blockchain.VM.OpcodePrices
@@ -126,20 +124,20 @@ checkValidity b = do
 
 
 runCodeForTransaction::Block->Integer->Address->Address->Transaction->ContextM (Either VMException B.ByteString, VMState)
-runCodeForTransaction b availableGas tAddr newAddress ut@ContractCreationTX{} = do
+runCodeForTransaction b availableGas tAddr newAddress ut | isContractCreationTX ut = do
   whenM isDebugEnabled $ liftIO $ putStrLn "runCodeForTransaction: ContractCreationTX"
 
   (result, vmState) <-
-    create b 0 tAddr tAddr (value ut) (gasPrice ut) availableGas newAddress (tInit ut)
+    create b 0 tAddr tAddr (transactionValue ut) (transactionGasPrice ut) availableGas newAddress (transactionInit ut)
 
   return (const B.empty <$> result, vmState)
 
-runCodeForTransaction b availableGas tAddr owner ut@MessageTX{} = do
-  whenM isDebugEnabled $ liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ to ut)
+runCodeForTransaction b availableGas tAddr owner ut | isMessageTX ut = do
+  whenM isDebugEnabled $ liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ transactionTo ut)
 
   call b 0 owner owner tAddr
-          (fromIntegral $ value ut) (fromIntegral $ gasPrice ut)
-          (tData ut) (fromIntegral availableGas) tAddr
+          (fromIntegral $ transactionValue ut) (fromIntegral $ transactionGasPrice ut)
+          (transactionData ut) (fromIntegral availableGas) tAddr
 
 
 
@@ -149,18 +147,20 @@ addBlocks::[Block]->ContextM ()
 addBlocks blocks = 
   forM_ blocks addBlock
 
-isTransactionValid::SignedTransaction->ContextM Bool
+isTransactionValid::Transaction->ContextM Bool
 isTransactionValid t = do
   addressState <- lift $ getAddressState $ whoSignedThisTransaction t
-  return (addressStateNonce addressState == tNonce (unsignedTransaction t))
+  return $ addressStateNonce addressState == transactionNonce t
 
 codeOrDataLength::Transaction->Int
-codeOrDataLength MessageTX{tData=d} = B.length d
-codeOrDataLength ContractCreationTX{tInit=d} = codeLength d
+codeOrDataLength t | isMessageTX t = B.length $ transactionData t
+codeOrDataLength t | isContractCreationTX t = codeLength $ transactionInit t
 
 zeroBytesLength::Transaction->Int
-zeroBytesLength MessageTX{tData=d} = length $ filter (==0) $ B.unpack d
-zeroBytesLength ContractCreationTX{tInit=Code d} = length $ filter (==0) $ B.unpack d
+zeroBytesLength t | isMessageTX t = length $ filter (==0) $ B.unpack $ transactionData t
+zeroBytesLength t | isContractCreationTX t = length $ filter (==0) $ B.unpack codeBytes
+                  where
+                    Code codeBytes = transactionInit t
 
 intrinsicGas::Transaction->Integer
 intrinsicGas t = gTXDATAZERO * zeroLen + gTXDATANONZERO * (fromIntegral (codeOrDataLength t) - zeroLen) + gTX
@@ -168,55 +168,54 @@ intrinsicGas t = gTXDATAZERO * zeroLen + gTXDATANONZERO * (fromIntegral (codeOrD
       zeroLen = fromIntegral $ zeroBytesLength t
 --intrinsicGas t@ContractCreationTX{} = 5 * (fromIntegral (codeOrDataLength t)) + 500
 
-addTransaction::Block->Integer->SignedTransaction->EitherT String ContextM (VMState, Integer)
-addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} = do
+addTransaction::Block->Integer->Transaction->EitherT String ContextM (VMState, Integer)
+addTransaction b remainingBlockGas t = do
   valid <- lift $ isTransactionValid t
 
   let tAddr = whoSignedThisTransaction t
 
-  let intrinsicGas' = intrinsicGas ut
+  let intrinsicGas' = intrinsicGas t
   whenM (lift isDebugEnabled) $
     liftIO $ do
-      putStrLn $ "bytes cost: " ++ show (gTXDATAZERO * (fromIntegral $ zeroBytesLength ut) + gTXDATANONZERO * (fromIntegral (codeOrDataLength ut) - (fromIntegral $ zeroBytesLength ut)))
+      putStrLn $ "bytes cost: " ++ show (gTXDATAZERO * (fromIntegral $ zeroBytesLength t) + gTXDATANONZERO * (fromIntegral (codeOrDataLength t) - (fromIntegral $ zeroBytesLength t)))
       putStrLn $ "transaction cost: " ++ show gTX
       putStrLn $ "intrinsicGas: " ++ show (intrinsicGas')
 
   addressState <- lift $ lift $ getAddressState tAddr
 
-  when (tGasLimit ut * gasPrice ut + value ut > addressStateBalance addressState) $ left "sender doesn't have high enough balance"
-  when (intrinsicGas' > tGasLimit ut) $ left "intrinsic gas higher than transaction gas limit"
-  when (tGasLimit ut > remainingBlockGas) $ left "block gas has run out"
+  when (transactionGasLimit t * transactionGasPrice t + transactionValue t > addressStateBalance addressState) $ left "sender doesn't have high enough balance"
+  when (intrinsicGas' > transactionGasLimit t) $ left "intrinsic gas higher than transaction gas limit"
+  when (transactionGasLimit t > remainingBlockGas) $ left "block gas has run out"
   when (not valid) $ left "nonce incorrect"
 
-  let availableGas = tGasLimit ut - intrinsicGas'    
+  let availableGas = transactionGasLimit t - intrinsicGas'    
 
   theAddress <-
-    case ut of
-      ContractCreationTX{} -> do
-        lift $ getNewAddress tAddr
-      MessageTX{} -> do
-        lift $ incrementNonce tAddr
-        return $ to ut
+    if isContractCreationTX t
+    then lift $ getNewAddress tAddr
+    else do
+      lift $ incrementNonce tAddr
+      return $ transactionTo t
   
-  success <- lift $ addToBalance tAddr (-tGasLimit ut * gasPrice ut)
+  success <- lift $ addToBalance tAddr (-transactionGasLimit t * transactionGasPrice t)
 
   whenM (lift isDebugEnabled) $ liftIO $ putStrLn "running code"
 
   if success
       then do
-        (result, newVMState') <- lift $ runCodeForTransaction b (tGasLimit ut - intrinsicGas') tAddr theAddress ut
+        (result, newVMState') <- lift $ runCodeForTransaction b (transactionGasLimit t - intrinsicGas') tAddr theAddress t
 
-        lift $ addToBalance (blockDataCoinbase $ blockBlockData b) (tGasLimit ut * gasPrice ut)
+        lift $ addToBalance (blockDataCoinbase $ blockBlockData b) (transactionGasLimit t * transactionGasPrice t)
         
         case result of
           Left e -> do
             whenM (lift isDebugEnabled) $ liftIO $ putStrLn $ CL.red $ show e
-            return (newVMState'{vmException = Just e}, remainingBlockGas - tGasLimit ut)
+            return (newVMState'{vmException = Just e}, remainingBlockGas - transactionGasLimit t)
           Right x -> do
             let realRefund =
-                  min (refund newVMState') ((tGasLimit ut - vmGasRemaining newVMState') `div` 2)
+                  min (refund newVMState') ((transactionGasLimit t - vmGasRemaining newVMState') `div` 2)
 
-            success <- lift $ pay "VM refund fees" (blockDataCoinbase $ blockBlockData b) tAddr ((realRefund + vmGasRemaining newVMState') * gasPrice ut)
+            success <- lift $ pay "VM refund fees" (blockDataCoinbase $ blockBlockData b) tAddr ((realRefund + vmGasRemaining newVMState') * transactionGasPrice t)
 
             when (not success) $ error "oops, refund was too much"
 
@@ -224,28 +223,28 @@ addTransaction b remainingBlockGas t@SignedTransaction{unsignedTransaction=ut} =
             forM_ (suicideList newVMState') $ lift . lift . deleteAddressState
 
 
-            return (newVMState', remainingBlockGas - (tGasLimit ut - realRefund - vmGasRemaining newVMState'))
+            return (newVMState', remainingBlockGas - (transactionGasLimit t - realRefund - vmGasRemaining newVMState'))
       else do
-        lift $ addToBalance (blockDataCoinbase $ blockBlockData b) (intrinsicGas' * gasPrice ut)
+        lift $ addToBalance (blockDataCoinbase $ blockBlockData b) (intrinsicGas' * transactionGasPrice t)
         addressState <- lift $ lift $ getAddressState tAddr
-        liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*gasPrice ut) ++ ", have " ++ show (addressStateBalance addressState)
+        liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*transactionGasPrice t) ++ ", have " ++ show (addressStateBalance addressState)
         return (VMState{vmException=Just InsufficientFunds, vmGasRemaining=0, refund=0, debugCallCreates=Nothing, suicideList=[], logs=[], returnVal=Nothing}, remainingBlockGas)
 
       
-addTransactions::Block->Integer->[SignedTransaction]->ContextM ()
+addTransactions::Block->Integer->[Transaction]->ContextM ()
 addTransactions _ _ [] = return ()
-addTransactions b blockGas (t@SignedTransaction{unsignedTransaction=ut}:rest) = do
+addTransactions b blockGas (t:rest) = do
   let tAddr = whoSignedThisTransaction t
-  nonce <- lift $ fmap addressStateNonce $ getAddressState $ whoSignedThisTransaction t
+  nonce <- lift $ fmap addressStateNonce $ getAddressState tAddr
   liftIO $ putStrLn $ CL.magenta "    =========================================================================="
   liftIO $ putStrLn $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " |"
   liftIO $ putStrLn $ CL.magenta "    |    " ++
     (
-      case ut of
-        (MessageTX _ _ _ to _ _) -> "MessageTX to " ++ show (pretty to) ++ "              "
-        (ContractCreationTX _ _ _ _ _) ->
-          "Create Contract "  ++ show (pretty $ getNewAddress_unsafe tAddr nonce)
+      if isMessageTX t
+      then "MessageTX to " ++ show (pretty $ transactionTo t) ++ "              "
+      else "Create Contract "  ++ show (pretty $ getNewAddress_unsafe tAddr nonce)
     ) ++ CL.magenta " |"
+
 
   before <- liftIO $ getPOSIXTime 
   result <- runEitherT $ addTransaction b blockGas t
@@ -281,6 +280,7 @@ addBlock b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
         addToBalance
           (blockDataCoinbase uncle)
           ((rewardBase*(8+blockDataNumber uncle - blockDataNumber bd )) `quot` 8)
+
 
       let transactions = blockReceiptTransactions b
 

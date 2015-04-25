@@ -20,7 +20,7 @@ import Blockchain.Data.BlockDB
 import Blockchain.Data.DataDefs
 import Blockchain.Data.Peer
 import Blockchain.Data.RLP
-import Blockchain.Data.SignedTransaction
+import Blockchain.Data.Transaction
 import Blockchain.ExtWord
 import Blockchain.Format
 import Blockchain.SHA
@@ -105,7 +105,7 @@ data Message =
   Peers [Peer] |
   Status { protocolVersion::Int, networkID::String, totalDifficulty::Int, latestHash::SHA, genesisHash:: SHA } |
   QqqqStatus Int |
-  Transactions [SignedTransaction] | 
+  Transactions [Transaction] | 
   GetBlocks [SHA] |
   Blocks [Block] |
   BlockHashes [SHA] |
