@@ -492,9 +492,13 @@ runOperation CALL = do
   (result, maybeBytes) <-
     case (callDepth' > 1023, fromIntegral value > addressStateBalance addressState, debugCallCreates vmState) of
       (True, _, _) -> do
+        liftIO $ putStrLn $ CL.red "Call stack too deep."
         addGas $ fromIntegral gas
         return (0, Nothing)
-      (_, True, _) -> return (0, Nothing)
+      (_, True, _) -> do
+        liftIO $ putStrLn $ CL.red "Not enough ether to transfer the value."
+        addGas $ fromIntegral $ gas + fromIntegral stipend
+        return (0, Nothing)
       (_, _, Nothing) -> do
         nestedRun_debugWrapper (fromIntegral gas + stipend) to to owner value inputData 
       (_, _, Just _) -> do
