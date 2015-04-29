@@ -13,6 +13,7 @@ import Crypto.Random
 import qualified Data.ByteString as B
 import Data.Time.Clock
 import Network.Haskoin.Crypto hiding (Address)
+import Numeric
 import System.Entropy
 import System.Environment
 
@@ -227,7 +228,9 @@ main = do
 
   liftIO $ putStrLn $ "Attempting to connect to " ++ show ipAddress ++ ":" ++ show thePort
   
-  otherPubKey <- liftIO $ getServerPubKey ipAddress thePort
+  otherPubKey@(Point x y) <- liftIO $ getServerPubKey ipAddress thePort
+
+  putStrLn $ "server public key is : " ++ showHex x "" ++ showHex y ""
 
   runResourceT $ do
       cxt <- openDBs "h"
