@@ -18,8 +18,10 @@ import Control.Monad.IfElse
 import Control.Monad.IO.Class
 import Control.Monad.State
 import Control.Monad.Trans.Resource
+import qualified Data.Vector as V
 import System.Directory
 import System.FilePath
+import System.IO
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
 
 import Blockchain.Constants
@@ -33,6 +35,8 @@ import qualified Blockchain.Database.MerklePatricia as MPDB
 import Blockchain.ExtWord
 import Blockchain.SHA
 import Blockchain.Util
+import Cache
+import Constants
 import qualified Data.NibbleString as N
 
 --import Debug.Trace
@@ -42,6 +46,7 @@ data Context =
     neededBlockHashes::[SHA],
     pingCount::Int,
     peers::[Peer],
+    miningCache::Cache,
     debugEnabled::Bool
     }
 
@@ -52,14 +57,19 @@ isDebugEnabled = do
   cxt <- get
   return $ debugEnabled cxt 
 
-initContext::String->ResourceT IO Context
+initContext::String->IO Context
 initContext theType = do
-  homeDir <- liftIO getHomeDirectory                     
-  liftIO $ createDirectoryIfMissing False $ homeDir </> dbDir theType
+  liftIO $ putStr "Creating mining cache.... "
+  hFlush stdout
+  cache <- mkCache (cacheSize 0) "seed"
+  liftIO $ putStrLn "Finished"
+  homeDir <- getHomeDirectory                     
+  createDirectoryIfMissing False $ homeDir </> dbDir theType
   return $ Context
       []
       0
       []
+      cache
       False
 
 getStorageKeyVal'::Address->Word256->ContextM Word256

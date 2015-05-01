@@ -82,6 +82,7 @@ library
                  , ethereum-util
                  , filepath
                  , haskoin
+                 , hminer
                  , IfElse
                  , leveldb-haskell
                  , mtl
@@ -105,6 +106,7 @@ library
                    Blockchain.DB.ModifyStateDB
                    Blockchain.Display
                    Blockchain.JCommand
+                   Blockchain.Mining
                    Blockchain.PeerUrls
                    Blockchain.SampleTransactions
                    Blockchain.VM.Code

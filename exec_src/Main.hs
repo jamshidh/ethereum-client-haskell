@@ -16,6 +16,7 @@ import Network.Haskoin.Crypto hiding (Address)
 import Numeric
 import System.Entropy
 import System.Environment
+import System.IO
 
 import Blockchain.Frame
 import Blockchain.UDP
@@ -226,16 +227,21 @@ main = do
   let g = cprgCreate entropyPool :: SystemRNG
       (myPriv, _) = generatePrivate g $ getCurveByName SEC_p256k1
 
-  liftIO $ putStrLn $ "Attempting to connect to " ++ show ipAddress ++ ":" ++ show thePort
-  
-  otherPubKey@(Point x y) <- liftIO $ getServerPubKey ipAddress thePort
+  putStrLn $ "Attempting to connect to " ++ show ipAddress ++ ":" ++ show thePort
 
-  putStrLn $ "server public key is : " ++ showHex x "" ++ showHex y ""
+  putStr "Obtaining server public key....  "
+  hFlush stdout
+  otherPubKey@(Point x y) <- liftIO $ getServerPubKey ipAddress thePort
+  putStrLn "Obtained"
+
+  putStrLn $ "server public key is: " ++ showHex x "" ++ showHex y ""
+
+  cxt <- initContext "h"
 
   runResourceT $ do
-      cxt <- openDBs "h"
-      _ <- flip runStateT cxt $
-           flip runStateT (Context [] 0 [] False) $
+      dbs <- openDBs "h"
+      _ <- flip runStateT dbs $
+           flip runStateT cxt $
            runEthCryptM myPriv otherPubKey ipAddress (fromIntegral thePort) $ do
              let myPublic = calculatePublic theCurve myPriv
              sendMsg =<< liftIO (mkHello myPublic)
