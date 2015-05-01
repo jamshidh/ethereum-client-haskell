@@ -88,7 +88,8 @@ submitNextBlock::Integer->Block->EthCryptM ContextM ()
 submitNextBlock baseDifficulty b = do
         ts <- liftIO getCurrentTime
         newBlock <- lift $ getNextBlock b ts
-        n <- liftIO $ fastFindNonce newBlock
+        --n <- liftIO $ fastFindNonce newBlock
+        n <- liftIO $ return $ fastFindNonce newBlock
 
         --let theBytes = headerHashWithoutNonce newBlock `B.append` B.pack (integer2Bytes n)
         let theNewBlock = addNonceToBlock newBlock n

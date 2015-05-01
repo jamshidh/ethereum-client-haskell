@@ -43,8 +43,9 @@ executable ethereumH
                  , ethereum-rlp
                  , ethereum-util
                  , filepath
-                 , haskoin
-                 , leveldb-haskell
+                 , haskoin == 0.1.0.2
+                 --, leveldb-haskell
+                 , leveldb-ghcjs
                  , mtl
                  , network
                  , nibblestring
@@ -56,9 +57,10 @@ executable ethereumH
                  , ansi-wl-pprint
                  , ethereum-client-haskell
     main-is: Main.hs
-    C-sources: fastNonceFinder/nonceFinder.c
+  --  C-sources: fastNonceFinder/nonceFinder.c
     ghc-options: -Wall -O2
     buildable: True
+    extra-libraries: pthread
     hs-source-dirs: exec_src
 
 library
@@ -81,9 +83,10 @@ library
                  , ethereum-rlp
                  , ethereum-util
                  , filepath
-                 , haskoin
+                 , haskoin == 0.1.0.2
                  , IfElse
-                 , leveldb-haskell
+                 --, leveldb-haskell
+                 , leveldb-ghcjs
                  , mtl
                  , network
                  , nibblestring
@@ -132,3 +135,9 @@ Test-Suite test-ethereumH
                     , test-framework-hunit
                     , HUnit
                     , containers
+                    , transformers
+                    , resourcet
+                    , bytestring
+                    , data-default
+                    , nibblestring
+                    
