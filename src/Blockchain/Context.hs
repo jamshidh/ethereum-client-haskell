@@ -18,6 +18,7 @@ import Control.Monad.IfElse
 import Control.Monad.IO.Class
 import Control.Monad.State
 import Control.Monad.Trans.Resource
+import qualified Data.ByteString as B
 import qualified Data.Vector as V
 import System.Directory
 import System.FilePath
@@ -61,7 +62,7 @@ initContext::String->IO Context
 initContext theType = do
   liftIO $ putStr "Creating mining cache.... "
   hFlush stdout
-  cache <- mkCache (cacheSize 0) "seed"
+  cache <- mkCache (cacheSize 0) (B.replicate 32 0)
   liftIO $ putStrLn "Finished"
   homeDir <- getHomeDirectory                     
   createDirectoryIfMissing False $ homeDir </> dbDir theType
