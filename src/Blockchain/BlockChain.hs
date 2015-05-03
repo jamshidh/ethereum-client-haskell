@@ -47,6 +47,7 @@ import Blockchain.Constants
 import Blockchain.ExtDBs
 import Blockchain.Format
 import Blockchain.Data.GenesisBlock
+import Blockchain.Mining
 import Blockchain.SHA
 import Blockchain.VM
 import Blockchain.VM.Code
@@ -108,7 +109,8 @@ checkValidity b = do
   case maybeParentBlock of
     Just parentBlock -> do
           checkParentChildValidity b parentBlock
-          --unless (nonceIsValid b) $ fail $ "Block nonce is wrong: " ++ format b
+          --nIsValid <- nonceIsValid' b
+          --unless (nIsValid) $ fail $ "Block nonce is wrong: " ++ format b
           unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"
           stateRootExists <- verifyStateRootExists b
           unless stateRootExists $ fail ("Block stateRoot does not exist: " ++ show (pretty $ blockDataStateRoot $ blockBlockData b))
