@@ -235,7 +235,7 @@ wireMessage2Obj Hello { version = ver,
                         capability = cap,
                         port = p,
                         nodeId = nId } =
-  (0x0, RLPArray [
+  (128, RLPArray [
            rlpEncode $ toInteger ver,
            rlpEncode cId,
            RLPArray $ rlpEncode <$> cap,
