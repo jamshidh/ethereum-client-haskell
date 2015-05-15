@@ -49,6 +49,7 @@ import qualified Data.ByteString.Base16 as B16
 import Data.Word
 import Data.Bits
 import Data.Maybe
+import Cache
 
 prvKey::H.PrvKey
 Just prvKey = H.makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
@@ -257,14 +258,17 @@ main = do
   putStrLn $ "my NodeID is: " ++ (show $ B16.encode $ B.pack $ pointToBytes $ hPubKeyToPubKey $ H.derivePubKey prvKey)
     
   otherPubKey@(Point x y) <- liftIO $ getServerPubKey ipAddress thePort
-  
+
+
 --  putStrLn $ "server public key is : " ++ (show otherPubKey)
   putStrLn $ "server public key is : " ++ (show $ B16.encode $ B.pack $ pointToBytes otherPubKey)
+
+  cch <- mkCache 1024 "seed"
   
   runResourceT $ do
       cxt <- openDBs "h"
       _ <- flip runStateT cxt $
-           flip runStateT (Context [] 0 [] False) $
+           flip runStateT (Context [] 0 [] cch  False) $
            runEthCryptM myPriv otherPubKey ipAddress (fromIntegral thePort) $ do
              
               

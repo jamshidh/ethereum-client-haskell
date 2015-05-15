@@ -37,7 +37,7 @@ executable ethereumH
                  , directory
                  , either
                  , entropy
-                 , ethereum-data-leveldb
+                 , ethereum-data-sql
                  , ethereum-encryption
                  , ethereum-merkle-patricia-db
                  , ethereum-rlp
@@ -54,6 +54,7 @@ executable ethereumH
                  , transformers
                  , vector
                  , ansi-wl-pprint
+                 , hminer
                  , ethereum-client-haskell
     main-is: Main.hs
     C-sources: fastNonceFinder/nonceFinder.c
@@ -75,7 +76,7 @@ library
                  , directory
                  , either
                  , entropy
-                 , ethereum-data-leveldb
+                 , ethereum-data-sql
                  , ethereum-encryption
                  , ethereum-merkle-patricia-db
                  , ethereum-rlp
