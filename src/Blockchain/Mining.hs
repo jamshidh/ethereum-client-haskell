@@ -1,6 +1,6 @@
 
 module Blockchain.Mining (
-  nonceIsValid'
+--  nonceIsValid'
   ) where
 
 
@@ -20,7 +20,7 @@ import Hashimoto
 
 import Debug.Trace
 
-
+{-
 powFunc'::Cache->Block->Integer
 powFunc' cache b =
   --trace (show $ headerHashWithoutNonce b) $
@@ -40,3 +40,4 @@ nonceIsValid' b = do
   trace (showHex (powFunc' (miningCache cxt) b) "") $ 
     return $
     powFunc' (miningCache cxt) b * blockDataDifficulty (blockBlockData b) < (2::Integer)^(256::Integer)
+-}
