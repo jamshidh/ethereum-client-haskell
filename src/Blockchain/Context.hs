@@ -30,6 +30,7 @@ import Blockchain.Data.AddressStateDB
 import Blockchain.Data.DataDefs
 import Blockchain.Data.RLP
 import qualified Blockchain.Database.MerklePatricia as MPDB
+import qualified Blockchain.Database.MerklePatricia.Internal as MPDBI
 import Blockchain.ExtWord
 import Blockchain.SHA
 import Blockchain.Util
@@ -67,18 +68,15 @@ getStorageKeyVal' owner key = do
   addressState <- lift $ getAddressState owner
   dbs <- lift get
   let mpdb = (stateDB dbs){MPDB.stateRoot=addressStateContractRoot addressState}
-  vals <- lift $ lift $ MPDB.getKeyVals mpdb (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes key)
-  case vals of
-    [] -> return 0
-    [x] -> return $ fromInteger $ rlpDecode $ rlpDeserialize $ rlpDecode $ snd x
-    _ -> error "Multiple values in storage"
+  vals <- lift $ lift $ MPDB.getKeyVal mpdb (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes key)
+  return $ maybe 0 (fromInteger . rlpDecode . rlpDeserialize . rlpDecode) vals
 
 getAllStorageKeyVals'::Address->ContextM [(MPDB.Key, Word256)]
 getAllStorageKeyVals' owner = do
   addressState <- lift $ getAddressState owner
   dbs <- lift get
   let mpdb = (stateDB dbs){MPDB.stateRoot=addressStateContractRoot addressState}
-  kvs <- lift $ lift $ MPDB.unsafeGetKeyVals mpdb ""
+  kvs <- lift $ lift $ MPDBI.unsafeGetAllKeyVals mpdb
   return $ map (fmap $ fromInteger . rlpDecode . rlpDeserialize . rlpDecode) kvs
 
 putStorageKeyVal'::Address->Word256->Word256->ContextM ()

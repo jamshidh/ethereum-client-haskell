@@ -15,7 +15,7 @@ import qualified Data.ByteString.Base16 as B16
 import Data.Functor
 import Data.Time.Clock.POSIX
 
-import Blockchain.Database.MerklePatricia
+import Blockchain.Database.MerklePatricia.Internal
 
 import Blockchain.Constants
 import Blockchain.Context
