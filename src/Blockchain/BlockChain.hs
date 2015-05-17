@@ -53,7 +53,7 @@ import Blockchain.VM.Code
 import Blockchain.VM.OpcodePrices
 import Blockchain.VM.VMState
 
---import Debug.Trace
+import Debug.Trace
 
 {-
 initializeBlockChain::ContextM ()
@@ -163,7 +163,10 @@ zeroBytesLength t | isContractCreationTX t = length $ filter (==0) $ B.unpack co
                     Code codeBytes = transactionInit t
 
 intrinsicGas::Transaction->Integer
-intrinsicGas t = gTXDATAZERO * zeroLen + gTXDATANONZERO * (fromIntegral (codeOrDataLength t) - zeroLen) + gTX
+intrinsicGas t
+  = (opGasItemPrice TXDATAZERO) * zeroLen +
+    (opGasItemPrice TXDATANONZERO) * (fromIntegral (codeOrDataLength t) - zeroLen)
+    + (opGasItemPrice TXBASE)
     where
       zeroLen = fromIntegral $ zeroBytesLength t
 --intrinsicGas t@ContractCreationTX{} = 5 * (fromIntegral (codeOrDataLength t)) + 500
@@ -177,9 +180,14 @@ addTransaction b remainingBlockGas t = do
   let intrinsicGas' = intrinsicGas t
   whenM (lift isDebugEnabled) $
     liftIO $ do
-      putStrLn $ "bytes cost: " ++ show (gTXDATAZERO * (fromIntegral $ zeroBytesLength t) + gTXDATANONZERO * (fromIntegral (codeOrDataLength t) - (fromIntegral $ zeroBytesLength t)))
-      putStrLn $ "transaction cost: " ++ show gTX
-      putStrLn $ "intrinsicGas: " ++ show (intrinsicGas')
+      putStrLn $ "bytes cost: " ++
+        (show $
+        (opGasItemPrice TXDATAZERO) * (fromIntegral $ zeroBytesLength t) +
+        (opGasItemPrice TXDATANONZERO) *
+        (fromIntegral (codeOrDataLength t) -
+         (fromIntegral $ zeroBytesLength t)))
+      putStrLn $ "transaction cost: " ++ (show $ opGasItemPrice TXBASE)
+      putStrLn $ "intrinsicGas: " ++ (show (intrinsicGas'))
 
   addressState <- lift $ lift $ getAddressState tAddr
 
@@ -196,7 +204,7 @@ addTransaction b remainingBlockGas t = do
     else do
       lift $ incrementNonce tAddr
       return $ transactionTo t
-  
+
   success <- lift $ addToBalance tAddr (-transactionGasLimit t * transactionGasPrice t)
 
   whenM (lift isDebugEnabled) $ liftIO $ putStrLn "running code"
