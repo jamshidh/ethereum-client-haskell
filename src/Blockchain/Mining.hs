@@ -4,6 +4,7 @@ module Blockchain.Mining (
   ) where
 
 
+import Control.Monad.IO.Class
 import Control.Monad.Trans.State
 import qualified Data.ByteString as B
 
@@ -21,11 +22,10 @@ import Hashimoto
 import Debug.Trace
 
 
-powFunc'::Cache->Block->Integer
+powFunc'::Cache->Block->IO Integer
 powFunc' cache b =
   --trace (show $ headerHashWithoutNonce b) $
-  byteString2Integer $
-  snd $
+  fmap (byteString2Integer . snd) $
   hashimoto
       (headerHashWithoutNonce b)
       (B.pack $ word64ToBytes $ blockDataNonce $ blockBlockData b)
@@ -37,6 +37,14 @@ powFunc' cache b =
 nonceIsValid'::Block->ContextM Bool
 nonceIsValid' b = do
   cxt <- get
-  trace (showHex (powFunc' (miningCache cxt) b) "") $ 
-    return $
-    powFunc' (miningCache cxt) b * blockDataDifficulty (blockBlockData b) < (2::Integer)^(256::Integer)
+
+  val <- liftIO $ powFunc' (miningCache cxt) b
+
+  liftIO $ putStrLn (showHex val "") 
+  liftIO $ putStrLn (showHex (
+                        val *
+                        blockDataDifficulty (blockBlockData b)
+                        ) "")
+
+
+  return $ val * blockDataDifficulty (blockBlockData b) < (2::Integer)^(256::Integer)
