@@ -19,7 +19,7 @@ import System.Environment
 import System.IO
 
 import Blockchain.Frame
-import Blockchain.UDP
+import Blockchain.UDP hiding (Ping, Pong)
 import Blockchain.RLPx
 
 import Blockchain.BlockChain
@@ -140,7 +140,7 @@ handleMsg m = do
       genesisBlockHash <- lift getGenesisBlockHash
       when (gh /= genesisBlockHash) $ error "Wrong genesis block hash!!!!!!!!"
       handleNewBlockHashes [lh]
-    GetTransactions -> do
+    (GetTransactions transactions) -> do
       sendMsg $ Transactions []
       --liftIO $ sendMessage handle GetTransactions
       return ()

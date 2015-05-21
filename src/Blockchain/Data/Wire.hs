@@ -110,7 +110,7 @@ data Message =
   Blocks [Block] |
   BlockHashes [SHA] |
   GetBlockHashes { parentSHAs::[SHA], numChildItems::Integer } |
-  GetTransactions |
+  GetTransactions [SHA] |
   NewBlockPacket Block Integer |
   PacketCount Integer |
   QqqqPacket |
@@ -164,7 +164,7 @@ instance Format Message where
   format (PacketCount c) =
     CL.blue "PacketCount:" ++ show c
   format QqqqPacket = CL.blue "QqqqPacket"
-  format GetTransactions = CL.blue "GetTransactions"
+  format (GetTransactions transactions) = CL.blue "GetTransactions"  ++ tab("\n" ++ intercalate "\n    " (show . pretty <$> transactions))
   format (WhisperProtocolVersion ver) = CL.blue "WhisperProtocolVersion " ++ show ver
 
 
@@ -197,7 +197,8 @@ obj2WireMessage 0x10 (RLPArray [ver, nID, d, lh, gh]) =
 obj2WireMessage 0x10 (RLPArray [ver]) = 
     QqqqStatus $ fromInteger $ rlpDecode ver
 
-obj2WireMessage 0x11 (RLPArray []) = GetTransactions
+obj2WireMessage 0x11 (RLPArray transactions) =
+  GetTransactions $ rlpDecode <$> transactions
 obj2WireMessage 0x12 (RLPArray transactions) =
   Transactions $ rlpDecode <$> transactions
 
@@ -250,7 +251,7 @@ wireMessage2Obj (Peers peers) = (0x5, RLPArray $ (rlpEncode <$> peers))
 wireMessage2Obj (Status ver nID d lh gh) =
     (0x10, RLPArray [rlpEncode $ toInteger ver, rlpEncode nID, rlpEncode $ toInteger d, rlpEncode lh, rlpEncode gh])
 wireMessage2Obj (QqqqStatus ver) = (0x10, RLPArray [rlpEncode $ toInteger ver])
-wireMessage2Obj GetTransactions = (0x11, RLPArray [])
+wireMessage2Obj (GetTransactions transactions) = (0x11, RLPArray (rlpEncode <$> transactions))
 wireMessage2Obj (Transactions transactions) = (0x12, RLPArray (rlpEncode <$> transactions))
 wireMessage2Obj (GetBlockHashes pSHAs numChildren) = 
     (0x13, RLPArray $ (rlpEncode <$> pSHAs) ++ [rlpEncode numChildren])
