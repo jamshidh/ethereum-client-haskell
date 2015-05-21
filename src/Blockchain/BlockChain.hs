@@ -119,7 +119,7 @@ checkValidity b = do
           checkParentChildValidity b parentBlock
           nIsValid <- nonceIsValid' b
           liftIO $ print nIsValid
-          unless nIsValid $ fail $ "Block nonce is wrong: " ++ format b
+          --unless nIsValid $ fail $ "Block nonce is wrong: " ++ format b
           unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"
           stateRootExists <- verifyStateRootExists b
           unless stateRootExists $ fail ("Block stateRoot does not exist: " ++ show (pretty $ blockDataStateRoot $ blockBlockData b))

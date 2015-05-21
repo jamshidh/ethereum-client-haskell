@@ -16,6 +16,7 @@ import qualified Network.Haskoin.Internals as H
 import Numeric
 import System.Entropy
 import System.Environment
+import System.IO.MMap
 
 import Blockchain.Frame
 import Blockchain.UDP hiding (Ping,Pong)
@@ -263,12 +264,14 @@ main = do
 --  putStrLn $ "server public key is : " ++ (show otherPubKey)
   putStrLn $ "server public key is : " ++ (show $ B16.encode $ B.pack $ pointToBytes otherPubKey)
 
-  cch <- mkCache 1024 "seed"
-  
+  --cch <- mkCache 1024 "seed"
+
+  dataset <- mmapFileByteString "dataset0" Nothing
+
   runResourceT $ do
       cxt <- openDBs "h"
       _ <- flip runStateT cxt $
-           flip runStateT (Context [] 0 [] cch  False) $
+           flip runStateT (Context [] 0 [] dataset False) $
            runEthCryptM myPriv otherPubKey ipAddress (fromIntegral thePort) $ do
              
               

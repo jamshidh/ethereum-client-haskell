@@ -44,7 +44,9 @@ executable ethereumH
                  , ethereum-util
                  , filepath
                  , haskoin
+                 , hminer
                  , leveldb-haskell
+                 , mmap
                  , mtl
                  , network
                  , nibblestring
@@ -54,7 +56,6 @@ executable ethereumH
                  , transformers
                  , vector
                  , ansi-wl-pprint
-                 , hminer
                  , ethereum-client-haskell
     main-is: Main.hs
     C-sources: fastNonceFinder/nonceFinder.c
@@ -66,6 +67,7 @@ library
     default-language: Haskell98
     build-depends: 
                    base >= 4 && < 5
+                 , array
                  , base16-bytestring
                  , binary
                  , bytestring
@@ -87,6 +89,7 @@ library
                  , IfElse
                  , leveldb-haskell
                  , mtl
+                 , mmap
                  , network
                  , nibblestring
                  , resourcet
