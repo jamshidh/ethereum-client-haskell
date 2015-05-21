@@ -76,6 +76,12 @@ nextDifficulty oldDifficulty oldTime newTime = max nextDiff' minimumDifficulty
 nextGasLimit::Integer->Integer->Integer
 nextGasLimit oldGasLimit oldGasUsed = max (max 125000 3141592) ((oldGasLimit * 1023 + oldGasUsed *6 `quot` 5) `quot` 1024)
 
+nextGasLimitDelta::Integer->Integer
+nextGasLimitDelta oldGasLimit  = oldGasLimit `div` 1024
+
+minGasLimit::Integer
+minGasLimit = 125000
+
 checkUnclesHash::Block->Bool
 checkUnclesHash b = blockDataUnclesHash (blockBlockData b) == hash (rlpSerialize $ RLPArray (rlpEncode <$> blockBlockUncles b))
 
@@ -99,7 +105,9 @@ checkParentChildValidity Block{blockBlockData=c} Block{blockBlockData=p} = do
              $ fail $ "Block difficulty is wrong: got '" ++ show (blockDataDifficulty c) ++ "', expected '" ++ show (nextDifficulty (blockDataDifficulty p) (blockDataTimestamp p) (blockDataTimestamp c)) ++ "'"
     unless (blockDataNumber c == blockDataNumber p + 1) 
              $ fail $ "Block number is wrong: got '" ++ show (blockDataNumber c) ++ ", expected '" ++ show (blockDataNumber p + 1) ++ "'"
-    unless (blockDataGasLimit c == nextGasLimit (blockDataGasLimit p) (blockDataGasUsed p))
+    unless ((blockDataGasLimit c <= (blockDataGasLimit p) +  (nextGasLimitDelta (blockDataGasLimit p)))
+            && (blockDataGasLimit c >= ((blockDataGasLimit p) - (nextGasLimitDelta (blockDataGasLimit p))))
+            && (blockDataGasLimit c >= minGasLimit))
              $ fail $ "Block gasLimit is wrong: got '" ++ show (blockDataGasLimit c) ++ "', expected '" ++ show (nextGasLimit (blockDataGasLimit p) (blockDataGasUsed p)) ++ "'"
     return ()
 

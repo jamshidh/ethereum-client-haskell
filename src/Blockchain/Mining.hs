@@ -1,6 +1,6 @@
 
 module Blockchain.Mining (
-  nonceIsValid'
+--  nonceIsValid'
   ) where
 
 
@@ -20,7 +20,6 @@ import Dataset
 import Hashimoto
 
 import Debug.Trace
-
 
 powFunc'::Cache->Block->IO Integer
 powFunc' cache b =
