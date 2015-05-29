@@ -64,7 +64,7 @@ initContext::String->IO Context
 initContext theType = do
   liftIO $ putStr "Loading mining cache.... "
   hFlush stdout
-  dataset <- mmapFileByteString "dataset0" Nothing
+  dataset <- return "" -- mmapFileByteString "dataset0" Nothing
   liftIO $ putStrLn "Finished"
   homeDir <- getHomeDirectory                     
   createDirectoryIfMissing False $ homeDir </> dbDir theType
