@@ -271,7 +271,7 @@ main = do
 
   --cch <- mkCache 1024 "seed"
 
-  dataset <- mmapFileByteString "dataset0" Nothing
+  dataset <- return "" -- mmapFileByteString "dataset0" Nothing
 
   runResourceT $ do
       cxt <- openDBs "h"
