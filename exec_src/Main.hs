@@ -237,12 +237,17 @@ main::IO ()
 main = do
   args <- getArgs
 
-  let serverNum =
-        case args of
-          (arg:_) -> arg
-          [] -> "1" --Just default to poc-9.ethdev.com
+  let serverInfo =
+          case args of
+            [] -> ["1"] --Just default to poc-9.ethdev.com
+            x -> x
 
-  let (ipAddress, thePort) = ipAddresses !! read serverNum
+  let (ipAddress, thePort) = ipAddresses !! (read . head $ serverInfo)
+
+  let usePort =
+          case serverInfo of
+            [_] -> thePort
+            [_, prt] -> fromIntegral $ read prt
 
   entropyPool <- liftIO createEntropyPool
 
@@ -253,12 +258,12 @@ main = do
 --  putStrLn $ "my pubkey is: " ++ show myPublic
   putStrLn $ "my pubkey is: " ++ (show $ B16.encode $ B.pack $ pointToBytes myPublic)
   
-  liftIO $ putStrLn $ "Attempting to connect to " ++ show ipAddress ++ ":" ++ show thePort
+  liftIO $ putStrLn $ "Attempting to connect to " ++ show ipAddress ++ ":" ++ show usePort
 
 --  putStrLn $ "my UDP pubkey is: " ++ (show $ H.derivePubKey $ prvKey)
   putStrLn $ "my NodeID is: " ++ (show $ B16.encode $ B.pack $ pointToBytes $ hPubKeyToPubKey $ H.derivePubKey prvKey)
     
-  otherPubKey@(Point x y) <- liftIO $ getServerPubKey ipAddress thePort
+  otherPubKey@(Point x y) <- liftIO $ getServerPubKey ipAddress usePort
 
 
 --  putStrLn $ "server public key is : " ++ (show otherPubKey)
@@ -272,7 +277,7 @@ main = do
       cxt <- openDBs "h"
       _ <- flip runStateT cxt $
            flip runStateT (Context [] 0 [] dataset False) $
-           runEthCryptM myPriv otherPubKey ipAddress (fromIntegral thePort) $ do
+           runEthCryptM myPriv otherPubKey ipAddress (fromIntegral usePort) $ do
              
               
              sendMsg =<< liftIO (mkHello myPublic)
