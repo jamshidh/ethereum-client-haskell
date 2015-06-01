@@ -48,24 +48,18 @@ sha2 input =
      SHA2.hash SHA2.SHA256 input
 
 callPrecompiledContract::Word160->B.ByteString->VMM B.ByteString
-callPrecompiledContract 0 inputData = return B.empty
-
-callPrecompiledContract 1 inputData = do
-  useGas gECRECOVER
-  return $ ecdsaRecover inputData
-
-callPrecompiledContract 2 inputData = do
-  useGas $ gSHA256BASE + gSHA256WORD*(ceiling $ fromIntegral (B.length inputData)/(32::Double))
-  return $ sha2 inputData
-
-callPrecompiledContract 3 inputData = do
-  useGas $ gRIPEMD160BASE +
-    gRIPEMD160WORD*(ceiling $ fromIntegral (B.length inputData)/(32::Double))
-  return $ ripemd inputData
-
-callPrecompiledContract 4 inputData = do
-  useGas $ gIDENTITYBASE +
-    gIDENTITYWORD*(ceiling $ fromIntegral (B.length inputData)/(32::Double))
-  return inputData
-
-callPrecompiledContract x _ = error $ "missing precompiled contract: " ++ show x
+callPrecompiledContract 0 _ = return B.empty
+callPrecompiledContract n inputData
+  = do
+    useGas gasPrice
+    return $! contractFunc inputData
+    where
+      (gasPrice, contractFunc) =
+        let g = opGasItemPrice
+            inputWords = countBytesToWords (B.length inputData)
+        in case n of
+          1 -> (g ECRECOVER, ecdsaRecover)
+          2 -> (g SHA256BASE    + g SHA256WORD    * inputWords, sha2)
+          3 -> (g RIPEMD160BASE + g RIPEMD160WORD * inputWords, ripemd)
+          4 -> (g IDENTITYBASE  + g IDENTITYWORD  * inputWords, id)
+          m -> error $ "missing precompiled contract: " ++ show m

@@ -49,7 +49,7 @@ import Blockchain.VM.VMState
 import qualified Data.NibbleString as N
 
 
---import Debug.Trace
+import Debug.Trace
 
 bool2Word256::Bool->Word256
 bool2Word256 True = 1
@@ -454,7 +454,7 @@ runOperation CREATE = do
         if addressStateBalance addressState' < fromIntegral value
           then return Nothing
           else do
-          addToBalance' owner (-fromIntegral value)
+          --addToBalance' owner (-fromIntegral value)
           addDebugCallCreate DebugCallCreate {
             ccData=initCodeBytes,
             ccDestination=Nothing,
@@ -483,7 +483,7 @@ runOperation CALL = do
 
   vmState <- lift get
 
-  let stipend = if value > 0 then fromIntegral gCALLSTIPEND  else 0
+  let stipend = if value > 0 then opGasItemPrice CALLSTIPEND else 0
 
   addressState <- lift $ lift $ lift $ getAddressState owner
 
@@ -503,7 +503,7 @@ runOperation CALL = do
         nestedRun_debugWrapper (fromIntegral gas + stipend) to to owner value inputData 
       (_, _, Just _) -> do
         addGas $ fromIntegral stipend
-        addToBalance' owner (-fromIntegral value)
+        --addToBalance' owner (-fromIntegral value)
         addGas $ fromIntegral gas
         addDebugCallCreate DebugCallCreate {
           ccData=inputData,
@@ -536,7 +536,7 @@ runOperation CALLCODE = do
 
   vmState <- lift get
 
-  let stipend = if value > 0 then fromIntegral gCALLSTIPEND  else 0
+  let stipend = if value > 0 then fromIntegral (opGasItemPrice CALLSTIPEND) else 0
 
 --  toAddressExists <- lift $ lift $ lift $ addressStateExists to
 
@@ -562,7 +562,7 @@ runOperation CALLCODE = do
       (_, _, Nothing) -> do
         nestedRun_debugWrapper (fromIntegral gas+stipend) owner to owner value inputData 
       (_, _, Just _) -> do
-        addToBalance' owner (-fromIntegral value)
+        --addToBalance' owner (-fromIntegral value)
         addGas $ fromIntegral stipend
         addGas $ fromIntegral gas
         addDebugCallCreate DebugCallCreate {
@@ -606,102 +606,6 @@ runOperation (MalformedOpcode opcode) = do
 runOperation x = error $ "Missing case in runOperation: " ++ show x
 
 -------------------
-
-opGasPriceAndRefund::Operation->VMM (Integer, Integer)
-
-opGasPriceAndRefund LOG0 = do
-  size <- getStackItem 1::VMM Word256
-  return (gLOG + gLOGDATA * fromIntegral size, 0)
-opGasPriceAndRefund LOG1 = do
-  size <- getStackItem 1::VMM Word256
-  return (gLOG + gLOGTOPIC + gLOGDATA * fromIntegral size, 0)
-opGasPriceAndRefund LOG2 = do
-  size <- getStackItem 1::VMM Word256
-  return (gLOG + 2*gLOGTOPIC + gLOGDATA * fromIntegral size, 0)
-opGasPriceAndRefund LOG3 = do
-  size <- getStackItem 1::VMM Word256
-  return (gLOG + 3*gLOGTOPIC + gLOGDATA * fromIntegral size, 0)
-opGasPriceAndRefund LOG4 = do
-  size <- getStackItem 1::VMM Word256
-  return (gLOG + 4*gLOGTOPIC + gLOGDATA * fromIntegral size, 0)
-
-opGasPriceAndRefund SHA3 = do
-  size <- getStackItem 1::VMM Word256
-  return (30+6*ceiling(fromIntegral size/(32::Double)), 0)
-
-opGasPriceAndRefund EXP = do
-    e <- getStackItem 1::VMM Word256
-    if e == 0
-      then return (gEXPBASE, 0)
-      else return (gEXPBASE + gEXPBYTE*bytesNeeded e, 0)
-
-    where
-      bytesNeeded::Word256->Integer
-      bytesNeeded 0 = 0
-      bytesNeeded x = 1+bytesNeeded (x `shiftR` 8)
-
-
-opGasPriceAndRefund CALL = do
-  gas <- getStackItem 0::VMM Word256
-  to <- getStackItem 1::VMM Word256
-  val <- getStackItem 2::VMM Word256
-
-  toAccountExists <- lift $ lift $ lift $ addressStateExists $ Address $ fromIntegral to
-
-  return $ (
-    fromIntegral gas +
-    fromIntegral gCALL +
-    (if toAccountExists then 0 else fromIntegral gCALLNEWACCOUNT) +
---                       (if toAccountExists || to < 5 then 0 else gCALLNEWACCOUNT) +
-    (if val > 0 then fromIntegral gCALLVALUETRANSFER else 0),
-    0)
-
-
-opGasPriceAndRefund CALLCODE = do
-  gas <- getStackItem 0::VMM Word256
---  to <- getStackItem 1::VMM Word256
-  val <- getStackItem 2::VMM Word256
-
---  toAccountExists <- lift $ lift $ lift $ addressStateExists $ Address $ fromIntegral to
-
-  return $ (fromIntegral $
-                fromIntegral gas +
-                fromIntegral gCALL +
---                (if toAccountExists then 0 else gCALLNEWACCOUNT) +
-                (if val > 0 then gCALLVALUETRANSFER else 0),
-            0)
-
-
-opGasPriceAndRefund CODECOPY = do
-    size <- getStackItem 2::VMM Word256
-    return (gCODECOPYBASE + gCOPYWORD * ceiling (fromIntegral size / (32::Double)), 0)
-opGasPriceAndRefund CALLDATACOPY = do
-    size <- getStackItem 2::VMM Word256
-    return (gCALLDATACOPYBASE + gCOPYWORD * ceiling (fromIntegral size / (32::Double)), 0)
-opGasPriceAndRefund EXTCODECOPY = do
-    size <- getStackItem 3::VMM Word256
-    return (gEXTCODECOPYBASE + gCOPYWORD * ceiling (fromIntegral size / (32::Double)), 0)
-opGasPriceAndRefund SSTORE = do
-  p <- getStackItem 0
-  val <- getStackItem 1
-  oldVal <- getStorageKeyVal p
-  case (oldVal, val) of
-      (0, x) | x /= (0::Word256) -> return (20000, 0)
-      (x, 0) | x /= 0 -> return (5000, 15000)
-      _ -> return (5000, 0)
-opGasPriceAndRefund SUICIDE = return (0, 24000)
-
-{-opGasPriceAndRefund RETURN = do
-  size <- getStackItem 1
-
-  return (gTXDATANONZERO*size, 0)-}
-
-opGasPriceAndRefund x = return (opGasPrice x, 0)
-
---missing stuff
---Glog 1 Partial payment for a LOG operation.
---Glogdata 1 Paid for each byte in a LOG operation’s data.
---Glogtopic 1 Paid for each topic of a LOG operation.
 
 nibbleString2ByteString::N.NibbleString->B.ByteString
 nibbleString2ByteString (N.EvenNibbleString s) = s
@@ -781,17 +685,19 @@ runVMM callDepth' env availableGas f = do
       flip runStateT vmState{callDepth=callDepth', vmGasRemaining=availableGas} $
       runEitherT f
 
-  case result of
-      (Left e, _) -> do
+  result' <-
+    case result of
+      (ex@(Left e), state) -> do
         liftIO $ putStrLn $ CL.red $ "Exception caught (" ++ show e ++ "), reverting state"
         cxtAfter <- lift get
         lift $ put cxtAfter{stateDB=stateDB cxtBefore}
-      _ -> return ()
+        return (ex, state{logs=[], suicideList=[]})
+      _ -> return result
 
 
   whenM isDebugEnabled $ liftIO $ putStrLn "VM has finished running"
 
-  return result
+  return result'
 
 --bool Executive::create(Address _sender, u256 _endowment, u256 _gasPrice, u256 _gas, bytesConstRef _init, Address _origin)
 
@@ -826,16 +732,15 @@ create b callDepth' sender origin value' gasPrice' availableGas newAddress init'
       then runVMM callDepth' env availableGas create'
       else return (Left InsufficientFunds, vmState)
 
-
   case ret of
-    (Left _, _) -> do
-      --if there was an error, addressStates were reverted, so the receiveAddress still should
-      --have the value, and I can revert without checking for success.
-      _ <- pay "revert value transfer" newAddress sender (fromIntegral value')
+    (ex@(Left _), state) -> do
+      --if there was an error, addressStates were reverted, so the newAddress
+      --still should have the value, and I can revert without checking for success.
+      pay "revert value transfer" newAddress sender (fromIntegral value')
       lift $ deleteAddressState newAddress
-      return ret
+      -- Remaining gas becomes zero!  What a punishment.
+      return (ex, state{vmGasRemaining = 0})
     _ -> return ret
-
 
 
 create'::VMM Code
@@ -851,13 +756,14 @@ create' = do
   whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ "Result: " ++ show codeBytes'
 
   
-  if vmGasRemaining vmState < gCREATEDATA * toInteger (B.length codeBytes')
+  if vmGasRemaining vmState < (opGasItemPrice CREATEDATA) * toInteger (B.length codeBytes')
     then do
       liftIO $ putStrLn $ CL.red "Not enough ether to create contract, contract being thrown away (account was created though)"
       assignCode "" owner
+      setReturnVal (Just "")
       return $ Code ""
     else do
-      useGas $ gCREATEDATA * toInteger (B.length codeBytes')
+      useGas $ (opGasItemPrice CREATEDATA) * toInteger (B.length codeBytes')
       assignCode codeBytes' owner
       return $ Code codeBytes'
 
@@ -874,7 +780,7 @@ create' = do
 --bool Executive::call(Address _receiveAddress, Address _codeAddress, Address _senderAddress, u256 _value, u256 _gasPrice, bytesConstRef _data, u256 _gas, Address _originAddress)
 
 call::Block->Int->Address->Address->Address->Word256->Word256->B.ByteString->Integer->Address->ContextM (Either VMException B.ByteString, VMState)
-call b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' theData availableGas origin = do
+call b callDepth' receiveAddress cA@(Address codeAddress) sender value' gasPrice' theData availableGas origin = do
 
   addressState <- lift $ getAddressState $ Address codeAddress
   code <- lift $ Code <$> fromMaybe B.empty <$> getCode (addressStateCodeHash addressState)
@@ -891,7 +797,11 @@ call b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' t
           envCode = code,
           envJumpDests = getValidJUMPDESTs code
           }
-
+        
+  addrExists <-
+    if codeAddress > 4
+    then return True
+    else lift $ addressStateExists cA
   
   success <- pay "call value transfer" sender receiveAddress (fromIntegral value')
 
@@ -906,6 +816,10 @@ call b callDepth' receiveAddress (Address codeAddress) sender value' gasPrice' t
       --if there was an error, addressStates were reverted, so the receiveAddress still should
       --have the value, and I can revert without checking for success.
       _ <- pay "revert value transfer" receiveAddress sender (fromIntegral value')
+      _ <-
+        if not addrExists
+        then lift $ deleteAddressState cA
+        else return ()
       return ret
     _ -> return ret
 

@@ -59,7 +59,6 @@ pop = do
                 return $ fromWord256 val
     _ -> left StackTooSmallException 
 
-
 getStackItem::Word256Storable a=>Int->VMM a
 getStackItem i = do
   state' <- lift get
@@ -70,7 +69,10 @@ getStackItem i = do
 push::Word256Storable a=>a->VMM ()
 push val = do
   state' <- lift get
-  lift $ put state'{stack = toWord256 val:stack state'}
+  let newStack = toWord256 val:stack state'
+  if length newStack > 1024
+    then left $ VMException "Stack exceeded maximum size of 1024"
+    else lift $ put state'{stack = newStack}
 
 addDebugCallCreate::DebugCallCreate->VMM ()
 addDebugCallCreate callCreate = do
