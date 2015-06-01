@@ -20,11 +20,12 @@ import Blockchain.Communication
 import Blockchain.Context
 import Blockchain.Data.BlockDB
 import Blockchain.Data.DataDefs
+import Blockchain.Data.RLP
 import Blockchain.Data.Wire
 import Blockchain.DBM
 import Blockchain.ExtDBs
 import Blockchain.Frame
-import Blockchain.Data.RLP
+import Blockchain.SHA
 
 --import Debug.Trace
 

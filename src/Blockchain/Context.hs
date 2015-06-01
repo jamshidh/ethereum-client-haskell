@@ -18,8 +18,12 @@ import Control.Monad.IfElse
 import Control.Monad.IO.Class
 import Control.Monad.State
 import Control.Monad.Trans.Resource
+import qualified Data.ByteString as B
+import qualified Data.Vector as V
 import System.Directory
 import System.FilePath
+import System.IO
+import System.IO.MMap
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
 
 import Blockchain.Constants
@@ -30,10 +34,12 @@ import Blockchain.Data.AddressStateDB
 import Blockchain.Data.DataDefs
 import Blockchain.Data.RLP
 import qualified Blockchain.Database.MerklePatricia as MPDB
-import qualified Blockchain.Database.MerklePatricia.Internal as MPDBI
+import qualified Blockchain.Database.MerklePatricia.Internal as MPDB
 import Blockchain.ExtWord
 import Blockchain.SHA
 import Blockchain.Util
+import Cache
+import Constants
 import qualified Data.NibbleString as N
 
 --import Debug.Trace
@@ -43,6 +49,7 @@ data Context =
     neededBlockHashes::[SHA],
     pingCount::Int,
     peers::[Peer],
+    miningDataset::B.ByteString,
     debugEnabled::Bool
     }
 
@@ -53,14 +60,19 @@ isDebugEnabled = do
   cxt <- get
   return $ debugEnabled cxt 
 
-initContext::String->ResourceT IO Context
+initContext::String->IO Context
 initContext theType = do
-  homeDir <- liftIO getHomeDirectory                     
-  liftIO $ createDirectoryIfMissing False $ homeDir </> dbDir theType
+  liftIO $ putStr "Loading mining cache.... "
+  hFlush stdout
+  dataset <- return "" -- mmapFileByteString "dataset0" Nothing
+  liftIO $ putStrLn "Finished"
+  homeDir <- getHomeDirectory                     
+  createDirectoryIfMissing False $ homeDir </> dbDir theType
   return $ Context
       []
       0
       []
+      dataset
       False
 
 getStorageKeyVal'::Address->Word256->ContextM Word256
@@ -68,15 +80,17 @@ getStorageKeyVal' owner key = do
   addressState <- lift $ getAddressState owner
   dbs <- lift get
   let mpdb = (stateDB dbs){MPDB.stateRoot=addressStateContractRoot addressState}
-  vals <- lift $ lift $ MPDB.getKeyVal mpdb (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes key)
-  return $ maybe 0 (fromInteger . rlpDecode . rlpDeserialize . rlpDecode) vals
+  maybeVal <- lift $ lift $ MPDB.getKeyVal mpdb (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes key)
+  case maybeVal of
+    Nothing -> return 0
+    Just x -> return $ fromInteger $ rlpDecode $ rlpDeserialize $ rlpDecode x
 
 getAllStorageKeyVals'::Address->ContextM [(MPDB.Key, Word256)]
 getAllStorageKeyVals' owner = do
   addressState <- lift $ getAddressState owner
   dbs <- lift get
   let mpdb = (stateDB dbs){MPDB.stateRoot=addressStateContractRoot addressState}
-  kvs <- lift $ lift $ MPDBI.unsafeGetAllKeyVals mpdb
+  kvs <- lift $ lift $ MPDB.unsafeGetAllKeyVals mpdb
   return $ map (fmap $ fromInteger . rlpDecode . rlpDeserialize . rlpDecode) kvs
 
 putStorageKeyVal'::Address->Word256->Word256->ContextM ()

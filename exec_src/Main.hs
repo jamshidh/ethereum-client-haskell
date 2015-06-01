@@ -12,14 +12,17 @@ import Crypto.Types.PubKey.ECC
 import Crypto.Random
 import qualified Data.ByteString as B
 import Data.Time.Clock
-import Network.Haskoin.Crypto hiding (Address)
+import qualified Network.Haskoin.Internals as H
+import Numeric
 import System.Entropy
 import System.Environment
+import System.IO.MMap
 
 import Blockchain.Frame
-import Blockchain.UDP
+import Blockchain.UDP hiding (Ping,Pong)
 import Blockchain.RLPx
 
+import Blockchain.Data.RLP
 import Blockchain.BlockChain
 import Blockchain.BlockSynchronizer
 import Blockchain.Communication
@@ -41,11 +44,16 @@ import Blockchain.PeerUrls
 import Blockchain.SHA
 --import Blockchain.SigningTools
 import Blockchain.Util
-
+import qualified Data.ByteString.Base16 as B16
 --import Debug.Trace
 
-prvKey::PrvKey
-Just prvKey = makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
+import Data.Word
+import Data.Bits
+import Data.Maybe
+import Cache
+
+prvKey::H.PrvKey
+Just prvKey = H.makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
 
 getNextBlock::Block->UTCTime->ContextM Block
 getNextBlock b ts = do
@@ -138,7 +146,7 @@ handleMsg m = do
       genesisBlockHash <- lift getGenesisBlockHash
       when (gh /= genesisBlockHash) $ error "Wrong genesis block hash!!!!!!!!"
       handleNewBlockHashes [lh]
-    GetTransactions -> do
+    (GetTransactions transactions) -> do
       sendMsg $ Transactions []
       --liftIO $ sendMessage handle GetTransactions
       return ()
@@ -154,14 +162,16 @@ readAndOutput = do
 mkHello::Point->IO Message
 mkHello peerId = do
   --let peerId = B.replicate 64 0xFF -- getEntropy 64
-  return Hello {
-               version = 3,
+  let hello = Hello {
+               version = 4,
                clientId = "Ethereum(G)/v0.6.4//linux/Haskell",
                capability = [ETH ethVersion], -- , SHH shhVersion],
-               port = 30303,
+               port = 0,
                nodeId = peerId
              }
-
+--  putStrLn $ show $ wireMessage2Obj hello
+--  putStrLn $ show $ rlpSerialize $ snd (wireMessage2Obj hello)
+  return hello
 {-
 createTransaction::Transaction->ContextM SignedTransaction
 createTransaction t = do
@@ -174,6 +184,13 @@ createTransactions transactions = do
     forM (zip transactions [userNonce..]) $ \(t, n) -> do
       liftIO $ withSource devURandom $ signTransaction prvKey t{tNonce=n}
 -}
+
+intToBytes::Integer->[Word8]
+intToBytes x = map (fromIntegral . (x `shiftR`)) [256-8, 256-16..0]
+
+pointToBytes::Point->[Word8]
+pointToBytes (Point x y) = intToBytes x ++ intToBytes y
+pointToBytes PointO = error "pointToBytes got value PointO, I don't know what to do here"
 
 doit::EthCryptM ContextM ()
 doit = do
@@ -209,33 +226,62 @@ theCurve::Curve
 theCurve = getCurveByName SEC_p256k1
 
 
+hPubKeyToPubKey::H.PubKey->Point
+hPubKeyToPubKey (H.PubKey hPoint) = Point (fromIntegral x) (fromIntegral y)
+  where
+    x = fromMaybe (error "getX failed in prvKey2Address") $ H.getX hPoint
+    y = fromMaybe (error "getY failed in prvKey2Address") $ H.getY hPoint
+hPubKeyToPubKey (H.PubKeyU _) = error "PubKeyU not supported in hPubKeyToPUbKey yet"
+
 main::IO ()    
 main = do
   args <- getArgs
 
-  let serverNum =
-        case args of
-          (arg:_) -> arg
-          [] -> "1" --Just default to poc-8.ethdev.com
+  let serverInfo =
+          case args of
+            [] -> ["1"] --Just default to poc-9.ethdev.com
+            x -> x
 
-  let (ipAddress, thePort) = ipAddresses !! read serverNum
+  let (ipAddress, thePort) = ipAddresses !! (read . head $ serverInfo)
+
+  let usePort =
+          case serverInfo of
+            [_] -> thePort
+            [_, prt] -> fromIntegral $ read prt
 
   entropyPool <- liftIO createEntropyPool
 
   let g = cprgCreate entropyPool :: SystemRNG
       (myPriv, _) = generatePrivate g $ getCurveByName SEC_p256k1
 
-  liftIO $ putStrLn $ "Attempting to connect to " ++ show ipAddress ++ ":" ++ show thePort
+  let myPublic = calculatePublic theCurve myPriv
+--  putStrLn $ "my pubkey is: " ++ show myPublic
+  putStrLn $ "my pubkey is: " ++ (show $ B16.encode $ B.pack $ pointToBytes myPublic)
   
-  otherPubKey <- liftIO $ getServerPubKey ipAddress thePort
+  liftIO $ putStrLn $ "Attempting to connect to " ++ show ipAddress ++ ":" ++ show usePort
+
+--  putStrLn $ "my UDP pubkey is: " ++ (show $ H.derivePubKey $ prvKey)
+  putStrLn $ "my NodeID is: " ++ (show $ B16.encode $ B.pack $ pointToBytes $ hPubKeyToPubKey $ H.derivePubKey prvKey)
+    
+  otherPubKey@(Point x y) <- liftIO $ getServerPubKey ipAddress usePort
+
+
+--  putStrLn $ "server public key is : " ++ (show otherPubKey)
+  putStrLn $ "server public key is : " ++ (show $ B16.encode $ B.pack $ pointToBytes otherPubKey)
+
+  --cch <- mkCache 1024 "seed"
+
+  dataset <- return "" -- mmapFileByteString "dataset0" Nothing
 
   runResourceT $ do
       cxt <- openDBs "h"
       _ <- flip runStateT cxt $
-           flip runStateT (Context [] 0 [] False) $
-           runEthCryptM myPriv otherPubKey ipAddress (fromIntegral thePort) $ do
-             let myPublic = calculatePublic theCurve myPriv
+           flip runStateT (Context [] 0 [] dataset False) $
+           runEthCryptM myPriv otherPubKey ipAddress (fromIntegral usePort) $ do
+             
+              
              sendMsg =<< liftIO (mkHello myPublic)
+          
              doit
       return ()
 

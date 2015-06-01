@@ -492,12 +492,12 @@ runOperation CALL = do
   (result, maybeBytes) <-
     case (callDepth' > 1023, fromIntegral value > addressStateBalance addressState, debugCallCreates vmState) of
       (True, _, _) -> do
+        liftIO $ putStrLn $ CL.red "Call stack too deep."
         addGas $ fromIntegral gas
         return (0, Nothing)
       (_, True, _) -> do
-        addGas $ fromIntegral gas
-        addGas $ fromIntegral stipend
-        whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ CL.red "Insufficient balance"
+        liftIO $ putStrLn $ CL.red "Not enough ether to transfer the value."
+        addGas $ fromIntegral $ gas + fromIntegral stipend
         return (0, Nothing)
       (_, _, Nothing) -> do
         nestedRun_debugWrapper (fromIntegral gas + stipend) to to owner value inputData 
@@ -727,10 +727,10 @@ create b callDepth' sender origin value' gasPrice' availableGas newAddress init'
     pay "transfer value" sender newAddress $ fromIntegral value'
     else return True
 
-  ret <-
+  ret <- 
     if success
-    then runVMM callDepth' env availableGas create'
-    else return (Left InsufficientFunds, vmState)
+      then runVMM callDepth' env availableGas create'
+      else return (Left InsufficientFunds, vmState)
 
   case ret of
     (ex@(Left _), state) -> do
