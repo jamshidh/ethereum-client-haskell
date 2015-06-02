@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, TupleSections #-}
 
 module Blockchain.Data.GenesisBlock (
                       initializeGenesisBlock,
@@ -49,7 +49,6 @@ initializeStateDB::ContextM ()
 initializeStateDB = do
   initializeBlankStateDB
 
-
   let addressInfo =
         [
           (0x0000000000000000000000000000000000000001, 1 * wei),
@@ -65,7 +64,24 @@ initializeStateDB = do
           (0x6c386a4b26f73c802f34673f7248bb118f97424a, 1606938044258990275541962092341162602522202993782792835301376 * wei),
           (0xe4157b34ea9615cfbde6b4fda419828124b70c78, 1606938044258990275541962092341162602522202993782792835301376 * wei)
         ]
-  
+
+  let addresses =
+        [
+          0xaced1ce9bb193d4270acf8738942ac7d008f22b4, -- ace dice, 1b4ad 
+          0xf1abb0d8af6f3de43cf05eb3d9458c95e79f30a0, -- flab bod, 3aa58
+          0xba5e10071204f37931769d7afa454bc82e1eb4cd, -- base 100, 3f30b
+          0xa1e5acc2a0c6efa671d9e27c4faf60f22fc50de0, -- ale sac, cb450
+          0xbade1f4d04f56f13381b6e3dc0e78479fe2563c2, -- bad elf, cb60c
+          0xe1fd1e0689bc35a4b7e531f50f96d77b02149dbc, -- elf die, e78bf
+          0xdad1005e6487a99422b22a9db665e01148add52b, -- dad loose, 78c2db
+          0xfa15efeef38db9ff6f7eb862e3402c66ee0e7951, -- false fee, 1e6392
+          0xfadedcabf08aead902061c146c5458e5bea1ce9f, --faded cab, 2554ba
+          0x5eedfab1e5e0ed81674dc6b503c6c89d413ccbc9, -- seed fable, 675888
+          0x1dea5c01dd17dee05b08c89e0753722f52f6d2f1 -- idea scold, 7e1ada
+        ]
+
+  let addressInfo2 = map (, 1606938044258990275541962092341162602522202993782792835301376*wei) addresses
+
   forM_ addressInfo $ \(address, balance) -> 
     lift $ putAddressState (Address address) blankAddressState{addressStateBalance=balance}
 
