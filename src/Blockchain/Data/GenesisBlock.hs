@@ -49,7 +49,7 @@ initializeStateDB::ContextM ()
 initializeStateDB = do
   initializeBlankStateDB
 
-  let addressInfo =
+  let canonicalAddressInfo =
         [
           (0x0000000000000000000000000000000000000001, 1 * wei),
           (0x0000000000000000000000000000000000000002, 1 * wei),
@@ -65,7 +65,7 @@ initializeStateDB = do
           (0xe4157b34ea9615cfbde6b4fda419828124b70c78, 1606938044258990275541962092341162602522202993782792835301376 * wei)
         ]
 
-  let addresses =
+  let alternateAddresses =
         [
           0xaced1ce9bb193d4270acf8738942ac7d008f22b4, -- ace dice, 1b4ad 
           0xf1abb0d8af6f3de43cf05eb3d9458c95e79f30a0, -- flab bod, 3aa58
@@ -80,8 +80,12 @@ initializeStateDB = do
           0x1dea5c01dd17dee05b08c89e0753722f52f6d2f1 -- idea scold, 7e1ada
         ]
 
-  let addressInfo2 = map (, 1606938044258990275541962092341162602522202993782792835301376*wei) addresses
+  let alternateAddressInfo = map (, 1606938044258990275541962092341162602522202993782792835301376*wei) alternateAddresses
 
+  cxt <- get
+  
+  let addressInfo = if useAlternateGenesisBlock cxt then alternateAddressInfo else canonicalAddressInfo
+  
   forM_ addressInfo $ \(address, balance) -> 
     lift $ putAddressState (Address address) blankAddressState{addressStateBalance=balance}
 

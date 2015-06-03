@@ -276,7 +276,7 @@ main = do
   runResourceT $ do
       cxt <- openDBs "h"
       _ <- flip runStateT cxt $
-           flip runStateT (Context [] 0 [] dataset False) $
+           flip runStateT (Context [] 0 [] dataset True False) $
            runEthCryptM myPriv otherPubKey ipAddress (fromIntegral usePort) $ do
              
               

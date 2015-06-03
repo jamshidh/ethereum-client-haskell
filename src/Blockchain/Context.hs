@@ -3,7 +3,6 @@
 module Blockchain.Context (
   Context(..),
   ContextM,
-  initContext,
   isDebugEnabled,
   getStorageKeyVal',
   getAllStorageKeyVals',
@@ -50,6 +49,7 @@ data Context =
     pingCount::Int,
     peers::[Peer],
     miningDataset::B.ByteString,
+    useAlternateGenesisBlock::Bool,
     debugEnabled::Bool
     }
 
@@ -60,6 +60,7 @@ isDebugEnabled = do
   cxt <- get
   return $ debugEnabled cxt 
 
+{-
 initContext::String->IO Context
 initContext theType = do
   liftIO $ putStr "Loading mining cache.... "
@@ -74,6 +75,7 @@ initContext theType = do
       []
       dataset
       False
+-}
 
 getStorageKeyVal'::Address->Word256->ContextM Word256
 getStorageKeyVal' owner key = do
