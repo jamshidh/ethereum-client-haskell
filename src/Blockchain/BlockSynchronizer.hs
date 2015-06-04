@@ -78,7 +78,7 @@ askForSomeBlocks = do
   if null (neededBlockHashes cxt)
     then return ()
     else do
-      let (firstBlocks, lastBlocks) = splitAt 0x20 (neededBlockHashes cxt)
+      let (firstBlocks, lastBlocks) = splitAt 128 (neededBlockHashes cxt)
       lift $ put cxt{neededBlockHashes=lastBlocks}
       sendMsg $ GetBlocks firstBlocks
 
