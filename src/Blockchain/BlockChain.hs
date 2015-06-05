@@ -37,6 +37,7 @@ import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
 import Blockchain.Data.Code
 import Blockchain.Data.DataDefs
+import Blockchain.Data.DiffDB
 import Blockchain.Data.GenesisBlock
 import Blockchain.Data.RLP
 import Blockchain.Data.Transaction
@@ -254,6 +255,7 @@ addTransactions::Block->Integer->[Transaction]->ContextM ()
 addTransactions _ _ [] = return ()
 addTransactions b blockGas (t:rest) = do
   let tAddr = whoSignedThisTransaction t
+
   nonce <- lift $ fmap addressStateNonce $ getAddressState tAddr
   liftIO $ putStrLn $ CL.magenta "    =========================================================================="
   liftIO $ putStrLn $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " |"
@@ -314,7 +316,7 @@ addBlock b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
       case valid of
         Right () -> return ()
         Left err -> error err
-      let bytes = rlpSerialize $ rlpEncode b
+      -- let bytes = rlpSerialize $ rlpEncode b
       lift $ putBlock b
       replaceBestIfBetter b
 
@@ -342,7 +344,10 @@ getBestBlock = do
 replaceBestIfBetter::Block->ContextM ()
 replaceBestIfBetter b = do
   best <- getBestBlock
-  if blockDataNumber (blockBlockData best) >= blockDataNumber (blockBlockData b) 
-       then return ()
-       else lift $ detailsDBPut "best" (BL.toStrict $ encode $ blockHash b)
-
+  if blockDataNumber (blockBlockData best) >= blockDataNumber (blockBlockData b)
+    then return ()
+    else do
+    lift $ detailsDBPut "best" (BL.toStrict $ encode $ blockHash b)
+    let oldStateRoot = blockDataStateRoot (blockBlockData best)
+        newStateRoot = blockDataStateRoot (blockBlockData b)
+    lift $ sqlDiff oldStateRoot newStateRoot

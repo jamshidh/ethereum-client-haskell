@@ -19,6 +19,7 @@ import Control.Monad.IO.Class
 import Control.Monad.State
 import Control.Monad.Trans.Resource
 import qualified Data.ByteString as B
+import qualified Data.NibbleString as N
 import qualified Data.Vector as V
 import System.Directory
 import System.FilePath
@@ -35,6 +36,7 @@ import Blockchain.Data.DataDefs
 import Blockchain.Data.RLP
 import qualified Blockchain.Database.MerklePatricia as MPDB
 import qualified Blockchain.Database.MerklePatricia.Internal as MPDB
+import Blockchain.ExtDBs
 import Blockchain.ExtWord
 import Blockchain.SHA
 import Blockchain.Util
@@ -95,11 +97,13 @@ getAllStorageKeyVals' owner = do
 
 putStorageKeyVal'::Address->Word256->Word256->ContextM ()
 putStorageKeyVal' owner key val = do
+  lift $ hashDBPut storageKeyNibbles
   addressState <- lift $ getAddressState owner
   dbs <- lift get
   let mpdb = (stateDB dbs){MPDB.stateRoot=addressStateContractRoot addressState}
-  newContractRoot <- fmap MPDB.stateRoot $ lift $ lift $ MPDB.putKeyVal mpdb (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes key) (rlpEncode $ rlpSerialize $ rlpEncode $ toInteger val)
+  newContractRoot <- fmap MPDB.stateRoot $ lift $ lift $ MPDB.putKeyVal mpdb storageKeyNibbles (rlpEncode $ rlpSerialize $ rlpEncode $ toInteger val)
   lift $ putAddressState owner addressState{addressStateContractRoot=newContractRoot}
+  where storageKeyNibbles = N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes key
 
 deleteStorageKey'::Address->Word256->ContextM ()
 deleteStorageKey' owner key = do

@@ -23,6 +23,7 @@ import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
 import Blockchain.Data.DataDefs
+import Blockchain.Data.DiffDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
 import Blockchain.ExtWord
@@ -66,8 +67,10 @@ initializeStateDB = do
           (0xe4157b34ea9615cfbde6b4fda419828124b70c78, 1606938044258990275541962092341162602522202993782792835301376 * wei)
         ]
   
-  forM_ addressInfo $ \(address, balance) -> 
+  forM_ addressInfo $ \(address, balance) -> do
     lift $ putAddressState (Address address) blankAddressState{addressStateBalance=balance}
+    ctx <- lift get
+    lift $ sqlDiff emptyTriePtr (stateRoot $ stateDB ctx)
 
 initializeGenesisBlock::ContextM Block
 initializeGenesisBlock = do
