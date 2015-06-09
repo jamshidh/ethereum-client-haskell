@@ -52,12 +52,12 @@ import Data.Bits
 import Data.Maybe
 import Cache
 
-prvKey::H.PrvKey
-Just prvKey = H.makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
+coinbasePrvKey::H.PrvKey
+Just coinbasePrvKey = H.makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
 
 getNextBlock::Block->UTCTime->ContextM Block
 getNextBlock b ts = do
-  let theCoinbase = prvKey2Address prvKey
+  let theCoinbase = prvKey2Address coinbasePrvKey
   lift $ setStateRoot $ blockDataStateRoot bd
   addToBalance theCoinbase (1500*finney)
 
@@ -74,7 +74,7 @@ getNextBlock b ts = do
       BlockData {
         blockDataParentHash=blockHash b,
         blockDataUnclesHash=hash $ B.pack [0xc0],
-        blockDataCoinbase=prvKey2Address prvKey,
+        blockDataCoinbase=prvKey2Address coinbasePrvKey,
         blockDataStateRoot = sr,
         blockDataTransactionsRoot = emptyTriePtr,
         blockDataReceiptsRoot = emptyTriePtr,
@@ -261,9 +261,9 @@ main = do
   liftIO $ putStrLn $ "Attempting to connect to " ++ show ipAddress ++ ":" ++ show usePort
 
 --  putStrLn $ "my UDP pubkey is: " ++ (show $ H.derivePubKey $ prvKey)
-  putStrLn $ "my NodeID is: " ++ (show $ B16.encode $ B.pack $ pointToBytes $ hPubKeyToPubKey $ H.derivePubKey prvKey)
+  putStrLn $ "my NodeID is: " ++ (show $ B16.encode $ B.pack $ pointToBytes $ hPubKeyToPubKey $ H.derivePubKey $ H.PrvKey $ fromIntegral myPriv)
     
-  otherPubKey@(Point x y) <- liftIO $ getServerPubKey ipAddress usePort
+  otherPubKey@(Point x y) <- liftIO $ getServerPubKey (H.PrvKey $ fromIntegral myPriv) ipAddress usePort
 
 
 --  putStrLn $ "server public key is : " ++ (show otherPubKey)
@@ -278,7 +278,6 @@ main = do
       _ <- flip runStateT cxt $
            flip runStateT (Context [] 0 [] dataset False False) $
            runEthCryptM myPriv otherPubKey ipAddress (fromIntegral usePort) $ do
-             
               
              sendMsg =<< liftIO (mkHello myPublic)
           
