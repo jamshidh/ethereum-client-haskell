@@ -23,6 +23,7 @@ import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
 import Blockchain.Data.DataDefs
+import Blockchain.Data.DiffDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
 import Blockchain.ExtWord
@@ -86,8 +87,10 @@ initializeStateDB = do
   
   let addressInfo = if useAlternateGenesisBlock cxt then alternateAddressInfo else canonicalAddressInfo
   
-  forM_ addressInfo $ \(address, balance) -> 
+  forM_ addressInfo $ \(address, balance) -> do
     lift $ putAddressState (Address address) blankAddressState{addressStateBalance=balance}
+    ctx <- lift get
+    lift $ sqlDiff emptyTriePtr (stateRoot $ stateDB ctx)
 
 initializeGenesisBlock::ContextM Block
 initializeGenesisBlock = do

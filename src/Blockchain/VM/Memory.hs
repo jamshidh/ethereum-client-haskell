@@ -81,7 +81,8 @@ setNewMaxSize newSize' = do
         then
           let newWordSize = fromInteger $ (ceiling $ fromIntegral newSize/(32::Double))
               oldWordSize = (ceiling $ fromIntegral oldSize/(32::Double))
-              sizeCost c = gMEMWORD * c + (c*c `quot` gQUADCOEFFDIV)
+              sizeCost c = (opGasItemPrice MEMWORD) * c
+                           + (c*c `quot` (opGasItemPrice QUADCOEFFDIV))
           in sizeCost newWordSize - sizeCost oldWordSize
           else 0
 
@@ -140,6 +141,7 @@ mLoadByteString p size = do
   return val
 
 unsafeSliceByteString::Word256->Word256->VMM B.ByteString
+unsafeSliceByteString p 0 = return B.empty
 unsafeSliceByteString p size = do
   setNewMaxSize (fromIntegral p+fromIntegral size)
   state <- lift get
