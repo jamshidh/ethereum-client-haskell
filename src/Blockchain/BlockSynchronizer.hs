@@ -56,7 +56,7 @@ findFirstHashAlreadyInDB hashes = do
 
 handleNewBlockHashes::[SHA]->EthCryptM ContextM ()
 --handleNewBlockHashes _ list | trace ("########### handleNewBlockHashes: " ++ show list) $ False = undefined
-handleNewBlockHashes [] = error "handleNewBlockHashes called with empty list"
+handleNewBlockHashes [] = return () --error "handleNewBlockHashes called with empty list"
 handleNewBlockHashes blockHashes = do
   result <- lift $ findFirstHashAlreadyInDB blockHashes
   case result of
@@ -101,6 +101,6 @@ handleNewBlocks blocks = do
       liftIO $ putStrLn $ CL.red "Warning: a new block has arrived before another block sync is in progress.  This block will be thrown away for now, and re-requested later."
     (_, Just _) -> do
       liftIO $ putStrLn "Submitting new blocks"
-      lift $ addBlocks $ sortBy (compare `on` blockDataNumber . blockBlockData) blocks
+      lift $ addBlocks False $ sortBy (compare `on` blockDataNumber . blockBlockData) blocks
       liftIO $ putStrLn $ show (length blocks) ++ " blocks have been submitted"
       askForSomeBlocks

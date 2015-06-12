@@ -5,6 +5,7 @@ module Blockchain.BlockChain (
   addBlock,
   addBlocks,
   addTransaction,
+  addTransactions,
   getBestBlock,
   getBestBlockHash,
   getGenesisBlockHash,
@@ -105,10 +106,12 @@ checkParentChildValidity Block{blockBlockData=c} Block{blockBlockData=p} = do
              $ fail $ "Block difficulty is wrong: got '" ++ show (blockDataDifficulty c) ++ "', expected '" ++ show (nextDifficulty (blockDataDifficulty p) (blockDataTimestamp p) (blockDataTimestamp c)) ++ "'"
     unless (blockDataNumber c == blockDataNumber p + 1) 
              $ fail $ "Block number is wrong: got '" ++ show (blockDataNumber c) ++ ", expected '" ++ show (blockDataNumber p + 1) ++ "'"
-    unless ((blockDataGasLimit c <= (blockDataGasLimit p) +  (nextGasLimitDelta (blockDataGasLimit p)))
-            && (blockDataGasLimit c >= ((blockDataGasLimit p) - (nextGasLimitDelta (blockDataGasLimit p))))
-            && (blockDataGasLimit c >= minGasLimit))
-             $ fail $ "Block gasLimit is wrong: got '" ++ show (blockDataGasLimit c) ++ "', expected '" ++ show (nextGasLimit (blockDataGasLimit p) (blockDataGasUsed p)) ++ "'"
+    unless (blockDataGasLimit c <= blockDataGasLimit p +  nextGasLimitDelta (blockDataGasLimit p))
+             $ fail $ "Block gasLimit is too high: got '" ++ show (blockDataGasLimit c) ++ "', should be less than '" ++ show (blockDataGasLimit p +  nextGasLimitDelta (blockDataGasLimit p)) ++ "'"
+    unless (blockDataGasLimit c >= blockDataGasLimit p - nextGasLimitDelta (blockDataGasLimit p))
+             $ fail $ "Block gasLimit is too low: got '" ++ show (blockDataGasLimit c) ++ "', should be less than '" ++ show (blockDataGasLimit p -  nextGasLimitDelta (blockDataGasLimit p)) ++ "'"
+    unless (blockDataGasLimit c >= minGasLimit)
+             $ fail $ "Block gasLimit is lower than minGasLimit: got '" ++ show (blockDataGasLimit c) ++ "'"
     return ()
 
 checkValidity::Monad m=>Block->ContextM (m ())
@@ -154,9 +157,9 @@ runCodeForTransaction b availableGas tAddr owner ut | isMessageTX ut = do
 
 
 
-addBlocks::[Block]->ContextM ()
-addBlocks blocks = 
-  forM_ blocks addBlock
+addBlocks::Bool->[Block]->ContextM ()
+addBlocks isBeingCreated blocks = 
+  forM_ blocks (addBlock isBeingCreated)
 
 isTransactionValid::Transaction->ContextM Bool
 isTransactionValid t = do
@@ -273,8 +276,8 @@ addTransactions b blockGas (t:rest) = do
 
   addTransactions b remainingBlockGas rest
   
-addBlock::Block->ContextM ()
-addBlock b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
+addBlock::Bool->Block->ContextM ()
+addBlock isBeingCreated b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
   liftIO $ putStrLn $ "Inserting block #" ++ show (blockDataNumber bd) ++ " (" ++ show (pretty $ blockHash b) ++ ")."
   maybeParent <- lift $ getBlock $ blockDataParentHash bd
   case maybeParent of
@@ -298,17 +301,23 @@ addBlock b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
       addTransactions b (blockDataGasLimit $ blockBlockData b) transactions
 
       dbs <- lift get
-      when (blockDataStateRoot (blockBlockData b) /= stateRoot (stateDB dbs)) $ do
-        liftIO $ putStrLn $ "newStateRoot: " ++ show (pretty $ stateRoot $ stateDB dbs)
-        error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ show (pretty $ blockDataStateRoot $ blockBlockData b)
 
-      valid <- checkValidity b
+      b' <-
+        if isBeingCreated
+        then return b{blockBlockData = (blockBlockData b){blockDataStateRoot=stateRoot $ stateDB dbs}}
+        else do
+          when ((blockDataStateRoot (blockBlockData b) /= stateRoot (stateDB dbs))) $ do
+            liftIO $ putStrLn $ "newStateRoot: " ++ show (pretty $ stateRoot $ stateDB dbs)
+            error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ show (pretty $ blockDataStateRoot $ blockBlockData b)
+          return b
+          
+      valid <- checkValidity b'
       case valid of
         Right () -> return ()
         Left err -> error err
-      let bytes = rlpSerialize $ rlpEncode b
-      lift $ putBlock b
-      replaceBestIfBetter b
+      let bytes = rlpSerialize $ rlpEncode b'
+      lift $ putBlock b'
+      replaceBestIfBetter b'
 
 getBestBlockHash::ContextM SHA
 getBestBlockHash = do

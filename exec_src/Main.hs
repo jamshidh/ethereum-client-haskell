@@ -32,7 +32,7 @@ import Blockchain.Data.Address
 import Blockchain.Data.BlockDB
 import Blockchain.Data.DataDefs
 --import Blockchain.Data.SignedTransaction
---import Blockchain.Data.Transaction
+import Blockchain.Data.Transaction
 import Blockchain.Data.Wire
 import Blockchain.Database.MerklePatricia
 import Blockchain.DB.CodeDB
@@ -55,8 +55,8 @@ import Cache
 coinbasePrvKey::H.PrvKey
 Just coinbasePrvKey = H.makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
 
-getNextBlock::Block->UTCTime->ContextM Block
-getNextBlock b ts = do
+getNextBlock::Block->UTCTime->[Transaction]->ContextM Block
+getNextBlock b ts transactions = do
   let theCoinbase = prvKey2Address coinbasePrvKey
   lift $ setStateRoot $ blockDataStateRoot bd
   addToBalance theCoinbase (1500*finney)
@@ -64,8 +64,8 @@ getNextBlock b ts = do
   dbs <- lift get
 
   return Block{
-               blockBlockData=testGetNextBlockData $ stateRoot $ stateDB dbs,
-               blockReceiptTransactions=[],
+               blockBlockData=testGetNextBlockData $ SHAPtr "", -- $ stateRoot $ stateDB dbs,
+               blockReceiptTransactions=transactions,
                blockBlockUncles=[]
              }
   where
@@ -81,7 +81,7 @@ getNextBlock b ts = do
         blockDataLogBloom = B.pack [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],         
         blockDataDifficulty = nextDifficulty (blockDataDifficulty bd) (blockDataTimestamp bd) ts,
         blockDataNumber = blockDataNumber bd + 1,
-        blockDataGasLimit = max 125000 ((blockDataGasLimit bd * 1023 + blockDataGasUsed bd *6 `quot` 5) `quot` 1024),
+        blockDataGasLimit = blockDataGasLimit bd, -- max 125000 ((blockDataGasLimit bd * 1023 + blockDataGasUsed bd *6 `quot` 5) `quot` 1024),
         blockDataGasUsed = 0,
         blockDataTimestamp = ts,  
         blockDataExtraData = 0,
@@ -94,13 +94,27 @@ getNextBlock b ts = do
 submitNextBlock::Integer->Block->EthCryptM ContextM ()
 submitNextBlock baseDifficulty b = do
         ts <- liftIO getCurrentTime
-        newBlock <- lift $ getNextBlock b ts
+        newBlock <- lift $ getNextBlock b ts []
         n <- liftIO $ fastFindNonce newBlock
 
         --let theBytes = headerHashWithoutNonce newBlock `B.append` B.pack (integer2Bytes n)
         let theNewBlock = addNonceToBlock newBlock n
         sendMsg $ NewBlockPacket theNewBlock (baseDifficulty + blockDataDifficulty (blockBlockData theNewBlock))
-        lift $ addBlocks [theNewBlock]
+        lift $ addBlocks False [theNewBlock]
+
+submitNextBlockToDB::Integer->Block->[Transaction]->EthCryptM ContextM ()
+submitNextBlockToDB baseDifficulty b transactions = do
+  ts <- liftIO getCurrentTime
+  newBlock <- lift $ getNextBlock b ts transactions
+  --n <- liftIO $ fastFindNonce newBlock
+
+  let theNewBlock = addNonceToBlock newBlock (-1)
+  lift $ addBlocks True [theNewBlock]
+
+submitNewBlock::Block->[Transaction]->EthCryptM ContextM ()
+submitNewBlock b transactions = do
+  --lift $ addTransactions b (blockDataGasLimit $ blockBlockData b) transactions
+  submitNextBlockToDB 0 b transactions
 
 ifBlockInDBSubmitNextBlock::Integer->Block->EthCryptM ContextM ()
 ifBlockInDBSubmitNextBlock baseDifficulty b = do
@@ -150,6 +164,9 @@ handleMsg m = do
       sendMsg $ Transactions []
       --liftIO $ sendMessage handle GetTransactions
       return ()
+    (Transactions transactions) -> do
+      bestBlock <-lift getBestBlock
+      submitNewBlock bestBlock transactions
       
     _-> return ()
 
@@ -276,7 +293,7 @@ main = do
   runResourceT $ do
       cxt <- openDBs "h"
       _ <- flip runStateT cxt $
-           flip runStateT (Context [] 0 [] dataset False False) $
+           flip runStateT (Context [] 0 [] dataset True False) $
            runEthCryptM myPriv otherPubKey ipAddress (fromIntegral usePort) $ do
               
              sendMsg =<< liftIO (mkHello myPublic)
