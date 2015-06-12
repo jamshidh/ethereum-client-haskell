@@ -77,7 +77,12 @@ initializeStateDB = do
           0xfa15efeef38db9ff6f7eb862e3402c66ee0e7951, -- false fee, 1e6392
           0xfadedcabf08aead902061c146c5458e5bea1ce9f, --faded cab, 2554ba
           0x5eedfab1e5e0ed81674dc6b503c6c89d413ccbc9, -- seed fable, 675888
-          0x1dea5c01dd17dee05b08c89e0753722f52f6d2f1 -- idea scold, 7e1ada
+          0x1dea5c01dd17dee05b08c89e0753722f52f6d2f1, -- idea scold, 7e1ada
+
+          0xe1fd0d4a52b75a694de8b55528ad48e2e2cf7859, -- 1dd885a423f4e212740f116afa66d40aafdbb3a381079150371801871d9ea281
+          0x1001e1077880d7e6ca43919b79eb595881a3f1f7, -- 1dd885a423f4e212740f116afa66d40aafdbb3a381079150371801871d9eac22
+          0xbed1006aba1aff1b832f42b05239bc53c0f3aaba, -- 1dd885a423f4e212740f116afa66d40aafdbb3a381079150371801871d9eac31
+          0xada0ca69254ddc48fa52cb7b26e65ecce2f7c63c -- 1dd885a423f4e212740f116afa66d40aafdbb3a381079150371801871d9eb1bb
         ]
 
   let alternateAddressInfo = map (, 1606938044258990275541962092341162602522202993782792835301376*wei) alternateAddresses
