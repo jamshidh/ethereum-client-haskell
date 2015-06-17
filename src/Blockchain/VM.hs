@@ -31,7 +31,6 @@ import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
 import Blockchain.Data.Code
 import Blockchain.Data.Log
-import Blockchain.Data.DataDefs
 import Blockchain.DB.CodeDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
@@ -46,8 +45,6 @@ import Blockchain.VM.OpcodePrices
 import Blockchain.VM.PrecompiledContracts
 import Blockchain.VM.VMM
 import Blockchain.VM.VMState
-import qualified Data.NibbleString as N
-
 
 --import Debug.Trace
 
@@ -703,24 +700,10 @@ opGasPriceAndRefund x = return (opGasPrice x, 0)
 --Glogdata 1 Paid for each byte in a LOG operation’s data.
 --Glogtopic 1 Paid for each topic of a LOG operation.
 
-nibbleString2ByteString::N.NibbleString->B.ByteString
-nibbleString2ByteString (N.EvenNibbleString s) = s
-nibbleString2ByteString (N.OddNibbleString c s) = c `B.cons` s
-
-
-showHex4::Word256->String
-showHex4 i = replicate (4 - length rawOutput) '0' ++ rawOutput
-    where rawOutput = showHex i ""
-
 formatOp::Operation->String
 formatOp (PUSH x) = "PUSH" ++ show (length x) -- ++ show x
 formatOp x = show x
 
-formatAddressWithoutColor::Address->String
-formatAddressWithoutColor (Address x) = padZeros 40 $ showHex x ""
-
-showHexU::Integer->[Char]
-showHexU = map toUpper . flip showHex ""
 
 printDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM ()
 printDebugInfo env memBefore memAfter c op stateBefore stateAfter = do
