@@ -318,8 +318,8 @@ addBlock isBeingCreated b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
         Right () -> return ()
         Left err -> error err
       -- let bytes = rlpSerialize $ rlpEncode b
-      blkDataId <- lift $ putBlock b
-      replaceBestIfBetter (blkDataId, b)
+      blkDataId <- lift $ putBlock b'
+      replaceBestIfBetter (blkDataId, b')
 
 getBestBlockHash::ContextM SHA
 getBestBlockHash = do
