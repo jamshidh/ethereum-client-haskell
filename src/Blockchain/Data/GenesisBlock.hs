@@ -123,8 +123,9 @@ initializeGenesisBlock = do
                blockBlockUncles=[]
              }
   genBlkId <- lift $ putBlock genesisBlock
-  ctx <- lift get
-  lift $ sqlDiff genBlkId 0 emptyTriePtr (stateRoot $ stateDB ctx)
+  genAddrStates <- lift $ getAllAddressStates
+  let diffFromPair (addr, addrS) = CreateAddr addr addrS
+  lift $ commitSqlDiffs genBlkId 0 $ map diffFromPair genAddrStates
 
   return genesisBlock
 
