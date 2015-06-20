@@ -331,14 +331,20 @@ getBestBlockHash::ContextM SHA
 getBestBlockHash = do
   maybeBestHash <- lift $ detailsDBGet "best"
   case maybeBestHash of
-    Nothing -> blockHash <$> initializeGenesisBlock
+    Nothing -> do
+      bhSHA <- getGenesisBlockHash
+      lift $ detailsDBPut "best" $ BL.toStrict $ encode bhSHA
+      return bhSHA
     Just bestHash -> return $ decode $ BL.fromStrict $ bestHash
 
 getGenesisBlockHash::ContextM SHA
 getGenesisBlockHash = do
   maybeGenesisHash <- lift $ detailsDBGet "genesis"
   case maybeGenesisHash of
-    Nothing -> blockHash <$> initializeGenesisBlock
+    Nothing -> do
+      bhSHA <- blockHash <$> initializeGenesisBlock
+      lift $ detailsDBPut "genesis" $ BL.toStrict $ encode bhSHA
+      return bhSHA
     Just bestHash -> return $ decode $ BL.fromStrict $ bestHash
 
 getBestBlock::ContextM Block
