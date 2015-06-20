@@ -31,7 +31,6 @@ import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
 import Blockchain.Data.Code
 import Blockchain.Data.Log
-import Blockchain.Data.DataDefs
 import Blockchain.DB.CodeDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
@@ -46,8 +45,6 @@ import Blockchain.VM.OpcodePrices
 import Blockchain.VM.PrecompiledContracts
 import Blockchain.VM.VMM
 import Blockchain.VM.VMState
-import qualified Data.NibbleString as N
-
 
 --import Debug.Trace
 
@@ -55,30 +52,11 @@ bool2Word256::Bool->Word256
 bool2Word256 True = 1
 bool2Word256 False = 0
 
-getByte::Word256->Word256->Word256
-getByte whichByte val | whichByte < 32 = val `shiftR` (8*(31 - fromIntegral whichByte)) .&. 0xFF
-getByte _ _ = 0;
-
-signExtend::Word256->Word256->Word256
-signExtend numBytes val | numBytes > 31 = val
-signExtend numBytes val = baseValue + if highBitSet then highFilter else 0
-  where
-    lowFilter = 2^(8*numBytes+8)-1
-    highFilter = (2^(256::Integer)-1) - lowFilter
-    baseValue = lowFilter .&. val
-    highBitSet =  val `shiftR` (8*fromIntegral numBytes + 7) .&. 1 == 1
-
-safe_quot::Integral a=>a->a->a
-safe_quot _ 0 = 0
-safe_quot x y = x `quot` y
-
-safe_mod::Integral a=>a->a->a
-safe_mod _ 0 = 0
-safe_mod x y = x `mod` y
-
-safe_rem::Integral a=>a->a->a
-safe_rem _ 0 = 0
-safe_rem x y = x `rem` y
+{-
+word2562Bool::Word256->Bool
+word2562Bool 1 = True
+word2562Bool _ = False
+-}
 
 binaryAction::(Word256->Word256->Word256)->VMM ()
 binaryAction action = do
@@ -138,6 +116,31 @@ swapn n = do
     else do
       let (middle, v2:rest2) = splitAt (n-1) $ stack vmState
       lift $ put vmState{stack = v2:(middle++(v1:rest2))}
+
+getByte::Word256->Word256->Word256
+getByte whichByte val | whichByte < 32 = val `shiftR` (8*(31 - fromIntegral whichByte)) .&. 0xFF
+getByte _ _ = 0;
+
+signExtend::Word256->Word256->Word256
+signExtend numBytes val | numBytes > 31 = val
+signExtend numBytes val = baseValue + if highBitSet then highFilter else 0
+  where
+    lowFilter = 2^(8*numBytes+8)-1
+    highFilter = (2^(256::Integer)-1) - lowFilter
+    baseValue = lowFilter .&. val
+    highBitSet =  val `shiftR` (8*fromIntegral numBytes + 7) .&. 1 == 1
+
+safe_quot::Integral a=>a->a->a
+safe_quot _ 0 = 0
+safe_quot x y = x `quot` y
+
+safe_mod::Integral a=>a->a->a
+safe_mod _ 0 = 0
+safe_mod x y = x `mod` y
+
+safe_rem::Integral a=>a->a->a
+safe_rem _ 0 = 0
+safe_rem x y = x `rem` y
 
 
 --For some strange reason, some ethereum tests (the VMTests) create an account when it doesn't
@@ -443,7 +446,7 @@ runOperation CREATE = do
       (_, Just _) -> do
         addressState' <- lift $ lift $ lift $ getAddressState owner
 
-        newAddress <- lift $ lift $ getNewAddress owner
+        let newAddress = getNewAddress_unsafe owner $ addressStateNonce addressState'
         
         if addressStateBalance addressState' < fromIntegral value
           then return Nothing
@@ -700,6 +703,7 @@ opGasPriceAndRefund x = return (opGasPrice x, 0)
 formatOp::Operation->String
 formatOp (PUSH x) = "PUSH" ++ show (length x) -- ++ show x
 formatOp x = show x
+
 
 printDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM ()
 printDebugInfo env memBefore memAfter c op stateBefore stateAfter = do

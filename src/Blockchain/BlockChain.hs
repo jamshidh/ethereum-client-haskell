@@ -42,6 +42,7 @@ import Blockchain.Data.DiffDB
 import Blockchain.Data.GenesisBlock
 import Blockchain.Data.RLP
 import Blockchain.Data.Transaction
+import Blockchain.Data.TransactionResult
 import Blockchain.Database.MerklePatricia
 import Blockchain.DB.CodeDB
 import Blockchain.DB.ModifyStateDB
@@ -264,6 +265,11 @@ addTransactions b blockGas (t:rest) = do
 
   before <- liftIO $ getPOSIXTime 
   result <- runEitherT $ addTransaction b blockGas t
+  let resultString =
+          case result of 
+            Left err -> err
+            Right _ -> "Success!"
+  lift $ putTransactionResult $ TransactionResult (blockHash b) (transactionHash t) resultString
   after <- liftIO $ getPOSIXTime 
 
   liftIO $ putStrLn $ CL.magenta "    |" ++ " t = " ++ printf "%.2f" (realToFrac $ after - before::Double) ++ "s                                                              " ++ CL.magenta "|"
