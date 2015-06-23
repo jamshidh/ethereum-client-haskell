@@ -293,7 +293,7 @@ main = do
   runResourceT $ do
       cxt <- openDBs "h"
       _ <- flip runStateT cxt $
-           flip runStateT (Context [] 0 [] dataset True False) $
+           flip runStateT (Context [] 0 [] dataset True "" True) $
            runEthCryptM myPriv otherPubKey ipAddress (fromIntegral usePort) $ do
               
              sendMsg =<< liftIO (mkHello myPublic)

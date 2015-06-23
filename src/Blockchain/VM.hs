@@ -707,7 +707,12 @@ formatOp x = show x
 
 printDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState->VMM ()
 printDebugInfo env memBefore memAfter c op stateBefore stateAfter = do
-  liftIO $ putStrLn $ "EVM [ eth | " ++ show (callDepth stateBefore) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc stateBefore)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining stateBefore) ++ " | " ++ show (vmGasRemaining stateAfter - vmGasRemaining stateBefore) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
+  let mainDebugLine = "EVM [ eth | " ++ show (callDepth stateBefore) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc stateBefore)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining stateBefore) ++ " | " ++ show (vmGasRemaining stateAfter - vmGasRemaining stateBefore) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
+
+  liftIO $ putStrLn mainDebugLine
+
+  lift $ lift $ addDebugMsg $ mainDebugLine ++ "\n"
+
   liftIO $ putStrLn $ "EVM [ eth ] "
   memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
   liftIO $ putStrLn "    STACK"

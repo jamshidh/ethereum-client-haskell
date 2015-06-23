@@ -269,7 +269,7 @@ addTransactions b blockGas (t:rest) = do
           case result of 
             Left err -> err
             Right _ -> "Success!"
-      detailsString = "qq"
+  detailsString <- getDebugMsg
   lift $ putTransactionResult $ TransactionResult (blockHash b) (transactionHash t) resultString detailsString
   after <- liftIO $ getPOSIXTime 
 

@@ -6,6 +6,8 @@ module Blockchain.Context (
   isDebugEnabled,
   getStorageKeyVal',
   getAllStorageKeyVals',
+  getDebugMsg,
+  addDebugMsg,
   putStorageKeyVal',
   deleteStorageKey',
   incrementNonce,
@@ -52,6 +54,7 @@ data Context =
     peers::[Peer],
     miningDataset::B.ByteString,
     useAlternateGenesisBlock::Bool,
+    debugMsg::String, 
     debugEnabled::Bool
     }
 
@@ -96,6 +99,16 @@ getAllStorageKeyVals' owner = do
   let mpdb = (stateDB dbs){MPDB.stateRoot=addressStateContractRoot addressState}
   kvs <- lift $ lift $ MPDB.unsafeGetAllKeyVals mpdb
   return $ map (fmap $ fromInteger . rlpDecode . rlpDeserialize . rlpDecode) kvs
+
+getDebugMsg::ContextM String
+getDebugMsg = do
+  cxt <- get
+  return $ debugMsg cxt
+
+addDebugMsg::String->ContextM ()
+addDebugMsg msg = do
+  cxt <- get
+  put cxt{debugMsg=debugMsg cxt++msg}
 
 putStorageKeyVal'::Address->Word256->Word256->ContextM ()
 putStorageKeyVal' owner key val = do
