@@ -269,7 +269,8 @@ addTransactions b blockGas (t:rest) = do
           case result of 
             Left err -> err
             Right _ -> "Success!"
-  lift $ putTransactionResult $ TransactionResult (blockHash b) (transactionHash t) resultString
+      detailsString = "qq"
+  lift $ putTransactionResult $ TransactionResult (blockHash b) (transactionHash t) resultString detailsString
   after <- liftIO $ getPOSIXTime 
 
   liftIO $ putStrLn $ CL.magenta "    |" ++ " t = " ++ printf "%.2f" (realToFrac $ after - before::Double) ++ "s                                                              " ++ CL.magenta "|"
