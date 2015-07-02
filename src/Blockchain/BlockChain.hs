@@ -273,6 +273,8 @@ addTransactions b blockGas (t:rest) = do
   lift $ putTransactionResult $ TransactionResult (blockHash b) (transactionHash t) resultString detailsString
   after <- liftIO $ getPOSIXTime 
 
+  clearDebugMsg
+
   liftIO $ putStrLn $ CL.magenta "    |" ++ " t = " ++ printf "%.2f" (realToFrac $ after - before::Double) ++ "s                                                              " ++ CL.magenta "|"
   liftIO $ putStrLn $ CL.magenta "    =========================================================================="
 

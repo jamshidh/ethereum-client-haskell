@@ -8,6 +8,7 @@ module Blockchain.Context (
   getAllStorageKeyVals',
   getDebugMsg,
   addDebugMsg,
+  clearDebugMsg,
   putStorageKeyVal',
   deleteStorageKey',
   incrementNonce,
@@ -109,6 +110,11 @@ addDebugMsg::String->ContextM ()
 addDebugMsg msg = do
   cxt <- get
   put cxt{debugMsg=debugMsg cxt++msg}
+
+clearDebugMsg::ContextM ()
+clearDebugMsg = do
+  cxt <- get
+  put cxt{debugMsg=""}
 
 putStorageKeyVal'::Address->Word256->Word256->ContextM ()
 putStorageKeyVal' owner key val = do
