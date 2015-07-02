@@ -709,10 +709,10 @@ printDebugInfo::Environment->Word256->Word256->Int->Operation->VMState->VMState-
 printDebugInfo env memBefore memAfter c op stateBefore stateAfter = do
   let mainDebugLine = "EVM [ eth | " ++ show (callDepth stateBefore) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc stateBefore)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining stateBefore) ++ " | " ++ show (vmGasRemaining stateAfter - vmGasRemaining stateBefore) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]"
 
-  liftIO $ putStrLn mainDebugLine
+  --liftIO $ putStrLn mainDebugLine
 
   lift $ lift $ addDebugMsg $ mainDebugLine ++ "\n"
-
+{-
   liftIO $ putStrLn $ "EVM [ eth ] "
   memByteString <- liftIO $ getMemAsByteString (memory stateAfter)
   liftIO $ putStrLn "    STACK"
@@ -721,7 +721,7 @@ printDebugInfo env memBefore memAfter c op stateBefore stateAfter = do
   liftIO $ putStrLn $ "    STORAGE"
   kvs <- getAllStorageKeyVals
   liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (fromIntegral v)) kvs)
-
+-}
 
 
 runCode::Int->VMM ()
