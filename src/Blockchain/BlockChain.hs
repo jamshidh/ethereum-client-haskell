@@ -270,7 +270,21 @@ addTransactions b blockGas (t:rest) = do
             Left err -> err
             Right _ -> "Success!"
   detailsString <- getDebugMsg
-  lift $ putTransactionResult $ TransactionResult (blockHash b) (transactionHash t) resultString detailsString
+  lift $ putTransactionResult $
+    TransactionResult {
+      transactionResultBlockHash=blockHash b,
+      transactionResultTransactionHash=transactionHash t,
+      transactionResultMessage=resultString,
+      transactionResultTrace=detailsString,
+      transactionResultGasUsed=0,
+      transactionResultEtherUsed=0,
+      transactionResultContractsCreated="",
+      transactionResultContractsDeleted="",
+      transactionResultTime=0,
+      transactionResultNewStorage="",
+      transactionResultDeletedStorage=""
+      }
+
   after <- liftIO $ getPOSIXTime 
 
   clearDebugMsg
