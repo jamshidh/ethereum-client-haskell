@@ -185,7 +185,7 @@ opLen _ = 1
 opCode2Op::B.ByteString->(Operation, Word256)
 opCode2Op rom | B.null rom = (STOP, 1) --according to the yellowpaper, should return STOP if outside of the code bytestring
 opCode2Op rom =
-  let opcode = B.head rom in
+  let opcode = B.head rom in --head OK, null weeded out above
   if opcode >= 0x60 && opcode <= 0x7f
   then (PUSH $ B.unpack $ safeTake (fromIntegral $ opcode-0x5F) $ B.tail rom, fromIntegral $ opcode - 0x5E)
   else

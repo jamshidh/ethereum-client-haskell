@@ -89,7 +89,7 @@ handleNewBlocks blocks = do
   let orderedBlocks =
         sortBy (compare `on` blockDataNumber . blockBlockData) blocks
 
-  maybeParentBlock <- lift $ lift $ getBlock (blockDataParentHash $ blockBlockData $ head $ orderedBlocks)
+  maybeParentBlock <- lift $ lift $ getBlock (blockDataParentHash $ blockBlockData $ head $ orderedBlocks) --head OK, [] weeded out
 
   cxt <- lift get
 
