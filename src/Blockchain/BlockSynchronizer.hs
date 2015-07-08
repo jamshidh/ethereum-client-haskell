@@ -96,7 +96,7 @@ handleNewBlocks blocks = do
   case (neededBlockHashes cxt, maybeParentBlock) of
     ([], Nothing) -> do
       liftIO $ putStrLn $ CL.red $ "Resynching!!!!!!!!"
-      handleNewBlockHashes [blockHash $ head orderedBlocks]
+      handleNewBlockHashes [blockHash $ head orderedBlocks] -- head OK, [] weeded out
     (_, Nothing) ->
       liftIO $ putStrLn $ CL.red "Warning: a new block has arrived before another block sync is in progress.  This block will be thrown away for now, and re-requested later."
     (_, Just _) -> do
