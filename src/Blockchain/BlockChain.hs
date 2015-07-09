@@ -163,10 +163,13 @@ addBlocks::Bool->[Block]->ContextM ()
 addBlocks isBeingCreated blocks = 
   forM_ blocks (addBlock isBeingCreated)
 
-isTransactionValid::Transaction->ContextM Bool
-isTransactionValid t = do
-  addressState <- lift $ getAddressState $ whoSignedThisTransaction t
-  return $ addressStateNonce addressState == transactionNonce t
+isNonceValid::Transaction->ContextM Bool
+isNonceValid t = do
+  case whoSignedThisTransaction t of
+    Nothing -> return False --no nonce would work
+    Just tAddr -> do
+      addressState <- lift $ getAddressState tAddr
+      return $ addressStateNonce addressState == transactionNonce t
 
 codeOrDataLength::Transaction->Int
 codeOrDataLength t | isMessageTX t = B.length $ transactionData t
@@ -186,9 +189,17 @@ intrinsicGas t = gTXDATAZERO * zeroLen + gTXDATANONZERO * (fromIntegral (codeOrD
 
 addTransaction::Block->Integer->Transaction->EitherT String ContextM (VMState, Integer)
 addTransaction b remainingBlockGas t = do
-  valid <- lift $ isTransactionValid t
+  let maybeAddr = whoSignedThisTransaction t
 
-  let tAddr = whoSignedThisTransaction t
+  case maybeAddr of
+    Just x -> return ()
+    Nothing -> left "malformed signature"
+
+  let Just tAddr = maybeAddr
+    
+  nonceValid <- lift $ isNonceValid t
+
+
 
   let intrinsicGas' = intrinsicGas t
   whenM (lift isDebugEnabled) $
@@ -202,7 +213,7 @@ addTransaction b remainingBlockGas t = do
   when (transactionGasLimit t * transactionGasPrice t + transactionValue t > addressStateBalance addressState) $ left "sender doesn't have high enough balance"
   when (intrinsicGas' > transactionGasLimit t) $ left "intrinsic gas higher than transaction gas limit"
   when (transactionGasLimit t > remainingBlockGas) $ left "block gas has run out"
-  when (not valid) $ left "nonce incorrect"
+  when (not nonceValid) $ left "nonce incorrect"
 
   let availableGas = transactionGasLimit t - intrinsicGas'    
 
@@ -246,22 +257,26 @@ addTransaction b remainingBlockGas t = do
         liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*transactionGasPrice t) ++ ", have " ++ show (addressStateBalance addressState)
         return (VMState{vmException=Just InsufficientFunds, vmGasRemaining=0, refund=0, debugCallCreates=Nothing, suicideList=[], logs=[], returnVal=Nothing}, remainingBlockGas)
 
-      
+
+printTransactionMessage::Transaction->ContextM ()
+printTransactionMessage t = do
+  case whoSignedThisTransaction t of
+    Just tAddr -> do
+      nonce <- lift $ fmap addressStateNonce $ getAddressState tAddr
+      liftIO $ putStrLn $ CL.magenta "    =========================================================================="
+      liftIO $ putStrLn $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " |"
+      liftIO $ putStrLn $ CL.magenta "    |    " ++
+        (
+          if isMessageTX t
+          then "MessageTX to " ++ show (pretty $ transactionTo t) ++ "              "
+          else "Create Contract "  ++ show (pretty $ getNewAddress_unsafe tAddr nonce)
+        ) ++ CL.magenta " |"
+    _ -> liftIO $ putStrLn $ CL.red $ "Malformed Signature!"
+
 addTransactions::Block->Integer->[Transaction]->ContextM ()
 addTransactions _ _ [] = return ()
 addTransactions b blockGas (t:rest) = do
-  let tAddr = whoSignedThisTransaction t
-
-  nonce <- lift $ fmap addressStateNonce $ getAddressState tAddr
-  liftIO $ putStrLn $ CL.magenta "    =========================================================================="
-  liftIO $ putStrLn $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " |"
-  liftIO $ putStrLn $ CL.magenta "    |    " ++
-    (
-      if isMessageTX t
-      then "MessageTX to " ++ show (pretty $ transactionTo t) ++ "              "
-      else "Create Contract "  ++ show (pretty $ getNewAddress_unsafe tAddr nonce)
-    ) ++ CL.magenta " |"
-
+  printTransactionMessage t
 
   before <- liftIO $ getPOSIXTime 
   result <- runEitherT $ addTransaction b blockGas t

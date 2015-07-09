@@ -30,12 +30,12 @@ ecdsaRecover input =
         v = byteString2Integer $ B.take 32 $ B.drop 32 input
         r = fromInteger $ byteString2Integer $ B.take 32 $ B.drop 64 input
         s = fromInteger $ byteString2Integer $ B.take 32 $ B.drop 96 input
+        maybePubKey = getPubKeyFromSignature (ExtendedSignature (Signature r s) (v == 28)) h
     in
-     if (r == 0) || (v < 27) || (v > 28)
-     then B.pack (replicate 32 0)
-     else 
-       let pubKey = getPubKeyFromSignature (ExtendedSignature (Signature r s) (v == 28)) h
-       in B.pack [0,0,0,0,0,0,0,0,0,0,0,0] `B.append` BL.toStrict (encode $ pubKey2Address pubKey)     
+     case (v >= 27, v <= 28, maybePubKey) of
+       (True, True, Just pubKey) ->
+         B.pack [0,0,0,0,0,0,0,0,0,0,0,0] `B.append` BL.toStrict (encode $ pubKey2Address pubKey)
+       _ -> B.pack (replicate 32 0)
 
 ripemd::B.ByteString->B.ByteString
 ripemd input =
