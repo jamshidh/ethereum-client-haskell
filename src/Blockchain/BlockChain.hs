@@ -54,6 +54,7 @@ import Blockchain.ExtDBs
 import Blockchain.Format
 import Blockchain.Mining
 import Blockchain.SHA
+import Blockchain.Util
 import Blockchain.VM
 import Blockchain.VM.Code
 import Blockchain.VM.OpcodePrices
@@ -275,12 +276,18 @@ printTransactionMessage t = do
         ) ++ CL.magenta " |"
     _ -> liftIO $ putStrLn $ CL.red $ "Malformed Signature!"
 
+formatAddress::Address->String
+formatAddress (Address x) = BC.unpack $ B16.encode $ B.pack $ word160ToBytes x
+
 addTransactions::Block->Integer->[Transaction]->ContextM ()
 addTransactions _ _ [] = return ()
 addTransactions b blockGas (t:rest) = do
   printTransactionMessage t
 
   before <- liftIO $ getPOSIXTime 
+
+  stateRootBefore <- lift $ getStateRoot
+
   result <- runEitherT $ addTransaction b blockGas t
 
   let (resultString, response) =
@@ -289,6 +296,12 @@ addTransactions b blockGas (t:rest) = do
             Right (state, _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state)
 
   after <- liftIO $ getPOSIXTime 
+
+  stateRootAfter <- lift $ getStateRoot
+
+  mpdb <- fmap stateDB $ lift get
+
+  addrDiff <- lift $ addrDbDiff mpdb stateRootBefore stateRootAfter
 
   detailsString <- getDebugMsg
   lift $ putTransactionResult $
@@ -300,12 +313,13 @@ addTransactions b blockGas (t:rest) = do
       transactionResultTrace=detailsString,
       transactionResultGasUsed=0,
       transactionResultEtherUsed=0,
-      transactionResultContractsCreated="",
-      transactionResultContractsDeleted="",
+      transactionResultContractsCreated=intercalate "," $ map formatAddress [x|CreateAddr x _ <- addrDiff],
+      transactionResultContractsDeleted=intercalate "," $ map formatAddress [x|DeleteAddr x <- addrDiff],
       transactionResultTime=realToFrac $ after - before::Double,
       transactionResultNewStorage="",
       transactionResultDeletedStorage=""
       }
+
 
   clearDebugMsg
 
