@@ -290,6 +290,7 @@ addTransactions b blockGas (t:rest) = do
       transactionResultBlockHash=blockHash b,
       transactionResultTransactionHash=transactionHash t,
       transactionResultMessage=resultString,
+      transactionResultResponse="",
       transactionResultTrace=detailsString,
       transactionResultGasUsed=0,
       transactionResultEtherUsed=0,
