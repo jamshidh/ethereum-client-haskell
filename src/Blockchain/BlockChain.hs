@@ -21,6 +21,8 @@ import Control.Monad.State hiding (state)
 import Data.Binary hiding (get)
 import Data.Bits
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Base16 as B16
+import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
 import Data.Functor
 import Data.List
@@ -280,28 +282,30 @@ addTransactions b blockGas (t:rest) = do
 
   before <- liftIO $ getPOSIXTime 
   result <- runEitherT $ addTransaction b blockGas t
-  let resultString =
+
+  let (resultString, response) =
           case result of 
-            Left err -> err
-            Right _ -> "Success!"
+            Left err -> (err, "")
+            Right (state, _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state)
+
+  after <- liftIO $ getPOSIXTime 
+
   detailsString <- getDebugMsg
   lift $ putTransactionResult $
     TransactionResult {
       transactionResultBlockHash=blockHash b,
       transactionResultTransactionHash=transactionHash t,
       transactionResultMessage=resultString,
-      transactionResultResponse="",
+      transactionResultResponse=response,
       transactionResultTrace=detailsString,
       transactionResultGasUsed=0,
       transactionResultEtherUsed=0,
       transactionResultContractsCreated="",
       transactionResultContractsDeleted="",
-      transactionResultTime=0,
+      transactionResultTime=realToFrac $ after - before::Double,
       transactionResultNewStorage="",
       transactionResultDeletedStorage=""
       }
-
-  after <- liftIO $ getPOSIXTime 
 
   clearDebugMsg
 
