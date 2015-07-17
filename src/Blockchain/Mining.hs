@@ -48,11 +48,12 @@ nonceIsValid' b = do
 
   val <- liftIO $ powFunc' (miningDataset cxt) b
 
+{-
   liftIO $ putStrLn (showHex val "") 
   liftIO $ putStrLn (showHex (
                         val *
                         blockDataDifficulty (blockBlockData b)
                         ) "")
-
+-}
 
   return $ val * blockDataDifficulty (blockBlockData b) < (2::Integer)^(256::Integer)
