@@ -55,7 +55,7 @@ data Context =
     peers::[Peer],
     miningDataset::B.ByteString,
     useAlternateGenesisBlock::Bool,
-    debugMsg::String, 
+    vmTrace::[String], 
     debugEnabled::Bool
     }
 
@@ -104,17 +104,17 @@ getAllStorageKeyVals' owner = do
 getDebugMsg::ContextM String
 getDebugMsg = do
   cxt <- get
-  return $ debugMsg cxt
+  return $ concat $ reverse $ vmTrace cxt
 
 addDebugMsg::String->ContextM ()
 addDebugMsg msg = do
   cxt <- get
-  put cxt{debugMsg=debugMsg cxt++msg}
+  put cxt{vmTrace=msg:vmTrace cxt}
 
 clearDebugMsg::ContextM ()
 clearDebugMsg = do
   cxt <- get
-  put cxt{debugMsg=""}
+  put cxt{vmTrace=[]}
 
 putStorageKeyVal'::Address->Word256->Word256->ContextM ()
 putStorageKeyVal' owner key val = do
