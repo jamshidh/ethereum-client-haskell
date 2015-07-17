@@ -258,7 +258,9 @@ main = do
         case args of
           [] -> ipAddresses !! 1 --default server
           [x] -> ipAddresses !! read x
+          ["-a", address] -> (address, 30303)
           [x, prt] -> (fst (ipAddresses !! read x), fromIntegral $ read prt)
+          ["-a", address, prt] -> (address, fromIntegral $ read prt)
           _ -> error "usage: ethereumH [servernum] [port]"
 
   putStrLn $ "Attempting to connect to " ++ show ipAddress ++ ":" ++ show thePort
@@ -289,7 +291,7 @@ main = do
   runResourceT $ do
       cxt <- openDBs "h"
       _ <- flip runStateT cxt $
-           flip runStateT (Context [] 0 [] dataset True "" False) $
+           flip runStateT (Context [] 0 [] dataset False [] False) $
            runEthCryptM myPriv otherPubKey ipAddress (fromIntegral thePort) $ do
               
              sendMsg =<< liftIO (mkHello myPublic)
