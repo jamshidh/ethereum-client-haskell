@@ -126,7 +126,6 @@ checkValidity b = do
     Just parentBlock -> do
           checkParentChildValidity b parentBlock
           nIsValid <- nonceIsValid' b
-          liftIO $ print nIsValid
           --unless nIsValid $ fail $ "Block nonce is wrong: " ++ format b
           unless (checkUnclesHash b) $ fail "Block unclesHash is wrong"
           stateRootExists <- verifyStateRootExists b
@@ -164,7 +163,13 @@ runCodeForTransaction b availableGas tAddr owner ut | isMessageTX ut = do
 
 addBlocks::Bool->[Block]->ContextM ()
 addBlocks isBeingCreated blocks = 
-  forM_ blocks (addBlock isBeingCreated)
+  forM_ blocks $ \block -> do
+    before <- liftIO $ getPOSIXTime 
+    addBlock isBeingCreated block
+    after <- liftIO $ getPOSIXTime 
+
+    liftIO $ putStrLn $ "#### Block insertion time = " ++ printf "%.4f" (realToFrac $ after - before::Double) ++ "s"
+
 
 isNonceValid::Transaction->ContextM Bool
 isNonceValid t = do
@@ -369,7 +374,7 @@ addBlock isBeingCreated b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
             liftIO $ putStrLn $ "newStateRoot: " ++ show (pretty $ stateRoot $ stateDB dbs)
             error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ show (pretty $ blockDataStateRoot $ blockBlockData b)
           return b
-          
+
       valid <- checkValidity b'
       case valid of
         Right () -> return ()
