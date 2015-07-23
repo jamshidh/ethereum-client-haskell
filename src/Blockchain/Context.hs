@@ -15,13 +15,10 @@ module Blockchain.Context (
   ) where
 
 
-import Control.Monad.IfElse
 import Control.Monad.IO.Class
 import Control.Monad.State
-import Control.Monad.Trans.Resource
 import qualified Data.ByteString as B
 import qualified Data.NibbleString as N
-import qualified Data.Vector as V
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
 
 import Blockchain.DBM
@@ -44,7 +41,6 @@ data Context =
     pingCount::Int,
     peers::[Peer],
     miningDataset::B.ByteString,
-    useAlternateGenesisBlock::Bool,
     vmTrace::[String]
     }
 

@@ -28,6 +28,7 @@ import Blockchain.Data.DiffDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
 import Blockchain.ExtWord
+import Blockchain.Options
 import Blockchain.SHA
 
 
@@ -127,7 +128,7 @@ initializeStateDB = do
 
   cxt <- get
   
-  let addressInfo = if useAlternateGenesisBlock cxt then alternateAddressInfo else canonicalAddressInfo
+  let addressInfo = if flags_altGenBlock then alternateAddressInfo else canonicalAddressInfo
   
   forM_ addressInfo $ \(address, balance) ->
     lift $ putAddressState (Address address) blankAddressState{addressStateBalance=balance}
