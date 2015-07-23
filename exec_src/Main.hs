@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
 
 module Main (
   main
@@ -12,6 +12,7 @@ import Crypto.Types.PubKey.ECC
 import Crypto.Random
 import qualified Data.ByteString as B
 import Data.Time.Clock
+import HFlags
 import qualified Network.Haskoin.Internals as H
 import Numeric
 import System.Entropy
@@ -40,6 +41,7 @@ import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
 import Blockchain.Display
 import Blockchain.PeerUrls
+import Blockchain.Options
 --import Blockchain.SampleTransactions
 import Blockchain.SHA
 --import Blockchain.SigningTools
@@ -252,7 +254,7 @@ hPubKeyToPubKey (H.PubKeyU _) = error "PubKeyU not supported in hPubKeyToPUbKey 
 
 main::IO ()    
 main = do
-  args <- getArgs
+  args <- $initHFlags "The Ethereum Haskell Peer"
 
   let (ipAddress, thePort) =
         case args of
@@ -291,7 +293,7 @@ main = do
   runResourceT $ do
       cxt <- openDBs "h"
       _ <- flip runStateT cxt $
-           flip runStateT (Context [] 0 [] dataset False [] False) $
+           flip runStateT (Context [] 0 [] dataset False [] flags_debug) $
            runEthCryptM myPriv otherPubKey ipAddress (fromIntegral thePort) $ do
               
              sendMsg =<< liftIO (mkHello myPublic)

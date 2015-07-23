@@ -44,6 +44,7 @@ executable ethereumH
                  , ethereum-util
                  , filepath
                  , haskoin
+                 , hflags
                  , hminer
                  , leveldb-haskell
                  , mmap
@@ -85,6 +86,7 @@ library
                  , ethereum-util
                  , filepath
                  , haskoin
+                 , hflags
                  , hminer
                  , IfElse
                  , leveldb-haskell
@@ -111,6 +113,7 @@ library
                    Blockchain.Display
                    Blockchain.JCommand
                    Blockchain.Mining
+                   Blockchain.Options
                    Blockchain.PeerUrls
                    Blockchain.SampleTransactions
                    Blockchain.VM.Code
