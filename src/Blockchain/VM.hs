@@ -35,6 +35,7 @@ import Blockchain.DB.CodeDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
 import Blockchain.ExtWord
+import Blockchain.Options
 import Blockchain.SHA
 import Blockchain.Util
 import Blockchain.VM.Code
@@ -554,7 +555,7 @@ runOperation CALLCODE = do
       (_, True, _) -> do
         addGas $ fromIntegral gas
         addGas $ fromIntegral stipend
-        whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ CL.red "Insufficient balance"
+        when flags_debug $ liftIO $ putStrLn $ CL.red "Insufficient balance"
         return (0, Nothing)
       (_, _, Nothing) -> do
         nestedRun_debugWrapper (fromIntegral gas+stipend) owner to owner value inputData 
@@ -597,7 +598,7 @@ runOperation SUICIDE = do
 
 
 runOperation (MalformedOpcode opcode) = do
-  whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ CL.red ("Malformed Opcode: " ++ showHex opcode "")
+  when flags_debug $ liftIO $ putStrLn $ CL.red ("Malformed Opcode: " ++ showHex opcode "")
   left MalformedOpcodeException
 
 runOperation x = error $ "Missing case in runOperation: " ++ show x
@@ -745,7 +746,7 @@ runCode c = do
   lift $ lift $ addDebugMsg $
     "EVM [ eth | " ++ show (callDepth vmState) ++ " | " ++ formatAddressWithoutColor (envOwner env) ++ " | #" ++ show c ++ " | " ++ map toUpper (showHex4 (pc vmState)) ++ " : " ++ formatOp op ++ " | " ++ show (vmGasRemaining vmState) ++ " | " ++ show (vmGasRemaining result - vmGasRemaining result) ++ " | " ++ show(toInteger memAfter - toInteger memBefore) ++ "x32 ]\n"
 
-  whenM (lift $ lift isDebugEnabled) $ printDebugInfo (environment result) memBefore memAfter c op vmState result
+  when flags_debug $ printDebugInfo (environment result) memBefore memAfter c op vmState result
 
   case result of
     VMState{done=True} -> incrementPC len
@@ -757,7 +758,7 @@ runCodeFromStart::VMM ()
 runCodeFromStart = do
   env <- lift $ fmap environment get
 
-  whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty $ envCode env)))
+  when flags_debug $ liftIO $ putStrLn $ "running code: " ++ tab (CL.magenta ("\n" ++ show (pretty $ envCode env)))
 
   runCode 0
 
@@ -778,7 +779,7 @@ runVMM callDepth' env availableGas f = do
       _ -> return ()
 
 
-  whenM isDebugEnabled $ liftIO $ putStrLn "VM has finished running"
+  when flags_debug $ liftIO $ putStrLn "VM has finished running"
 
   return result
 
@@ -837,7 +838,7 @@ create' = do
   owner <- getEnvVar envOwner
   
   let codeBytes' = fromMaybe B.empty $ returnVal vmState
-  whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ "Result: " ++ show codeBytes'
+  when flags_debug $ liftIO $ putStrLn $ "Result: " ++ show codeBytes'
 
   
   if vmGasRemaining vmState < gCREATEDATA * toInteger (B.length codeBytes')
@@ -912,7 +913,7 @@ call' = do
 
   vmState <- lift get
 
-  whenM (lift $ lift isDebugEnabled) $ liftIO $ do
+  when flags_debug $ liftIO $ do
       let result = fromMaybe B.empty $ returnVal vmState
       --putStrLn $ "Result: " ++ format result
       putStrLn $ "Gas remaining: " ++ show (vmGasRemaining vmState) ++ ", needed: " ++ show (5*toInteger (B.length result))
@@ -952,7 +953,7 @@ create_debugWrapper block owner value initCodeBytes = do
 
       case result of
         Left e -> do
-          whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ CL.red $ show e
+          when flags_debug $ liftIO $ putStrLn $ CL.red $ show e
           return Nothing
         Right _ -> do
 
@@ -982,11 +983,11 @@ nestedRun_debugWrapper gas receiveAddress (Address address') sender value inputD
         Right retVal -> do
           forM_ (reverse $ logs finalVMState) addLog
           forM_ (reverse $ suicideList finalVMState) addSuicideList
-          whenM (lift $ lift isDebugEnabled) $
+          when flags_debug $
             liftIO $ putStrLn $ "Refunding: " ++ show (vmGasRemaining finalVMState)
           useGas (- vmGasRemaining finalVMState)
           addToRefund (refund finalVMState)
           return (1, Just retVal)
         Left e -> do
-          whenM (lift $ lift isDebugEnabled) $ liftIO $ putStrLn $ CL.red $ show e
+          when flags_debug $ liftIO $ putStrLn $ CL.red $ show e
           return (0, Nothing)

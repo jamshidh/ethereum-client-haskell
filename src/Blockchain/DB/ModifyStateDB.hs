@@ -13,6 +13,7 @@ import Blockchain.Context
 import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.DataDefs
+import Blockchain.Options
 
 --import Debug.Trace
 
@@ -28,8 +29,7 @@ addToBalance address val = do
 
 pay::String->Address->Address->Integer->ContextM Bool
 pay description fromAddr toAddr val = do
-  debug <- isDebugEnabled
-  when debug $ do
+  when flags_debug $ do
     liftIO $ putStrLn $ "payment: from " ++ show (pretty fromAddr) ++ " to " ++ show (pretty toAddr) ++ ": " ++ show val ++ ", " ++ description
     fromAddressState <- lift $ getAddressState fromAddr
     liftIO $ putStrLn $ "from Funds: " ++ show (addressStateBalance fromAddressState)

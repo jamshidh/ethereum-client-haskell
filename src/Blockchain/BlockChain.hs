@@ -53,6 +53,7 @@ import Blockchain.Constants
 import Blockchain.ExtDBs
 import Blockchain.Format
 import Blockchain.Mining
+import Blockchain.Options
 import Blockchain.SHA
 import Blockchain.Util
 import Blockchain.VM
@@ -143,7 +144,7 @@ checkValidity b = do
 
 runCodeForTransaction::Block->Integer->Address->Address->Transaction->ContextM (Either VMException B.ByteString, VMState)
 runCodeForTransaction b availableGas tAddr newAddress ut | isContractCreationTX ut = do
-  whenM isDebugEnabled $ liftIO $ putStrLn "runCodeForTransaction: ContractCreationTX"
+  when flags_debug $ liftIO $ putStrLn "runCodeForTransaction: ContractCreationTX"
 
   (result, vmState) <-
     create b 0 tAddr tAddr (transactionValue ut) (transactionGasPrice ut) availableGas newAddress (transactionInit ut)
@@ -151,7 +152,7 @@ runCodeForTransaction b availableGas tAddr newAddress ut | isContractCreationTX 
   return (const B.empty <$> result, vmState)
 
 runCodeForTransaction b availableGas tAddr owner ut | isMessageTX ut = do
-  whenM isDebugEnabled $ liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ transactionTo ut)
+  when flags_debug $ liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ transactionTo ut)
 
   call b 0 owner owner tAddr
           (fromIntegral $ transactionValue ut) (fromIntegral $ transactionGasPrice ut)
@@ -210,7 +211,7 @@ addTransaction b remainingBlockGas t = do
 
 
   let intrinsicGas' = intrinsicGas t
-  whenM (lift isDebugEnabled) $
+  when flags_debug $
     liftIO $ do
       putStrLn $ "bytes cost: " ++ show (gTXDATAZERO * (fromIntegral $ zeroBytesLength t) + gTXDATANONZERO * (fromIntegral (codeOrDataLength t) - (fromIntegral $ zeroBytesLength t)))
       putStrLn $ "transaction cost: " ++ show gTX
@@ -234,7 +235,7 @@ addTransaction b remainingBlockGas t = do
   
   success <- lift $ addToBalance tAddr (-transactionGasLimit t * transactionGasPrice t)
 
-  whenM (lift isDebugEnabled) $ liftIO $ putStrLn "running code"
+  when flags_debug $ liftIO $ putStrLn "running code"
 
   if success
       then do
@@ -244,7 +245,7 @@ addTransaction b remainingBlockGas t = do
         
         case result of
           Left e -> do
-            whenM (lift isDebugEnabled) $ liftIO $ putStrLn $ CL.red $ show e
+            when flags_debug $ liftIO $ putStrLn $ CL.red $ show e
             return (newVMState'{vmException = Just e}, remainingBlockGas - transactionGasLimit t)
           Right x -> do
             let realRefund =
@@ -254,7 +255,7 @@ addTransaction b remainingBlockGas t = do
 
             when (not success) $ error "oops, refund was too much"
 
-            whenM (lift isDebugEnabled) $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList newVMState')
+            when flags_debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList newVMState')
             forM_ (suicideList newVMState') $ lift . lift . deleteAddressState
 
 

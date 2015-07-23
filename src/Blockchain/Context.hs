@@ -3,7 +3,6 @@
 module Blockchain.Context (
   Context(..),
   ContextM,
-  isDebugEnabled,
   getStorageKeyVal',
   getAllStorageKeyVals',
   getDebugMsg,
@@ -23,28 +22,19 @@ import Control.Monad.Trans.Resource
 import qualified Data.ByteString as B
 import qualified Data.NibbleString as N
 import qualified Data.Vector as V
-import System.Directory
-import System.FilePath
-import System.IO
-import System.IO.MMap
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
 
-import Blockchain.Constants
 import Blockchain.DBM
 import Blockchain.Data.Peer
 import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
-import Blockchain.Data.DataDefs
 import Blockchain.Data.RLP
 import qualified Blockchain.Database.MerklePatricia as MPDB
 import qualified Blockchain.Database.MerklePatricia.Internal as MPDB
 import Blockchain.ExtDBs
 import Blockchain.ExtWord
+import Blockchain.Options
 import Blockchain.SHA
-import Blockchain.Util
-import Cache
-import Constants
-import qualified Data.NibbleString as N
 
 --import Debug.Trace
 
@@ -55,16 +45,10 @@ data Context =
     peers::[Peer],
     miningDataset::B.ByteString,
     useAlternateGenesisBlock::Bool,
-    vmTrace::[String], 
-    debugEnabled::Bool
+    vmTrace::[String]
     }
 
 type ContextM = StateT Context DBM
-
-isDebugEnabled::ContextM Bool
-isDebugEnabled = do
-  cxt <- get
-  return $ debugEnabled cxt 
 
 {-
 initContext::String->IO Context
@@ -142,7 +126,7 @@ incrementNonce address = do
 getNewAddress::Address->ContextM Address
 getNewAddress address = do
   addressState <- lift $ getAddressState address
-  whenM isDebugEnabled $ liftIO $ putStrLn $ "Creating new account: owner=" ++ show (pretty address) ++ ", nonce=" ++ show (addressStateNonce addressState)
+  when flags_debug $ liftIO $ putStrLn $ "Creating new account: owner=" ++ show (pretty address) ++ ", nonce=" ++ show (addressStateNonce addressState)
   let newAddress = getNewAddress_unsafe address (addressStateNonce addressState)
   incrementNonce address
   return newAddress

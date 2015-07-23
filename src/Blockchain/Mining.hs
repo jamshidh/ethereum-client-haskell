@@ -23,7 +23,7 @@ import Constants
 import Dataset
 import Hashimoto
 
-import Debug.Trace
+--import Debug.Trace
 
 
 word32Unpack::B.ByteString->[Word32]
