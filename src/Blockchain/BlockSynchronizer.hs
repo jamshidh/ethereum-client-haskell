@@ -33,7 +33,7 @@ import Blockchain.SHA
 data GetBlockHashesResult = NeedMore SHA | NeededHashes [SHA] deriving (Show)
 
 --Only use for debug purposes, to trick the peer to rerun VM code for a particular block
-debug_blockDBGet::(HasBlockDB m, MonadResource m)=>B.ByteString->m (Maybe B.ByteString)
+debug_blockDBGet::HasBlockDB m=>B.ByteString->m (Maybe B.ByteString)
 debug_blockDBGet hash = do
   maybeBlockBytes <- blockDBGet hash
   case maybeBlockBytes of
