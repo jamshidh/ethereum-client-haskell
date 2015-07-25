@@ -6,15 +6,19 @@ module Blockchain.Mining (
 
 import Control.Monad.IO.Class
 import Control.Monad.Trans.State
+import qualified Crypto.Hash.SHA3 as SHA3
 import qualified Data.Array.IO as A
 import qualified Data.Binary as Bin
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
+import Data.Time.Clock.POSIX
 import Data.Word
 
 import Blockchain.Context
 import Blockchain.Data.BlockDB
+import Blockchain.Data.RLP
 import Blockchain.ExtWord
+import Blockchain.SHA
 import Blockchain.Util
 import Numeric
 
@@ -57,3 +61,35 @@ nonceIsValid' b = do
 -}
 
   return $ val * blockDataDifficulty (blockBlockData b) < (2::Integer)^(256::Integer)
+
+
+
+
+--------------------------
+--Mining stuff
+
+--used as part of the powFunc
+noncelessBlockData2RLP::BlockData->RLPObject
+noncelessBlockData2RLP bd =
+  RLPArray [
+      rlpEncode $ blockDataParentHash bd,
+      rlpEncode $ blockDataUnclesHash bd,
+      rlpEncode $ blockDataCoinbase bd,
+      rlpEncode $ blockDataStateRoot bd,
+      rlpEncode $ blockDataTransactionsRoot bd,
+      rlpEncode $ blockDataReceiptsRoot bd,
+      rlpEncode $ blockDataLogBloom bd,
+      rlpEncode $ blockDataDifficulty bd,
+      rlpEncode $ blockDataNumber bd,
+      rlpEncode $ blockDataGasLimit bd,
+      rlpEncode $ blockDataGasUsed bd,
+      rlpEncode (round $ utcTimeToPOSIXSeconds $ blockDataTimestamp bd::Integer),
+      rlpEncode $ blockDataExtraData bd
+      ]
+
+sha2ByteString::SHA->B.ByteString
+sha2ByteString (SHA val) = BL.toStrict $ Bin.encode val
+
+headerHashWithoutNonce::Block->B.ByteString
+headerHashWithoutNonce b = SHA3.hash 256 $ rlpSerialize $ noncelessBlockData2RLP $ blockBlockData b
+

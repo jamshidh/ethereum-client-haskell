@@ -6,6 +6,7 @@ module Blockchain.BlockSynchronizer (
 
 import Control.Monad.IO.Class
 import Control.Monad.State
+import Control.Monad.Trans.Resource
 import qualified Data.Binary as Bin
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
@@ -32,7 +33,7 @@ import Blockchain.SHA
 data GetBlockHashesResult = NeedMore SHA | NeededHashes [SHA] deriving (Show)
 
 --Only use for debug purposes, to trick the peer to rerun VM code for a particular block
-debug_blockDBGet::B.ByteString->DBM (Maybe B.ByteString)
+debug_blockDBGet::(HasBlockDB m, MonadResource m)=>B.ByteString->m (Maybe B.ByteString)
 debug_blockDBGet hash = do
   maybeBlockBytes <- blockDBGet hash
   case maybeBlockBytes of
@@ -46,7 +47,7 @@ debug_blockDBGet hash = do
 
 findFirstHashAlreadyInDB::[SHA]->ContextM (Maybe SHA)
 findFirstHashAlreadyInDB hashes = do
-  items <- lift $ filterM (fmap (not . isNothing) . blockDBGet . BL.toStrict . Bin.encode) hashes
+  items <- filterM (fmap (not . isNothing) . blockDBGet . BL.toStrict . Bin.encode) hashes
   --items <- lift $ filterM (fmap (not . isNothing) . debug_blockDBGet . BL.toStrict . Bin.encode) hashes
   return $ safeHead items
   where
@@ -89,7 +90,7 @@ handleNewBlocks blocks = do
   let orderedBlocks =
         sortBy (compare `on` blockDataNumber . blockBlockData) blocks
 
-  maybeParentBlock <- lift $ lift $ getBlock (blockDataParentHash $ blockBlockData $ head $ orderedBlocks) --head OK, [] weeded out
+  maybeParentBlock <- lift $ getBlock (blockDataParentHash $ blockBlockData $ head $ orderedBlocks) --head OK, [] weeded out
 
   cxt <- lift get
 

@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, TypeSynonymInstances, FlexibleInstances #-}
 
 module Blockchain.Context (
   Context(..),
@@ -19,6 +19,7 @@ import Control.Monad.IO.Class
 import Control.Monad.State
 import qualified Data.ByteString as B
 import qualified Data.NibbleString as N
+import qualified Database.LevelDB as LDB
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
 
 import Blockchain.DBM
@@ -37,6 +38,12 @@ import Blockchain.SHA
 
 data Context =
   Context {
+    contextStateDB::MPDB.MPDB,
+    contextHashDB::HashDB,
+    contextBlockDB::BlockDB,
+    contextCodeDB::CodeDB,
+    contextSQLDB::SQLDB,
+    contextDetailsDB::DetailsDB,
     neededBlockHashes::[SHA],
     pingCount::Int,
     peers::[Peer],
@@ -45,6 +52,29 @@ data Context =
     }
 
 type ContextM = StateT Context DBM
+
+instance HasStateDB ContextM where
+  getStateDB = do
+    cxt <- get
+    return $ contextStateDB cxt
+  setStateDBStateRoot sr = do
+    cxt <- get
+    put cxt{contextStateDB=(contextStateDB cxt){MPDB.stateRoot=sr}}
+
+instance HasHashDB ContextM where
+  getHashDB = fmap contextHashDB get
+
+instance HasBlockDB ContextM where
+  getBlockDB = fmap contextBlockDB get
+
+instance HasCodeDB ContextM where
+  getCodeDB = fmap contextCodeDB get
+
+instance HasSQLDB ContextM where
+  getSQLDB = fmap contextSQLDB get
+
+instance HasDetailsDB ContextM where
+  getDetailsDB = fmap contextDetailsDB get
 
 {-
 initContext::String->IO Context
@@ -65,9 +95,9 @@ initContext theType = do
 
 getStorageKeyVal'::Address->Word256->ContextM Word256
 getStorageKeyVal' owner key = do
-  addressState <- lift $ getAddressState owner
-  dbs <- lift get
-  let mpdb = (stateDB dbs){MPDB.stateRoot=addressStateContractRoot addressState}
+  addressState <- getAddressState owner
+  db <- getStateDB
+  let mpdb = db{MPDB.stateRoot=addressStateContractRoot addressState}
   maybeVal <- lift $ lift $ MPDB.getKeyVal mpdb (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes key)
   case maybeVal of
     Nothing -> return 0
@@ -75,9 +105,9 @@ getStorageKeyVal' owner key = do
 
 getAllStorageKeyVals'::Address->ContextM [(MPDB.Key, Word256)]
 getAllStorageKeyVals' owner = do
-  addressState <- lift $ getAddressState owner
-  dbs <- lift get
-  let mpdb = (stateDB dbs){MPDB.stateRoot=addressStateContractRoot addressState}
+  addressState <- getAddressState owner
+  db <- getStateDB
+  let mpdb = db{MPDB.stateRoot=addressStateContractRoot addressState}
   kvs <- lift $ lift $ MPDB.unsafeGetAllKeyVals mpdb
   return $ map (fmap $ fromInteger . rlpDecode . rlpDeserialize . rlpDecode) kvs
 
@@ -98,30 +128,30 @@ clearDebugMsg = do
 
 putStorageKeyVal'::Address->Word256->Word256->ContextM ()
 putStorageKeyVal' owner key val = do
-  lift $ hashDBPut storageKeyNibbles
-  addressState <- lift $ getAddressState owner
-  dbs <- lift get
-  let mpdb = (stateDB dbs){MPDB.stateRoot=addressStateContractRoot addressState}
+  hashDBPut storageKeyNibbles
+  addressState <- getAddressState owner
+  db <- getStateDB
+  let mpdb = db{MPDB.stateRoot=addressStateContractRoot addressState}
   newContractRoot <- fmap MPDB.stateRoot $ lift $ lift $ MPDB.putKeyVal mpdb storageKeyNibbles (rlpEncode $ rlpSerialize $ rlpEncode $ toInteger val)
-  lift $ putAddressState owner addressState{addressStateContractRoot=newContractRoot}
+  putAddressState owner addressState{addressStateContractRoot=newContractRoot}
   where storageKeyNibbles = N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes key
 
 deleteStorageKey'::Address->Word256->ContextM ()
 deleteStorageKey' owner key = do
-  addressState <- lift $ getAddressState owner
-  dbs <- lift get
-  let mpdb = (stateDB dbs){MPDB.stateRoot=addressStateContractRoot addressState}
+  addressState <- getAddressState owner
+  db <- getStateDB
+  let mpdb = db{MPDB.stateRoot=addressStateContractRoot addressState}
   newContractRoot <- fmap MPDB.stateRoot $ lift $ lift $ MPDB.deleteKey mpdb (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes key)
-  lift $ putAddressState owner addressState{addressStateContractRoot=newContractRoot}
+  putAddressState owner addressState{addressStateContractRoot=newContractRoot}
 
 incrementNonce::Address->ContextM ()
 incrementNonce address = do
-  addressState <- lift $ getAddressState address
-  lift $ putAddressState address addressState{ addressStateNonce = addressStateNonce addressState + 1 }
+  addressState <- getAddressState address
+  putAddressState address addressState{ addressStateNonce = addressStateNonce addressState + 1 }
 
 getNewAddress::Address->ContextM Address
 getNewAddress address = do
-  addressState <- lift $ getAddressState address
+  addressState <- getAddressState address
   when flags_debug $ liftIO $ putStrLn $ "Creating new account: owner=" ++ show (pretty address) ++ ", nonce=" ++ show (addressStateNonce addressState)
   let newAddress = getNewAddress_unsafe address (addressStateNonce addressState)
   incrementNonce address

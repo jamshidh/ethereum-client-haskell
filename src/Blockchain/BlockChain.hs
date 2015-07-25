@@ -45,7 +45,7 @@ import Blockchain.Data.GenesisBlock
 import Blockchain.Data.RLP
 import Blockchain.Data.Transaction
 import Blockchain.Data.TransactionResult
-import Blockchain.Database.MerklePatricia
+import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.DB.CodeDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
@@ -101,7 +101,7 @@ instance Format BlockValidityError where
 
 verifyStateRootExists::Block->ContextM Bool
 verifyStateRootExists b = do
-  val <- lift $ stateDBGet (BL.toStrict $ encode $ blockDataStateRoot $ blockBlockData b)
+  val <- stateDBGet (BL.toStrict $ encode $ blockDataStateRoot $ blockBlockData b)
   case val of
     Nothing -> return False
     Just _ -> return True
@@ -122,7 +122,7 @@ checkParentChildValidity Block{blockBlockData=c} Block{blockBlockData=p} = do
 
 checkValidity::Monad m=>Block->ContextM (m ())
 checkValidity b = do
-  maybeParentBlock <- lift $ getBlock (blockDataParentHash $ blockBlockData b)
+  maybeParentBlock <- getBlock (blockDataParentHash $ blockBlockData b)
   case maybeParentBlock of
     Just parentBlock -> do
           checkParentChildValidity b parentBlock
@@ -177,7 +177,7 @@ isNonceValid t = do
   case whoSignedThisTransaction t of
     Nothing -> return False --no nonce would work
     Just tAddr -> do
-      addressState <- lift $ getAddressState tAddr
+      addressState <- getAddressState tAddr
       return $ addressStateNonce addressState == transactionNonce t
 
 codeOrDataLength::Transaction->Int
@@ -217,7 +217,7 @@ addTransaction b remainingBlockGas t = do
       putStrLn $ "transaction cost: " ++ show gTX
       putStrLn $ "intrinsicGas: " ++ show (intrinsicGas')
 
-  addressState <- lift $ lift $ getAddressState tAddr
+  addressState <- lift $ getAddressState tAddr
 
   when (transactionGasLimit t * transactionGasPrice t + transactionValue t > addressStateBalance addressState) $ left "sender doesn't have high enough balance"
   when (intrinsicGas' > transactionGasLimit t) $ left "intrinsic gas higher than transaction gas limit"
@@ -256,13 +256,13 @@ addTransaction b remainingBlockGas t = do
             when (not success) $ error "oops, refund was too much"
 
             when flags_debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList newVMState')
-            forM_ (suicideList newVMState') $ lift . lift . deleteAddressState
+            forM_ (suicideList newVMState') $ lift . deleteAddressState
 
 
             return (newVMState', remainingBlockGas - (transactionGasLimit t - realRefund - vmGasRemaining newVMState'))
       else do
         lift $ addToBalance (blockDataCoinbase $ blockBlockData b) (intrinsicGas' * transactionGasPrice t)
-        addressState <- lift $ lift $ getAddressState tAddr
+        addressState <- lift $ getAddressState tAddr
         liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*transactionGasPrice t) ++ ", have " ++ show (addressStateBalance addressState)
         return (VMState{vmException=Just InsufficientFunds, vmGasRemaining=0, refund=0, debugCallCreates=Nothing, suicideList=[], logs=[], returnVal=Nothing}, remainingBlockGas)
 
@@ -271,7 +271,7 @@ printTransactionMessage::Transaction->ContextM ()
 printTransactionMessage t = do
   case whoSignedThisTransaction t of
     Just tAddr -> do
-      nonce <- lift $ fmap addressStateNonce $ getAddressState tAddr
+      nonce <- fmap addressStateNonce $ getAddressState tAddr
       liftIO $ putStrLn $ CL.magenta "    =========================================================================="
       liftIO $ putStrLn $ CL.magenta "    | Adding transaction signed by: " ++ show (pretty tAddr) ++ CL.magenta " |"
       liftIO $ putStrLn $ CL.magenta "    |    " ++
@@ -292,7 +292,7 @@ addTransactions b blockGas (t:rest) = do
 
   before <- liftIO $ getPOSIXTime 
 
-  stateRootBefore <- lift $ getStateRoot
+  stateRootBefore <- fmap MP.stateRoot getStateDB
 
   result <- runEitherT $ addTransaction b blockGas t
 
@@ -303,11 +303,11 @@ addTransactions b blockGas (t:rest) = do
 
   after <- liftIO $ getPOSIXTime 
 
-  stateRootAfter <- lift $ getStateRoot
+  stateRootAfter <- fmap MP.stateRoot getStateDB
 
-  mpdb <- fmap stateDB $ lift get
+  mpdb <- getStateDB
 
-  addrDiff <- lift $ addrDbDiff mpdb stateRootBefore stateRootAfter
+  addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
 
   detailsString <- getDebugMsg
   lift $ putTransactionResult $
@@ -344,13 +344,13 @@ addTransactions b blockGas (t:rest) = do
 addBlock::Bool->Block->ContextM ()
 addBlock isBeingCreated b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
   liftIO $ putStrLn $ "Inserting block #" ++ show (blockDataNumber bd) ++ " (" ++ show (pretty $ blockHash b) ++ ")."
-  maybeParent <- lift $ getBlock $ blockDataParentHash bd
+  maybeParent <- getBlock $ blockDataParentHash bd
   case maybeParent of
     Nothing ->
       liftIO $ putStrLn $ "Missing parent block in addBlock: " ++ show (pretty $ blockDataParentHash bd) ++ "\n" ++
       "Block will not be added now, but will be requested and added later"
     Just parentBlock -> do
-      lift $ setStateRoot $ blockDataStateRoot $ blockBlockData parentBlock
+      setStateDBStateRoot $ blockDataStateRoot $ blockBlockData parentBlock
       let rewardBase = 1500 * finney
       addToBalance (blockDataCoinbase bd) rewardBase
 
@@ -365,14 +365,14 @@ addBlock isBeingCreated b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
 
       addTransactions b (blockDataGasLimit $ blockBlockData b) transactions
 
-      dbs <- lift get
+      db <- getStateDB
 
       b' <-
         if isBeingCreated
-        then return b{blockBlockData = (blockBlockData b){blockDataStateRoot=stateRoot $ stateDB dbs}}
+        then return b{blockBlockData = (blockBlockData b){blockDataStateRoot=MP.stateRoot db}}
         else do
-          when ((blockDataStateRoot (blockBlockData b) /= stateRoot (stateDB dbs))) $ do
-            liftIO $ putStrLn $ "newStateRoot: " ++ show (pretty $ stateRoot $ stateDB dbs)
+          when ((blockDataStateRoot (blockBlockData b) /= MP.stateRoot db)) $ do
+            liftIO $ putStrLn $ "newStateRoot: " ++ show (pretty $ MP.stateRoot db)
             error $ "stateRoot mismatch!!  New stateRoot doesn't match block stateRoot: " ++ show (pretty $ blockDataStateRoot $ blockBlockData b)
           return b
 
@@ -381,33 +381,33 @@ addBlock isBeingCreated b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
         Right () -> return ()
         Left err -> error err
       -- let bytes = rlpSerialize $ rlpEncode b
-      blkDataId <- lift $ putBlock b'
+      blkDataId <- putBlock b'
       replaceBestIfBetter (blkDataId, b')
 
 getBestBlockHash::ContextM SHA
 getBestBlockHash = do
-  maybeBestHash <- lift $ detailsDBGet "best"
+  maybeBestHash <- detailsDBGet "best"
   case maybeBestHash of
     Nothing -> do
       bhSHA <- getGenesisBlockHash
-      lift $ detailsDBPut "best" $ BL.toStrict $ encode bhSHA
+      detailsDBPut "best" $ BL.toStrict $ encode bhSHA
       return bhSHA
     Just bestHash -> return $ decode $ BL.fromStrict $ bestHash
 
 getGenesisBlockHash::ContextM SHA
 getGenesisBlockHash = do
-  maybeGenesisHash <- lift $ detailsDBGet "genesis"
+  maybeGenesisHash <- detailsDBGet "genesis"
   case maybeGenesisHash of
     Nothing -> do
       bhSHA <- blockHash <$> initializeGenesisBlock
-      lift $ detailsDBPut "genesis" $ BL.toStrict $ encode bhSHA
+      detailsDBPut "genesis" $ BL.toStrict $ encode bhSHA
       return bhSHA
     Just bestHash -> return $ decode $ BL.fromStrict $ bestHash
 
 getBestBlock::ContextM Block
 getBestBlock = do
   bestBlockHash <- getBestBlockHash
-  bestBlock <- lift $ getBlock bestBlockHash
+  bestBlock <- getBlock bestBlockHash
   return $ fromMaybe (error $ "Missing block in database: " ++ show (pretty bestBlockHash)) bestBlock
       
 
@@ -417,8 +417,8 @@ replaceBestIfBetter (blkDataId, b) = do
   if blockDataNumber (blockBlockData best) >= n
     then return ()
     else do
-    lift $ detailsDBPut "best" (BL.toStrict $ encode $ blockHash b)
+    detailsDBPut "best" (BL.toStrict $ encode $ blockHash b)
     let oldStateRoot = blockDataStateRoot (blockBlockData best)
         newStateRoot = blockDataStateRoot (blockBlockData b)
-    lift $ sqlDiff blkDataId n oldStateRoot newStateRoot
+    sqlDiff blkDataId n oldStateRoot newStateRoot
   where n = blockDataNumber (blockBlockData b)

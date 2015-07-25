@@ -43,10 +43,10 @@ import Blockchain.Data.RLP
 
 initializeBlankStateDB::ContextM ()
 initializeBlankStateDB = do
-  dbs <- lift get
+  db <- getStateDB
   liftIO $ runResourceT $
-         initializeBlank (stateDB dbs)
-  lift $ put dbs{stateDB=(stateDB dbs){stateRoot=emptyTriePtr}}
+         initializeBlank db
+  setStateDBStateRoot emptyTriePtr
 
 initializeStateDB::ContextM ()
 initializeStateDB = do
@@ -131,12 +131,12 @@ initializeStateDB = do
   let addressInfo = if flags_altGenBlock then alternateAddressInfo else canonicalAddressInfo
   
   forM_ addressInfo $ \(address, balance) ->
-    lift $ putAddressState (Address address) blankAddressState{addressStateBalance=balance}
+    putAddressState (Address address) blankAddressState{addressStateBalance=balance}
 
 initializeGenesisBlock::ContextM Block
 initializeGenesisBlock = do
   initializeStateDB
-  dbs <- lift get
+  db <- getStateDB
   let genesisBlock = Block {
                blockBlockData = 
                    BlockData {
@@ -144,7 +144,7 @@ initializeGenesisBlock = do
                        blockDataUnclesHash = hash (B.pack [0xc0]), 
                        blockDataCoinbase = Address 0,
                        --blockDataStateRoot = SHAPtr $ fst $ B16.decode "9178d0f23c965d81f0834a4c72c6253ce6830f4022b1359aaebfc1ecba442d4e", -- stateRoot $ stateDB dbs,
-                       blockDataStateRoot = stateRoot $ stateDB dbs,
+                       blockDataStateRoot = stateRoot db,
                        blockDataTransactionsRoot = emptyTriePtr,
                        blockDataReceiptsRoot = emptyTriePtr,
                        blockDataLogBloom = B.replicate 256 0,
@@ -160,10 +160,10 @@ initializeGenesisBlock = do
                blockReceiptTransactions=[],
                blockBlockUncles=[]
              }
-  genBlkId <- lift $ putBlock genesisBlock
-  genAddrStates <- lift $ getAllAddressStates
+  genBlkId <- putBlock genesisBlock
+  genAddrStates <- getAllAddressStates
   let diffFromPair (addr, addrS) = CreateAddr addr addrS
-  lift $ commitSqlDiffs genBlkId 0 $ map diffFromPair genAddrStates
+  commitSqlDiffs genBlkId 0 $ map diffFromPair genAddrStates
 
   return genesisBlock
 

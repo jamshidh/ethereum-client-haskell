@@ -60,7 +60,7 @@ Just coinbasePrvKey = H.makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3d
 getNextBlock::Block->UTCTime->[Transaction]->ContextM Block
 getNextBlock b ts transactions = do
   let theCoinbase = prvKey2Address coinbasePrvKey
-  lift $ setStateRoot $ blockDataStateRoot bd
+  setStateDBStateRoot $ blockDataStateRoot bd
   addToBalance theCoinbase (1500*finney)
 
   dbs <- lift get
@@ -97,10 +97,11 @@ submitNextBlock::Integer->Block->EthCryptM ContextM ()
 submitNextBlock baseDifficulty b = do
         ts <- liftIO getCurrentTime
         newBlock <- lift $ getNextBlock b ts []
-        n <- liftIO $ fastFindNonce newBlock
+        --n <- liftIO $ fastFindNonce newBlock
+        let n = 0
 
         --let theBytes = headerHashWithoutNonce newBlock `B.append` B.pack (integer2Bytes n)
-        let theNewBlock = addNonceToBlock newBlock n
+        let theNewBlock = newBlock -- addNonceToBlock newBlock n
         sendMsg $ NewBlockPacket theNewBlock (baseDifficulty + blockDataDifficulty (blockBlockData theNewBlock))
         lift $ addBlocks False [theNewBlock]
 
@@ -110,7 +111,7 @@ submitNextBlockToDB baseDifficulty b transactions = do
   newBlock <- lift $ getNextBlock b ts transactions
   --n <- liftIO $ fastFindNonce newBlock
 
-  let theNewBlock = addNonceToBlock newBlock (-1)
+  let theNewBlock = newBlock{blockBlockData=(blockBlockData newBlock){blockDataNonce= -1}}
   lift $ addBlocks True [theNewBlock]
 
 submitNewBlock::Block->[Transaction]->EthCryptM ContextM ()
@@ -120,7 +121,7 @@ submitNewBlock b transactions = do
 
 ifBlockInDBSubmitNextBlock::Integer->Block->EthCryptM ContextM ()
 ifBlockInDBSubmitNextBlock baseDifficulty b = do
-  maybeBlock <- lift $ lift $ getBlock (blockHash b)
+  maybeBlock <- lift $ getBlock (blockHash b)
   case maybeBlock of
     Nothing -> return ()
     _ -> submitNextBlock baseDifficulty b
@@ -215,8 +216,8 @@ doit::EthCryptM ContextM ()
 doit = do
     liftIO $ putStrLn "Connected"
 
-    lift $ lift $ addCode B.empty --This is probably a bad place to do this, but I can't think of a more natural place to do it....  Empty code is used all over the place, and it needs to be in the database.
-    lift (lift . setStateRoot . blockDataStateRoot . blockBlockData =<< getBestBlock)
+    lift $ addCode B.empty --This is probably a bad place to do this, but I can't think of a more natural place to do it....  Empty code is used all over the place, and it needs to be in the database.
+    lift (setStateDBStateRoot . blockDataStateRoot . blockBlockData =<< getBestBlock)
 
   --signedTx <- createTransaction simpleTX
   --signedTx <- createTransaction outOfGasTX
@@ -293,7 +294,14 @@ main = do
   runResourceT $ do
       cxt <- openDBs "h"
       _ <- flip runStateT cxt $
-           flip runStateT (Context [] 0 [] dataset []) $
+           flip runStateT (Context
+                           (stateDB' cxt)
+                           (hashDB cxt)
+                           (blockDB cxt)
+                           (codeDB cxt)
+                           (sqlDB cxt)
+                           (detailsDB cxt)
+                           [] 0 [] dataset []) $
            runEthCryptM myPriv otherPubKey ipAddress (fromIntegral thePort) $ do
               
              sendMsg =<< liftIO (mkHello myPublic)

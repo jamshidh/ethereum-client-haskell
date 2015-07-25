@@ -19,26 +19,26 @@ import Blockchain.Options
 
 addToBalance::Address->Integer->ContextM Bool
 addToBalance address val = do
-  addressState <- lift $ getAddressState address
+  addressState <- getAddressState address
   let newVal = addressStateBalance addressState + val
   if newVal < 0
     then return False
     else do
-    lift $ putAddressState address addressState{addressStateBalance = newVal}
+    putAddressState address addressState{addressStateBalance = newVal}
     return True
 
 pay::String->Address->Address->Integer->ContextM Bool
 pay description fromAddr toAddr val = do
   when flags_debug $ do
     liftIO $ putStrLn $ "payment: from " ++ show (pretty fromAddr) ++ " to " ++ show (pretty toAddr) ++ ": " ++ show val ++ ", " ++ description
-    fromAddressState <- lift $ getAddressState fromAddr
+    fromAddressState <- getAddressState fromAddr
     liftIO $ putStrLn $ "from Funds: " ++ show (addressStateBalance fromAddressState)
-    toAddressState <- lift $ getAddressState toAddr
+    toAddressState <- getAddressState toAddr
     liftIO $ putStrLn $ "to Funds: " ++ show (addressStateBalance toAddressState)
     when (addressStateBalance fromAddressState < val) $
        liftIO $ putStrLn "insufficient funds"
 
-  fromAddressState <- lift $ getAddressState fromAddr
+  fromAddressState <- getAddressState fromAddr
   if addressStateBalance fromAddressState < val
     then return False
     else do
