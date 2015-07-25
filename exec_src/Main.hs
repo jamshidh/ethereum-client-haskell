@@ -169,7 +169,7 @@ handleMsg m = do
       return ()
     (Transactions transactions) -> do
       bestBlock <-lift getBestBlock
-      submitNewBlock bestBlock transactions
+      when flags_wrapTransactions $ submitNewBlock bestBlock transactions
       
     _-> return ()
 
