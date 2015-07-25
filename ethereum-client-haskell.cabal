@@ -62,6 +62,7 @@ executable ethereumH
     ghc-options: -Wall -O2
     buildable: True
     hs-source-dirs: exec_src
+    extra-libraries: pthread
 
 library
     default-language: Haskell98
