@@ -296,11 +296,11 @@ main = do
       _ <- flip runStateT cxt $
            flip runStateT (Context
                            (stateDB' cxt)
-                           (hashDB cxt)
-                           (blockDB cxt)
-                           (codeDB cxt)
-                           (sqlDB cxt)
-                           (detailsDB cxt)
+                           (hashDB' cxt)
+                           (blockDB' cxt)
+                           (codeDB' cxt)
+                           (sqlDB' cxt)
+                           (detailsDB' cxt)
                            [] 0 [] dataset []) $
            runEthCryptM myPriv otherPubKey ipAddress (fromIntegral thePort) $ do
               

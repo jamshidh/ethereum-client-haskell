@@ -310,7 +310,7 @@ addTransactions b blockGas (t:rest) = do
   addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
 
   detailsString <- getDebugMsg
-  lift $ putTransactionResult $
+  putTransactionResult $
     TransactionResult {
       transactionResultBlockHash=blockHash b,
       transactionResultTransactionHash=transactionHash t,
