@@ -292,15 +292,15 @@ main = do
   dataset <- return "" -- mmapFileByteString "dataset0" Nothing
 
   runResourceT $ do
-      cxt <- openDBs "h"
-      _ <- flip runStateT cxt $
+      dbs <- openDBs "h"
+      _ <- flip runStateT dbs $
            flip runStateT (Context
-                           (stateDB' cxt)
-                           (hashDB' cxt)
-                           (blockDB' cxt)
-                           (codeDB' cxt)
-                           (sqlDB' cxt)
-                           (detailsDB' cxt)
+                           (stateDB' dbs)
+                           (hashDB' dbs)
+                           (blockDB' dbs)
+                           (codeDB' dbs)
+                           (sqlDB' dbs)
+                           (detailsDB' dbs)
                            [] 0 [] dataset []) $
            runEthCryptM myPriv otherPubKey ipAddress (fromIntegral thePort) $ do
               
