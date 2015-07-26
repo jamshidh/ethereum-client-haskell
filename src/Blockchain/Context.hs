@@ -29,6 +29,8 @@ import Blockchain.Data.AddressStateDB
 import Blockchain.Data.RLP
 import qualified Blockchain.Database.MerklePatricia as MPDB
 import qualified Blockchain.Database.MerklePatricia.Internal as MPDB
+import Blockchain.DB.CodeDB
+import Blockchain.DB.HashDB
 import Blockchain.ExtDBs
 import Blockchain.ExtWord
 import Blockchain.Options

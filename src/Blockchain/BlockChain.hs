@@ -51,6 +51,7 @@ import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
 import Blockchain.Constants
 import Blockchain.ExtDBs
+import Blockchain.ExtWord
 import Blockchain.Format
 import Blockchain.Mining
 import Blockchain.Options
