@@ -7,13 +7,9 @@ module Blockchain.Data.GenesisBlock (
 
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Monad.Trans
 import Control.Monad.Trans.Resource
-import Control.Monad.Trans.State
 import Data.Bits
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Base16 as B16
-import Data.Functor
 import Data.Time.Clock.POSIX
 
 import Blockchain.Database.MerklePatricia
@@ -23,23 +19,12 @@ import Blockchain.Context
 import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
-import Blockchain.Data.DataDefs
 import Blockchain.Data.DiffDB
-import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
-import Blockchain.ExtWord
 import Blockchain.Options
 import Blockchain.SHA
 
-
-import Blockchain.Format
-import Blockchain.Data.RLP
-
 --import Debug.Trace
-
---startingRoot::B.ByteString
---(startingRoot, "") = B16.decode "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
-                     --"bc36789e7a1e281436464229828f817d6612f7b477d66591ff96a9e064bcc98a"                                                                                                                   
 
 initializeBlankStateDB::ContextM ()
 initializeBlankStateDB = do
@@ -126,8 +111,6 @@ initializeStateDB = do
 
   let alternateAddressInfo = map (, 1 `shiftL` 250) alternateAddresses
 
-  cxt <- get
-  
   let addressInfo = if flags_altGenBlock then alternateAddressInfo else canonicalAddressInfo
   
   forM_ addressInfo $ \(address, balance) ->
@@ -162,7 +145,7 @@ initializeGenesisBlock = do
              }
   genBlkId <- putBlock genesisBlock
   genAddrStates <- getAllAddressStates
-  let diffFromPair (addr, addrS) = CreateAddr addr addrS
+  let diffFromPair (addr', addrS) = CreateAddr addr' addrS
   commitSqlDiffs genBlkId 0 $ map diffFromPair genAddrStates
 
   return genesisBlock

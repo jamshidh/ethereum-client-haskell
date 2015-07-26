@@ -9,20 +9,14 @@ import qualified Data.ByteString as B
 
 import Blockchain.Context
 import Blockchain.Data.Address
-import Blockchain.Data.AddressStateDB
 import Blockchain.Data.Log
 import qualified Blockchain.Database.MerklePatricia as MPDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.ExtDBs
 import Blockchain.ExtWord
-import Blockchain.Data.RLP
-import Blockchain.DBM
-import Blockchain.Util
 import Blockchain.VM.Environment
 import Blockchain.VM.VMState
 import Blockchain.SHA
-import qualified Data.NibbleString as N
-
 
 type VMM = EitherT VMException (StateT VMState ContextM)
 

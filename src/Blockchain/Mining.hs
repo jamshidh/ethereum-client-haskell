@@ -18,13 +18,12 @@ import Blockchain.Context
 import Blockchain.Data.BlockDB
 import Blockchain.Data.RLP
 import Blockchain.ExtWord
-import Blockchain.SHA
+--import Blockchain.SHA
 import Blockchain.Util
-import Numeric
 
-import Cache
+--import Cache
 import Constants
-import Dataset
+--import Dataset
 import Hashimoto
 
 --import Debug.Trace
@@ -33,7 +32,7 @@ import Hashimoto
 word32Unpack::B.ByteString->[Word32]
 word32Unpack s | B.null s = []
 word32Unpack s | B.length s >= 4 = Bin.decode (BL.fromStrict $ B.take 4 s) : word32Unpack (B.drop 4 s)
-word32Unpack s = error "word32Unpack called for ByteString of length not a multiple of 4"
+word32Unpack _ = error "word32Unpack called for ByteString of length not a multiple of 4"
 
 powFunc'::B.ByteString->Block->IO Integer
 powFunc' dataset b = 
@@ -86,9 +85,6 @@ noncelessBlockData2RLP bd =
       rlpEncode (round $ utcTimeToPOSIXSeconds $ blockDataTimestamp bd::Integer),
       rlpEncode $ blockDataExtraData bd
       ]
-
-sha2ByteString::SHA->B.ByteString
-sha2ByteString (SHA val) = BL.toStrict $ Bin.encode val
 
 headerHashWithoutNonce::Block->B.ByteString
 headerHashWithoutNonce b = SHA3.hash 256 $ rlpSerialize $ noncelessBlockData2RLP $ blockBlockData b

@@ -6,7 +6,6 @@ module Blockchain.BlockSynchronizer (
 
 import Control.Monad.IO.Class
 import Control.Monad.State
-import Control.Monad.Trans.Resource
 import qualified Data.Binary as Bin
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
@@ -20,7 +19,6 @@ import qualified Blockchain.Colors as CL
 import Blockchain.Communication
 import Blockchain.Context
 import Blockchain.Data.BlockDB
-import Blockchain.Data.DataDefs
 import Blockchain.Data.RLP
 import Blockchain.Data.Wire
 import Blockchain.DBM

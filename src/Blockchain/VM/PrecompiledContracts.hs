@@ -48,7 +48,7 @@ sha2 input =
      SHA2.hash SHA2.SHA256 input
 
 callPrecompiledContract::Word160->B.ByteString->VMM B.ByteString
-callPrecompiledContract 0 inputData = return B.empty
+callPrecompiledContract 0 _ = return B.empty
 
 callPrecompiledContract 1 inputData = do
   useGas gECRECOVER

@@ -46,6 +46,7 @@ import Blockchain.Options
 import Blockchain.SHA
 --import Blockchain.SigningTools
 import Blockchain.Util
+import Blockchain.Verifier
 import qualified Data.ByteString.Base16 as B16
 --import Debug.Trace
 

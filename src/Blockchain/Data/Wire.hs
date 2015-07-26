@@ -11,13 +11,11 @@ import qualified Data.ByteString as B
 import Data.Functor
 import Data.List
 import Data.Word
-import Network.Haskoin.Crypto
 import Numeric
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import qualified Blockchain.Colors as CL
 import Blockchain.Data.BlockDB
-import Blockchain.Data.DataDefs
 import Blockchain.Data.Peer
 import Blockchain.Data.RLP
 import Blockchain.Data.Transaction

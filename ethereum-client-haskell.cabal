@@ -116,6 +116,7 @@ library
                    Blockchain.Options
                    Blockchain.PeerUrls
                    Blockchain.SampleTransactions
+                   Blockchain.Verifier
                    Blockchain.VM.Code
                    Blockchain.VM.Environment
                    Blockchain.VM.Labels

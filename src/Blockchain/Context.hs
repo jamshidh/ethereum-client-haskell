@@ -15,19 +15,15 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import Control.Monad.State
 import qualified Data.ByteString as B
-import qualified Data.NibbleString as N
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
 
 import Blockchain.DBM
 import Blockchain.Data.Peer
 import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
-import Blockchain.Data.RLP
 import qualified Blockchain.Database.MerklePatricia as MPDB
-import qualified Blockchain.Database.MerklePatricia.Internal as MPDB
 import Blockchain.DB.CodeDB
 import Blockchain.DB.HashDB
-import Blockchain.ExtWord
 import Blockchain.Options
 import Blockchain.SHA
 

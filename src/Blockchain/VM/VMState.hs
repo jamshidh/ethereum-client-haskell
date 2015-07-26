@@ -17,11 +17,9 @@ import Data.Word
 
 
 import Blockchain.Data.Address
-import Blockchain.Data.Code
 import Blockchain.Data.Log
 import Blockchain.ExtWord
 import Blockchain.Format
-import Blockchain.VM.Code
 import Blockchain.VM.Environment
 
 data VMException =
