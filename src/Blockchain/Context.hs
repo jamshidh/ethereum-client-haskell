@@ -8,8 +8,6 @@ module Blockchain.Context (
   getDebugMsg,
   addDebugMsg,
   clearDebugMsg,
-  putStorageKeyVal',
-  deleteStorageKey',
   incrementNonce,
   getNewAddress
   ) where
@@ -19,7 +17,6 @@ import Control.Monad.IO.Class
 import Control.Monad.State
 import qualified Data.ByteString as B
 import qualified Data.NibbleString as N
-import qualified Database.LevelDB as LDB
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
 
 import Blockchain.DBM
@@ -31,7 +28,6 @@ import qualified Blockchain.Database.MerklePatricia as MPDB
 import qualified Blockchain.Database.MerklePatricia.Internal as MPDB
 import Blockchain.DB.CodeDB
 import Blockchain.DB.HashDB
-import Blockchain.ExtDBs
 import Blockchain.ExtWord
 import Blockchain.Options
 import Blockchain.SHA
@@ -62,6 +58,11 @@ instance HasStateDB ContextM where
   setStateDBStateRoot sr = do
     cxt <- get
     put cxt{contextStateDB=(contextStateDB cxt){MPDB.stateRoot=sr}}
+
+instance HasStorageDB ContextM where
+  getStorageDB = do
+    cxt <- get
+    return $ MPDB.ldb $ contextStateDB cxt --storage and states use the same database!
 
 instance HasHashDB ContextM where
   getHashDB = fmap contextHashDB get
@@ -127,24 +128,6 @@ clearDebugMsg::ContextM ()
 clearDebugMsg = do
   cxt <- get
   put cxt{vmTrace=[]}
-
-putStorageKeyVal'::Address->Word256->Word256->ContextM ()
-putStorageKeyVal' owner key val = do
-  hashDBPut storageKeyNibbles
-  addressState <- getAddressState owner
-  db <- getStateDB
-  let mpdb = db{MPDB.stateRoot=addressStateContractRoot addressState}
-  newContractRoot <- fmap MPDB.stateRoot $ lift $ lift $ MPDB.putKeyVal mpdb storageKeyNibbles (rlpEncode $ rlpSerialize $ rlpEncode $ toInteger val)
-  putAddressState owner addressState{addressStateContractRoot=newContractRoot}
-  where storageKeyNibbles = N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes key
-
-deleteStorageKey'::Address->Word256->ContextM ()
-deleteStorageKey' owner key = do
-  addressState <- getAddressState owner
-  db <- getStateDB
-  let mpdb = db{MPDB.stateRoot=addressStateContractRoot addressState}
-  newContractRoot <- fmap MPDB.stateRoot $ lift $ lift $ MPDB.deleteKey mpdb (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes key)
-  putAddressState owner addressState{addressStateContractRoot=newContractRoot}
 
 incrementNonce::Address->ContextM ()
 incrementNonce address = do

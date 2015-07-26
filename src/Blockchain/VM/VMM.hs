@@ -13,6 +13,7 @@ import Blockchain.Data.AddressStateDB
 import Blockchain.Data.Log
 import qualified Blockchain.Database.MerklePatricia as MPDB
 import Blockchain.DB.ModifyStateDB
+import Blockchain.ExtDBs
 import Blockchain.ExtWord
 import Blockchain.Data.RLP
 import Blockchain.DBM
