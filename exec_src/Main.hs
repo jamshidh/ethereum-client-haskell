@@ -63,8 +63,6 @@ getNextBlock b ts transactions = do
   setStateDBStateRoot $ blockDataStateRoot bd
   addToBalance theCoinbase (1500*finney)
 
-  dbs <- lift get
-
   return Block{
                blockBlockData=testGetNextBlockData $ SHAPtr "", -- $ stateRoot $ stateDB dbs,
                blockReceiptTransactions=transactions,
@@ -293,8 +291,7 @@ main = do
 
   runResourceT $ do
       dbs <- openDBs "h"
-      _ <- flip runStateT dbs $
-           flip runStateT (Context
+      _ <- flip runStateT (Context
                            (stateDB' dbs)
                            (hashDB' dbs)
                            (blockDB' dbs)

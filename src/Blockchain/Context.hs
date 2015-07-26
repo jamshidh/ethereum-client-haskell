@@ -3,8 +3,6 @@
 module Blockchain.Context (
   Context(..),
   ContextM,
-  getStorageKeyVal',
-  getAllStorageKeyVals',
   getDebugMsg,
   addDebugMsg,
   clearDebugMsg,
@@ -14,6 +12,7 @@ module Blockchain.Context (
 
 
 import Control.Monad.IO.Class
+import Control.Monad.Trans.Resource
 import Control.Monad.State
 import qualified Data.ByteString as B
 import qualified Data.NibbleString as N
@@ -49,7 +48,7 @@ data Context =
     vmTrace::[String]
     }
 
-type ContextM = StateT Context DBM
+type ContextM = StateT Context (ResourceT IO)
 
 instance HasStateDB ContextM where
   getStateDB = do
@@ -95,24 +94,6 @@ initContext theType = do
       dataset
       False
 -}
-
-getStorageKeyVal'::Address->Word256->ContextM Word256
-getStorageKeyVal' owner key = do
-  addressState <- getAddressState owner
-  db <- getStateDB
-  let mpdb = db{MPDB.stateRoot=addressStateContractRoot addressState}
-  maybeVal <- lift $ lift $ MPDB.getKeyVal mpdb (N.pack $ (N.byte2Nibbles =<<) $ word256ToBytes key)
-  case maybeVal of
-    Nothing -> return 0
-    Just x -> return $ fromInteger $ rlpDecode $ rlpDeserialize $ rlpDecode x
-
-getAllStorageKeyVals'::Address->ContextM [(MPDB.Key, Word256)]
-getAllStorageKeyVals' owner = do
-  addressState <- getAddressState owner
-  db <- getStateDB
-  let mpdb = db{MPDB.stateRoot=addressStateContractRoot addressState}
-  kvs <- lift $ lift $ MPDB.unsafeGetAllKeyVals mpdb
-  return $ map (fmap $ fromInteger . rlpDecode . rlpDeserialize . rlpDecode) kvs
 
 getDebugMsg::ContextM String
 getDebugMsg = do
