@@ -14,16 +14,11 @@ import qualified Data.ByteString as B
 import Data.Time.Clock
 import HFlags
 import qualified Network.Haskoin.Internals as H
-import Numeric
-import System.Entropy
-import System.Environment
-import System.IO.MMap
 
 import Blockchain.Frame
 import Blockchain.UDP hiding (Ping,Pong)
 import Blockchain.RLPx
 
-import Blockchain.Data.RLP
 import Blockchain.BlockChain
 import Blockchain.BlockSynchronizer
 import Blockchain.Communication
@@ -31,7 +26,6 @@ import Blockchain.Constants
 import Blockchain.Context
 import Blockchain.Data.Address
 import Blockchain.Data.BlockDB
-import Blockchain.Data.DataDefs
 --import Blockchain.Data.SignedTransaction
 import Blockchain.Data.Transaction
 import Blockchain.Data.Wire
@@ -45,7 +39,6 @@ import Blockchain.Options
 --import Blockchain.SampleTransactions
 import Blockchain.SHA
 --import Blockchain.SigningTools
-import Blockchain.Util
 import Blockchain.Verifier
 import qualified Data.ByteString.Base16 as B16
 --import Debug.Trace
@@ -53,7 +46,6 @@ import qualified Data.ByteString.Base16 as B16
 import Data.Word
 import Data.Bits
 import Data.Maybe
-import Cache
 
 coinbasePrvKey::H.PrvKey
 Just coinbasePrvKey = H.makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
@@ -62,7 +54,9 @@ getNextBlock::Block->UTCTime->[Transaction]->ContextM Block
 getNextBlock b ts transactions = do
   let theCoinbase = prvKey2Address coinbasePrvKey
   setStateDBStateRoot $ blockDataStateRoot bd
-  addToBalance theCoinbase (1500*finney)
+  success <- addToBalance theCoinbase (1500*finney)
+
+  when (not success) $ error "coinbase overflow??  This should never happen."
 
   return Block{
                blockBlockData=testGetNextBlockData $ SHAPtr "", -- $ stateRoot $ stateDB dbs,
@@ -91,21 +85,20 @@ getNextBlock b ts transactions = do
         }
     bd = blockBlockData b
 
-
+{-
 submitNextBlock::Integer->Block->EthCryptM ContextM ()
 submitNextBlock baseDifficulty b = do
         ts <- liftIO getCurrentTime
         newBlock <- lift $ getNextBlock b ts []
-        --n <- liftIO $ fastFindNonce newBlock
-        let n = 0
 
         --let theBytes = headerHashWithoutNonce newBlock `B.append` B.pack (integer2Bytes n)
         let theNewBlock = newBlock -- addNonceToBlock newBlock n
         sendMsg $ NewBlockPacket theNewBlock (baseDifficulty + blockDataDifficulty (blockBlockData theNewBlock))
         lift $ addBlocks False [theNewBlock]
+-}
 
-submitNextBlockToDB::Integer->Block->[Transaction]->EthCryptM ContextM ()
-submitNextBlockToDB baseDifficulty b transactions = do
+submitNextBlockToDB::Block->[Transaction]->EthCryptM ContextM ()
+submitNextBlockToDB b transactions = do
   ts <- liftIO getCurrentTime
   newBlock <- lift $ getNextBlock b ts transactions
   --n <- liftIO $ fastFindNonce newBlock
@@ -116,15 +109,16 @@ submitNextBlockToDB baseDifficulty b transactions = do
 submitNewBlock::Block->[Transaction]->EthCryptM ContextM ()
 submitNewBlock b transactions = do
   --lift $ addTransactions b (blockDataGasLimit $ blockBlockData b) transactions
-  submitNextBlockToDB 0 b transactions
+  submitNextBlockToDB b transactions
 
+{-
 ifBlockInDBSubmitNextBlock::Integer->Block->EthCryptM ContextM ()
 ifBlockInDBSubmitNextBlock baseDifficulty b = do
   maybeBlock <- lift $ getBlock (blockHash b)
   case maybeBlock of
     Nothing -> return ()
     _ -> submitNextBlock baseDifficulty b
-
+-}
 
 
 handleMsg::Message->EthCryptM ContextM ()
@@ -150,11 +144,12 @@ handleMsg m = do
     (Peers thePeers) -> do
       lift $ setPeers thePeers
     BlockHashes blockHashes -> handleNewBlockHashes blockHashes
-    GetBlocks blocks -> do
+    GetBlocks _ -> do
       sendMsg $ Blocks []
     Blocks blocks -> do
       handleNewBlocks blocks
-    NewBlockPacket block baseDifficulty -> do
+    --NewBlockPacket block baseDifficulty -> do
+    NewBlockPacket block _ -> do
       handleNewBlocks [block]
       --ifBlockInDBSubmitNextBlock baseDifficulty block
 
@@ -162,7 +157,7 @@ handleMsg m = do
       genesisBlockHash <- lift getGenesisBlockHash
       when (gh /= genesisBlockHash) $ error "Wrong genesis block hash!!!!!!!!"
       handleNewBlockHashes [lh]
-    (GetTransactions transactions) -> do
+    GetTransactions _ -> do
       sendMsg $ Transactions []
       --liftIO $ sendMessage handle GetTransactions
       return ()
@@ -261,8 +256,8 @@ main = do
           [] -> ipAddresses !! 1 --default server
           [x] -> ipAddresses !! read x
           ["-a", address] -> (address, 30303)
-          [x, prt] -> (fst (ipAddresses !! read x), fromIntegral $ read prt)
-          ["-a", address, prt] -> (address, fromIntegral $ read prt)
+          [x, prt] -> (fst (ipAddresses !! read x), fromInteger $ read prt)
+          ["-a", address, prt] -> (address, fromInteger $ read prt)
           _ -> error "usage: ethereumH [servernum] [port]"
 
   putStrLn $ "Attempting to connect to " ++ show ipAddress ++ ":" ++ show thePort
@@ -280,7 +275,7 @@ main = do
 --  putStrLn $ "my UDP pubkey is: " ++ (show $ H.derivePubKey $ prvKey)
   putStrLn $ "my NodeID is: " ++ (show $ B16.encode $ B.pack $ pointToBytes $ hPubKeyToPubKey $ H.derivePubKey $ H.PrvKey $ fromIntegral myPriv)
     
-  otherPubKey@(Point x y) <- liftIO $ getServerPubKey (H.PrvKey $ fromIntegral myPriv) ipAddress thePort
+  otherPubKey <- liftIO $ getServerPubKey (H.PrvKey $ fromIntegral myPriv) ipAddress thePort
 
 
 --  putStrLn $ "server public key is : " ++ (show otherPubKey)
