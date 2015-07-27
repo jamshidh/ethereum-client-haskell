@@ -113,56 +113,16 @@ addBlock isBeingCreated b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
 addTransactions::Block->Integer->[Transaction]->ContextM ()
 addTransactions _ _ [] = return ()
 addTransactions b blockGas (t:rest) = do
-  printTransactionMessage t
 
-  before <- liftIO $ getPOSIXTime 
-
-  stateRootBefore <- fmap MP.stateRoot getStateDB
-
-  result <- runEitherT $ addTransaction b blockGas t
-
-  let (resultString, response) =
-          case result of 
-            Left err -> (err, "")
-            Right (state', _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state')
-
-  after <- liftIO $ getPOSIXTime 
-
-  stateRootAfter <- fmap MP.stateRoot getStateDB
-
-  mpdb <- getStateDB
-
-  addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
-
-  detailsString <- getDebugMsg
-  _ <-
-    putTransactionResult $
-    TransactionResult {
-      transactionResultBlockHash=blockHash b,
-      transactionResultTransactionHash=transactionHash t,
-      transactionResultMessage=resultString,
-      transactionResultResponse=response,
-      transactionResultTrace=detailsString,
-      transactionResultGasUsed=0,
-      transactionResultEtherUsed=0,
-      transactionResultContractsCreated=intercalate "," $ map formatAddress [x|CreateAddr x _ <- addrDiff],
-      transactionResultContractsDeleted=intercalate "," $ map formatAddress [x|DeleteAddr x <- addrDiff],
-      transactionResultTime=realToFrac $ after - before::Double,
-      transactionResultNewStorage="",
-      transactionResultDeletedStorage=""
-      }
-  
-
-  clearDebugMsg
-
-  liftIO $ putStrLn $ CL.magenta "    |" ++ " t = " ++ printf "%.2f" (realToFrac $ after - before::Double) ++ "s                                                              " ++ CL.magenta "|"
-  liftIO $ putStrLn $ CL.magenta "    =========================================================================="
+  result <-
+    printTransactionMessage t b $
+      runEitherT $ addTransaction b blockGas t
 
   remainingBlockGas <-
     case result of
       Left e -> do
-        liftIO $ putStrLn $ CL.red "Insertion of transaction failed!  " ++ e
-        return blockGas
+          liftIO $ putStrLn $ CL.red "Insertion of transaction failed!  " ++ e
+          return blockGas
       Right (_, g') -> return g'
 
   addTransactions b remainingBlockGas rest
@@ -267,8 +227,8 @@ intrinsicGas t = gTXDATAZERO * zeroLen + gTXDATANONZERO * (fromIntegral (codeOrD
 --intrinsicGas t@ContractCreationTX{} = 5 * (fromIntegral (codeOrDataLength t)) + 500
 
 
-printTransactionMessage::Transaction->ContextM ()
-printTransactionMessage t = do
+printTransactionMessage::Transaction->Block->ContextM (Either String (VMState, Integer))->ContextM (Either String (VMState, Integer))
+printTransactionMessage t b f = do
   case whoSignedThisTransaction t of
     Just tAddr -> do
       nonce <- fmap addressStateNonce $ getAddressState tAddr
@@ -281,6 +241,56 @@ printTransactionMessage t = do
           else "Create Contract "  ++ show (pretty $ getNewAddress_unsafe tAddr nonce)
         ) ++ CL.magenta " |"
     _ -> liftIO $ putStrLn $ CL.red $ "Malformed Signature!"
+
+  stateRootBefore <- fmap MP.stateRoot getStateDB
+
+  before <- liftIO $ getPOSIXTime 
+
+  result <- f
+
+  after <- liftIO $ getPOSIXTime 
+
+  stateRootAfter <- fmap MP.stateRoot getStateDB
+
+  mpdb <- getStateDB
+  
+  addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
+
+  let (resultString, response) =
+        case result of 
+          Left err -> (err, "")
+          Right (state', _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state')
+
+  detailsString <- getDebugMsg
+  _ <-
+        putTransactionResult $
+        TransactionResult {
+          transactionResultBlockHash=blockHash b,
+          transactionResultTransactionHash=transactionHash t,
+          transactionResultMessage=resultString,
+          transactionResultResponse=response,
+          transactionResultTrace=detailsString,
+          transactionResultGasUsed=0,
+          transactionResultEtherUsed=0,
+          transactionResultContractsCreated=intercalate "," $ map formatAddress [x|CreateAddr x _ <- addrDiff],
+          transactionResultContractsDeleted=intercalate "," $ map formatAddress [x|DeleteAddr x <- addrDiff],
+          transactionResultTime=realToFrac $ after - before::Double,
+          transactionResultNewStorage="",
+          transactionResultDeletedStorage=""
+          }
+  
+
+  clearDebugMsg
+
+  liftIO $ putStrLn $ CL.magenta "    |" ++ " t = " ++ printf "%.2f" (realToFrac $ after - before::Double) ++ "s                                                              " ++ CL.magenta "|"
+  liftIO $ putStrLn $ CL.magenta "    =========================================================================="
+
+  return result
+
+
+
+
+
 
 formatAddress::Address->String
 formatAddress (Address x) = BC.unpack $ B16.encode $ B.pack $ word160ToBytes x
