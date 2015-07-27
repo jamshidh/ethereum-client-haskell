@@ -6,10 +6,6 @@ author: Jamshid
 license-file:  LICENSE
 maintainer:    jamshidnh@gmail.com
 synopsis: A Haskell version of an Ethereum client
-extra-source-files:
-               fastNonceFinder/bitfn.h
-               fastNonceFinder/sha3.c
-               fastNonceFinder/sha3.h
 category:      Data Structures
 license: BSD3
 description:  
@@ -59,7 +55,6 @@ executable ethereumH
                  , ansi-wl-pprint
                  , ethereum-client-haskell
     main-is: Main.hs
-    C-sources: fastNonceFinder/nonceFinder.c
     ghc-options: -Wall -O2
     buildable: True
     hs-source-dirs: exec_src
@@ -127,7 +122,6 @@ library
                    Blockchain.VM.VMM
                    Blockchain.VM.VMState
                    Blockchain.VM
-    C-sources: fastNonceFinder/nonceFinder.c
     ghc-options: -Wall -O2
     buildable: True
     hs-source-dirs: src
