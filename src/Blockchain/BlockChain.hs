@@ -12,13 +12,10 @@ module Blockchain.BlockChain (
   ) where
 
 import Control.Monad
-import Control.Monad.IfElse
 import Control.Monad.IO.Class
 import Control.Monad.Trans
 import Control.Monad.Trans.Either
-import Control.Monad.State hiding (state)
 import Data.Binary hiding (get)
-import Data.Bits
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8 as BC
@@ -26,8 +23,6 @@ import qualified Data.ByteString.Lazy as BL
 import Data.Functor
 import Data.List
 import Data.Maybe
-import Data.Time
-import Data.Time.Clock
 import Data.Time.Clock.POSIX
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import Text.Printf
@@ -41,21 +36,16 @@ import Blockchain.Data.Code
 import Blockchain.Data.DataDefs
 import Blockchain.Data.DiffDB
 import Blockchain.Data.GenesisBlock
-import Blockchain.Data.RLP
 import Blockchain.Data.Transaction
 import Blockchain.Data.TransactionResult
 import qualified Blockchain.Database.MerklePatricia as MP
-import Blockchain.DB.CodeDB
 import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
 import Blockchain.Constants
 import Blockchain.ExtDBs
 import Blockchain.ExtWord
-import Blockchain.Format
-import Blockchain.Mining
 import Blockchain.Options
 import Blockchain.SHA
-import Blockchain.Util
 import Blockchain.Verifier
 import Blockchain.VM
 import Blockchain.VM.Code
@@ -73,7 +63,7 @@ runCodeForTransaction b availableGas tAddr newAddress ut | isContractCreationTX 
 
   return (const B.empty <$> result, vmState)
 
-runCodeForTransaction b availableGas tAddr owner ut | isMessageTX ut = do
+runCodeForTransaction b availableGas tAddr owner ut = do --MessageTX
   when flags_debug $ liftIO $ putStrLn $ "runCodeForTransaction: MessageTX caller: " ++ show (pretty $ tAddr) ++ ", address: " ++ show (pretty $ transactionTo ut)
 
   call b 0 owner owner tAddr
@@ -91,13 +81,13 @@ addBlocks isBeingCreated blocks =
 
 codeOrDataLength::Transaction->Int
 codeOrDataLength t | isMessageTX t = B.length $ transactionData t
-codeOrDataLength t | isContractCreationTX t = codeLength $ transactionInit t
+codeOrDataLength t = codeLength $ transactionInit t --is ContractCreationTX
 
 zeroBytesLength::Transaction->Int
 zeroBytesLength t | isMessageTX t = length $ filter (==0) $ B.unpack $ transactionData t
-zeroBytesLength t | isContractCreationTX t = length $ filter (==0) $ B.unpack codeBytes
+zeroBytesLength t = length $ filter (==0) $ B.unpack codeBytes' --is ContractCreationTX
                   where
-                    Code codeBytes = transactionInit t
+                    Code codeBytes' = transactionInit t
 
 intrinsicGas::Transaction->Integer
 intrinsicGas t = gTXDATAZERO * zeroLen + gTXDATANONZERO * (fromIntegral (codeOrDataLength t) - zeroLen) + gTX
@@ -110,7 +100,7 @@ addTransaction b remainingBlockGas t = do
   let maybeAddr = whoSignedThisTransaction t
 
   case maybeAddr of
-    Just x -> return ()
+    Just _ -> return ()
     Nothing -> left "malformed signature"
 
   let Just tAddr = maybeAddr
@@ -156,13 +146,13 @@ addTransaction b remainingBlockGas t = do
           Left e -> do
             when flags_debug $ liftIO $ putStrLn $ CL.red $ show e
             return (newVMState'{vmException = Just e}, remainingBlockGas - transactionGasLimit t)
-          Right x -> do
+          Right _ -> do
             let realRefund =
                   min (refund newVMState') ((transactionGasLimit t - vmGasRemaining newVMState') `div` 2)
 
-            success <- lift $ pay "VM refund fees" (blockDataCoinbase $ blockBlockData b) tAddr ((realRefund + vmGasRemaining newVMState') * transactionGasPrice t)
+            success' <- lift $ pay "VM refund fees" (blockDataCoinbase $ blockBlockData b) tAddr ((realRefund + vmGasRemaining newVMState') * transactionGasPrice t)
 
-            when (not success) $ error "oops, refund was too much"
+            when (not success') $ error "oops, refund was too much"
 
             when flags_debug $ liftIO $ putStrLn $ "Removing accounts in suicideList: " ++ intercalate ", " (show . pretty <$> suicideList newVMState')
             forM_ (suicideList newVMState') $ lift . deleteAddressState
@@ -171,8 +161,8 @@ addTransaction b remainingBlockGas t = do
             return (newVMState', remainingBlockGas - (transactionGasLimit t - realRefund - vmGasRemaining newVMState'))
       else do
         lift $ addToBalance (blockDataCoinbase $ blockBlockData b) (intrinsicGas' * transactionGasPrice t)
-        addressState <- lift $ getAddressState tAddr
-        liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*transactionGasPrice t) ++ ", have " ++ show (addressStateBalance addressState)
+        addressState' <- lift $ getAddressState tAddr
+        liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*transactionGasPrice t) ++ ", have " ++ show (addressStateBalance addressState')
         return (VMState{vmException=Just InsufficientFunds, vmGasRemaining=0, refund=0, debugCallCreates=Nothing, suicideList=[], logs=[], returnVal=Nothing}, remainingBlockGas)
 
 
@@ -208,7 +198,7 @@ addTransactions b blockGas (t:rest) = do
   let (resultString, response) =
           case result of 
             Left err -> (err, "")
-            Right (state, _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state)
+            Right (state', _) -> ("Success!", BC.unpack $ B16.encode $ fromMaybe "" $ returnVal state')
 
   after <- liftIO $ getPOSIXTime 
 
