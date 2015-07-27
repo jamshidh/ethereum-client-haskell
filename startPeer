@@ -1,7 +1,0 @@
-#!/bin/bash
-
-while true
-do
-	ethereumH 0
-	sleep 10
-done

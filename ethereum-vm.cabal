@@ -1,0 +1,60 @@
+name: ethereum-vm
+version: 0.0.4
+cabal-version: >=1.10
+build-type: Simple
+author: Jamshid
+license-file:  LICENSE
+maintainer:    jamshidnh@gmail.com
+synopsis: A Haskell version of an Ethereum client
+category:      Data Structures
+license: BSD3
+description:  
+    The client described in the Ethereum Yellowpaper
+
+source-repository this
+  type:     git
+  location: https://github.com/jamshidh/ethereum-vm
+  branch:   master
+  tag:      v0.0.4
+
+executable ethereum-vm
+    default-language: Haskell98
+    build-depends: 
+                   base >= 4 && < 5
+                 , base16-bytestring
+                 , binary
+                 , bytestring
+                 , containers
+                 , cryptohash
+                 , crypto-pubkey
+                 , crypto-pubkey-types
+                 , crypto-random
+                 , data-default
+                 , directory
+                 , either
+                 , entropy
+                 , ethereum-data-sql
+                 , ethereum-encryption
+                 , ethereum-merkle-patricia-db
+                 , ethereum-rlp
+                 , ethereum-util
+                 , filepath
+                 , haskoin
+                 , hflags
+                 , hminer
+                 , leveldb-haskell
+                 , mmap
+                 , mtl
+                 , network
+                 , nibblestring
+                 , resourcet
+                 , SHA2
+                 , time
+                 , transformers
+                 , vector
+                 , ansi-wl-pprint
+                 , ethereum-client-haskell
+    main-is: Main.hs
+    ghc-options: -Wall -O2
+    buildable: True
+    hs-source-dirs: src

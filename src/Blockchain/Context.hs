@@ -37,10 +37,6 @@ data Context =
     contextCodeDB::CodeDB,
     contextSQLDB::SQLDB,
     contextDetailsDB::DetailsDB,
-    neededBlockHashes::[SHA],
-    pingCount::Int,
-    peers::[Peer],
-    miningDataset::B.ByteString,
     vmTrace::[String]
     }
 
@@ -73,23 +69,6 @@ instance HasSQLDB ContextM where
 
 instance HasDetailsDB ContextM where
   getDetailsDB = fmap contextDetailsDB get
-
-{-
-initContext::String->IO Context
-initContext theType = do
-  liftIO $ putStr "Loading mining cache.... "
-  hFlush stdout
-  dataset <- return "" -- mmapFileByteString "dataset0" Nothing
-  liftIO $ putStrLn "Finished"
-  homeDir <- getHomeDirectory                     
-  createDirectoryIfMissing False $ homeDir </> dbDir theType
-  return $ Context
-      []
-      0
-      []
-      dataset
-      False
--}
 
 getDebugMsg::ContextM String
 getDebugMsg = do

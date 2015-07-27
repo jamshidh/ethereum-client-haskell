@@ -5,9 +5,6 @@ module Blockchain.BlockChain (
   addBlocks,
   addTransaction,
   addTransactions,
-  getBestBlock,
-  getBestBlockHash,
-  getGenesisBlockHash,
   runCodeForTransaction
   ) where
 
@@ -305,32 +302,6 @@ x ?! err = maybe (left err) return $ x
 
 
 ----------------
-
-getBestBlockHash::ContextM SHA
-getBestBlockHash = do
-  maybeBestHash <- detailsDBGet "best"
-  case maybeBestHash of
-    Nothing -> do
-      bhSHA <- getGenesisBlockHash
-      detailsDBPut "best" $ BL.toStrict $ encode bhSHA
-      return bhSHA
-    Just bestHash -> return $ decode $ BL.fromStrict $ bestHash
-
-getGenesisBlockHash::ContextM SHA
-getGenesisBlockHash = do
-  maybeGenesisHash <- detailsDBGet "genesis"
-  case maybeGenesisHash of
-    Nothing -> do
-      bhSHA <- blockHash <$> initializeGenesisBlock
-      detailsDBPut "genesis" $ BL.toStrict $ encode bhSHA
-      return bhSHA
-    Just bestHash -> return $ decode $ BL.fromStrict $ bestHash
-
-getBestBlock::ContextM Block
-getBestBlock = do
-  bestBlockHash <- getBestBlockHash
-  bestBlock <- getBlock bestBlockHash
-  return $ fromMaybe (error $ "Missing block in database: " ++ show (pretty bestBlockHash)) bestBlock
 
 replaceBestIfBetter::(BlockDataRefId, Block)->ContextM ()
 replaceBestIfBetter (blkDataId, b) = do
