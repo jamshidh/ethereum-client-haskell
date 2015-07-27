@@ -140,7 +140,8 @@ addTransaction b remainingBlockGas t = do
       then do
         (result, newVMState') <- lift $ runCodeForTransaction b (transactionGasLimit t - intrinsicGas') tAddr theAddress t
 
-        lift $ addToBalance (blockDataCoinbase $ blockBlockData b) (transactionGasLimit t * transactionGasPrice t)
+        s1 <- lift $ addToBalance (blockDataCoinbase $ blockBlockData b) (transactionGasLimit t * transactionGasPrice t)
+        when (not s1) $ error "addToBalance failed even after a check in addBlock"
         
         case result of
           Left e -> do
@@ -160,7 +161,8 @@ addTransaction b remainingBlockGas t = do
 
             return (newVMState', remainingBlockGas - (transactionGasLimit t - realRefund - vmGasRemaining newVMState'))
       else do
-        lift $ addToBalance (blockDataCoinbase $ blockBlockData b) (intrinsicGas' * transactionGasPrice t)
+        s1 <- lift $ addToBalance (blockDataCoinbase $ blockBlockData b) (intrinsicGas' * transactionGasPrice t)
+        when (not s1) $ error "addToBalance failed even after a check in addTransaction"
         addressState' <- lift $ getAddressState tAddr
         liftIO $ putStrLn $ "Insufficient funds to run the VM: need " ++ show (availableGas*transactionGasPrice t) ++ ", have " ++ show (addressStateBalance addressState')
         return (VMState{vmException=Just InsufficientFunds, vmGasRemaining=0, refund=0, debugCallCreates=Nothing, suicideList=[], logs=[], returnVal=Nothing}, remainingBlockGas)
@@ -209,7 +211,8 @@ addTransactions b blockGas (t:rest) = do
   addrDiff <- addrDbDiff mpdb stateRootBefore stateRootAfter
 
   detailsString <- getDebugMsg
-  putTransactionResult $
+  _ <-
+    putTransactionResult $
     TransactionResult {
       transactionResultBlockHash=blockHash b,
       transactionResultTransactionHash=transactionHash t,
@@ -224,7 +227,7 @@ addTransactions b blockGas (t:rest) = do
       transactionResultNewStorage="",
       transactionResultDeletedStorage=""
       }
-
+  
 
   clearDebugMsg
 
@@ -251,13 +254,17 @@ addBlock isBeingCreated b@Block{blockBlockData=bd, blockBlockUncles=uncles} = do
     Just parentBlock -> do
       setStateDBStateRoot $ blockDataStateRoot $ blockBlockData parentBlock
       let rewardBase = 1500 * finney
-      addToBalance (blockDataCoinbase bd) rewardBase
+      s1 <- addToBalance (blockDataCoinbase bd) rewardBase
+      when (not s1) $ error "addToBalance failed even after a check in addBlock"
 
       forM_ uncles $ \uncle -> do
-        addToBalance (blockDataCoinbase bd) (rewardBase `quot` 32)
-        addToBalance
-          (blockDataCoinbase uncle)
-          ((rewardBase*(8+blockDataNumber uncle - blockDataNumber bd )) `quot` 8)
+        s2 <- addToBalance (blockDataCoinbase bd) (rewardBase `quot` 32)
+        when (not s2) $ error "addToBalance failed even after a check in addBlock"
+        
+        s3 <- addToBalance
+              (blockDataCoinbase uncle)
+              ((rewardBase*(8+blockDataNumber uncle - blockDataNumber bd )) `quot` 8)
+        when (not s3) $ error "addToBalance failed even after a check in addBlock"
 
 
       let transactions = blockReceiptTransactions b
