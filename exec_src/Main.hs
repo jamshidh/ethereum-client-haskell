@@ -26,12 +26,15 @@ import Blockchain.Constants
 import Blockchain.Context
 import Blockchain.Data.Address
 import Blockchain.Data.BlockDB
+import Blockchain.Data.GenesisBlock
 --import Blockchain.Data.SignedTransaction
 import Blockchain.Data.Transaction
 import Blockchain.Data.Wire
 import Blockchain.Database.MerklePatricia
 import Blockchain.DB.CodeDB
+import Blockchain.DB.DetailsDB
 import Blockchain.DB.ModifyStateDB
+import Blockchain.DB.StateDB
 import Blockchain.DBM
 import Blockchain.Display
 import Blockchain.PeerUrls
@@ -39,13 +42,28 @@ import Blockchain.Options
 --import Blockchain.SampleTransactions
 import Blockchain.SHA
 --import Blockchain.SigningTools
-import Blockchain.Verifier
+--import Blockchain.Verifier
 import qualified Data.ByteString.Base16 as B16
 --import Debug.Trace
 
 import Data.Word
 import Data.Bits
 import Data.Maybe
+
+----
+
+import Data.Time.Clock.POSIX
+
+nextDifficulty::Integer->UTCTime->UTCTime->Integer
+nextDifficulty oldDifficulty oldTime newTime = max nextDiff' minimumDifficulty
+    where
+      nextDiff' = 
+          if round (utcTimeToPOSIXSeconds newTime) >=
+                 (round (utcTimeToPOSIXSeconds oldTime) + 8::Integer)
+          then oldDifficulty - oldDifficulty `shiftR` 11
+          else oldDifficulty + oldDifficulty `shiftR` 11
+
+----
 
 coinbasePrvKey::H.PrvKey
 Just coinbasePrvKey = H.makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
@@ -126,8 +144,8 @@ handleMsg m = do
   lift $ displayMessage False m
   case m of
     Hello{} -> do
-             bestBlock <- lift getBestBlock
-             genesisBlockHash <- lift getGenesisBlockHash
+             bestBlock <- lift $ getBestBlock flags_altGenBlock
+             genesisBlockHash <- lift $ getGenesisBlockHash flags_altGenBlock
              sendMsg Status{
                protocolVersion=fromIntegral ethVersion,
                networkID="",
@@ -154,7 +172,7 @@ handleMsg m = do
       --ifBlockInDBSubmitNextBlock baseDifficulty block
 
     Status{latestHash=lh, genesisHash=gh} -> do
-      genesisBlockHash <- lift getGenesisBlockHash
+      genesisBlockHash <- lift $ getGenesisBlockHash flags_altGenBlock
       when (gh /= genesisBlockHash) $ error "Wrong genesis block hash!!!!!!!!"
       handleNewBlockHashes [lh]
     GetTransactions _ -> do
@@ -162,7 +180,7 @@ handleMsg m = do
       --liftIO $ sendMessage handle GetTransactions
       return ()
     (Transactions transactions) -> do
-      bestBlock <-lift getBestBlock
+      bestBlock <-lift $ getBestBlock flags_altGenBlock
       when flags_wrapTransactions $ submitNewBlock bestBlock transactions
       
     _-> return ()
@@ -211,7 +229,7 @@ doit = do
     liftIO $ putStrLn "Connected"
 
     lift $ addCode B.empty --This is probably a bad place to do this, but I can't think of a more natural place to do it....  Empty code is used all over the place, and it needs to be in the database.
-    lift (setStateDBStateRoot . blockDataStateRoot . blockBlockData =<< getBestBlock)
+    lift (setStateDBStateRoot . blockDataStateRoot . blockBlockData =<< getBestBlock flags_altGenBlock)
 
   --signedTx <- createTransaction simpleTX
   --signedTx <- createTransaction outOfGasTX

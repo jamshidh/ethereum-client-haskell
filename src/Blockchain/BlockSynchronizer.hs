@@ -19,6 +19,7 @@ import Blockchain.Communication
 import Blockchain.Context
 import Blockchain.Data.BlockDB
 import Blockchain.Data.Wire
+import Blockchain.DB.BlockDB
 import Blockchain.ExtDBs
 import Blockchain.Frame
 import Blockchain.SHA
