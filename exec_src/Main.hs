@@ -148,7 +148,7 @@ handleMsg m = do
              genesisBlockHash <- lift $ getGenesisBlockHash flags_altGenBlock
              sendMsg Status{
                protocolVersion=fromIntegral ethVersion,
-               networkID="",
+               networkID=1,
                totalDifficulty=0,
                latestHash=blockHash bestBlock,
                genesisHash=genesisBlockHash

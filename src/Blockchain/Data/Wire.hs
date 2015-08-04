@@ -101,7 +101,7 @@ data Message =
   Pong |
   GetPeers |
   Peers [Peer] |
-  Status { protocolVersion::Int, networkID::String, totalDifficulty::Int, latestHash::SHA, genesisHash:: SHA } |
+  Status { protocolVersion::Int, networkID::Int, totalDifficulty::Int, latestHash::SHA, genesisHash:: SHA } |
   QqqqStatus Int |
   Transactions [Transaction] | 
   GetBlocks [SHA] |
@@ -187,7 +187,7 @@ obj2WireMessage 0x5 (RLPArray peers) = Peers $ rlpDecode <$> peers
 obj2WireMessage 0x10 (RLPArray [ver, nID, d, lh, gh]) = 
     Status {
   protocolVersion=fromInteger $ rlpDecode ver,
-  networkID = rlpDecode nID,
+  networkID = fromInteger $ rlpDecode nID,
   totalDifficulty = fromInteger $ rlpDecode d,
   latestHash=rlpDecode lh,
   genesisHash=rlpDecode gh
@@ -247,7 +247,7 @@ wireMessage2Obj Pong = (0x3, RLPArray [])
 wireMessage2Obj GetPeers = (0x4, RLPArray [])
 wireMessage2Obj (Peers peers) = (0x5, RLPArray $ (rlpEncode <$> peers))
 wireMessage2Obj (Status ver nID d lh gh) =
-    (0x10, RLPArray [rlpEncode $ toInteger ver, rlpEncode nID, rlpEncode $ toInteger d, rlpEncode lh, rlpEncode gh])
+    (0x10, RLPArray [rlpEncode $ toInteger ver, rlpEncode $ toInteger nID, rlpEncode $ toInteger d, rlpEncode lh, rlpEncode gh])
 wireMessage2Obj (QqqqStatus ver) = (0x10, RLPArray [rlpEncode $ toInteger ver])
 wireMessage2Obj (GetTransactions transactions) = (0x11, RLPArray (rlpEncode <$> transactions))
 wireMessage2Obj (Transactions transactions) = (0x12, RLPArray (rlpEncode <$> transactions))
