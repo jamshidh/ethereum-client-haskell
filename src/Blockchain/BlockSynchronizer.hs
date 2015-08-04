@@ -59,7 +59,17 @@ findFirstHashAlreadyInDB hashes = do
 
 handleNewBlockHashes::[SHA]->EthCryptM ContextM ()
 --handleNewBlockHashes _ list | trace ("########### handleNewBlockHashes: " ++ show list) $ False = undefined
-handleNewBlockHashes [] = return () --error "handleNewBlockHashes called with empty list"
+handleNewBlockHashes [] = do
+  --this really shouldn't happen, but the go client was doing it
+  --For now I will just reset the hash sync when this happens, the client will restart the sync
+
+  --error "handleNewBlockHashes called with empty list"
+
+  liftIO $ putStrLn $ CL.red "peer unexpectedly responded with no blocks, so for now I will reset the sync"
+  
+  cxt <- lift get
+  lift $ put cxt{neededBlockHashes=[]}
+  
 handleNewBlockHashes blockHashes = do
   result <- lift $ findFirstHashAlreadyInDB blockHashes
   case result of
