@@ -9,6 +9,7 @@ ipAddresses::[(String, PortNumber)]
 ipAddresses =
   [
     ("127.0.0.1", 30303),
+    ("10.0.0.101", 30303),
     ("poc-9.ethdev.com", 30303),
     ("poc-8.ethdev.com", 30303),
     ("api.blockapps.net", 30303),
