@@ -144,8 +144,8 @@ handleMsg m = do
   lift $ displayMessage False m
   case m of
     Hello{} -> do
-             bestBlock <- lift $ getBestBlock flags_altGenBlock
-             genesisBlockHash <- lift $ getGenesisBlockHash flags_altGenBlock
+             bestBlock <- lift getBestBlock
+             genesisBlockHash <- lift getGenesisBlockHash
              sendMsg Status{
                protocolVersion=fromIntegral ethVersion,
                networkID=1,
@@ -172,7 +172,7 @@ handleMsg m = do
       --ifBlockInDBSubmitNextBlock baseDifficulty block
 
     Status{latestHash=lh, genesisHash=gh} -> do
-      genesisBlockHash <- lift $ getGenesisBlockHash flags_altGenBlock
+      genesisBlockHash <- lift getGenesisBlockHash
       when (gh /= genesisBlockHash) $ error "Wrong genesis block hash!!!!!!!!"
       handleNewBlockHashes [lh]
     GetTransactions _ -> do
@@ -180,7 +180,7 @@ handleMsg m = do
       --liftIO $ sendMessage handle GetTransactions
       return ()
     (Transactions transactions) -> do
-      bestBlock <-lift $ getBestBlock flags_altGenBlock
+      bestBlock <-lift getBestBlock
       when flags_wrapTransactions $ submitNewBlock bestBlock transactions
       
     _-> return ()
@@ -229,7 +229,7 @@ doit = do
     liftIO $ putStrLn "Connected"
 
     lift $ addCode B.empty --This is probably a bad place to do this, but I can't think of a more natural place to do it....  Empty code is used all over the place, and it needs to be in the database.
-    lift (setStateDBStateRoot . blockDataStateRoot . blockBlockData =<< getBestBlock flags_altGenBlock)
+    lift (setStateDBStateRoot . blockDataStateRoot . blockBlockData =<< getBestBlock)
 
   --signedTx <- createTransaction simpleTX
   --signedTx <- createTransaction outOfGasTX
@@ -310,7 +310,6 @@ main = do
                            (hashDB' dbs)
                            (codeDB' dbs)
                            (sqlDB' dbs)
-                           (detailsDB' dbs)
                            [] 0 [] dataset []) $
            runEthCryptM myPriv otherPubKey ipAddress (fromIntegral thePort) $ do
               

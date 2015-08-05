@@ -23,7 +23,6 @@ import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
 import qualified Blockchain.Database.MerklePatricia as MPDB
 import Blockchain.DB.CodeDB
-import Blockchain.DB.DetailsDB
 import Blockchain.DB.HashDB
 import Blockchain.DB.SQLDB
 import Blockchain.DB.StateDB
@@ -39,7 +38,6 @@ data Context =
     contextHashDB::HashDB,
     contextCodeDB::CodeDB,
     contextSQLDB::SQLDB,
-    contextDetailsDB::DetailsDB,
     neededBlockHashes::[SHA],
     pingCount::Int,
     peers::[Peer],
@@ -70,9 +68,6 @@ instance HasCodeDB ContextM where
 
 instance HasSQLDB ContextM where
   getSQLDB = fmap contextSQLDB get
-
-instance HasDetailsDB ContextM where
-  getDetailsDB = fmap contextDetailsDB get
 
 {-
 initContext::String->IO Context
