@@ -122,7 +122,7 @@ submitNextBlockToDB b transactions = do
   --n <- liftIO $ fastFindNonce newBlock
 
   let theNewBlock = newBlock{blockBlockData=(blockBlockData newBlock){blockDataNonce= -1}}
-  lift $ addBlocks True [theNewBlock]
+  lift $ addBlocks [theNewBlock]
 
 submitNewBlock::Block->[Transaction]->EthCryptM ContextM ()
 submitNewBlock b transactions = do
@@ -308,7 +308,6 @@ main = do
       _ <- flip runStateT (Context
                            (stateDB' dbs)
                            (hashDB' dbs)
-                           (blockDB' dbs)
                            (codeDB' dbs)
                            (sqlDB' dbs)
                            (detailsDB' dbs)

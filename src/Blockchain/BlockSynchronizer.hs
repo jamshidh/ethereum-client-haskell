@@ -49,7 +49,7 @@ debug_blockDBGet hash' = do
 
 findFirstHashAlreadyInDB::[SHA]->ContextM (Maybe SHA)
 findFirstHashAlreadyInDB hashes = do
-  items <- filterM (fmap (not . isNothing) . blockDBGet . BL.toStrict . Bin.encode) hashes
+  items <- filterM (fmap (not . isNothing) . getBlockLite) hashes
   --items <- lift $ filterM (fmap (not . isNothing) . debug_blockDBGet . BL.toStrict . Bin.encode) hashes
   return $ safeHead items
   where
@@ -102,7 +102,7 @@ handleNewBlocks blocks = do
   let orderedBlocks =
         sortBy (compare `on` blockDataNumber . blockBlockData) blocks
 
-  maybeParentBlock <- lift $ getBlock (blockDataParentHash $ blockBlockData $ head $ orderedBlocks) --head OK, [] weeded out
+  maybeParentBlock <- lift $ getBlockLite (blockDataParentHash $ blockBlockData $ head $ orderedBlocks) --head OK, [] weeded out
 
   cxt <- lift get
 
@@ -114,6 +114,6 @@ handleNewBlocks blocks = do
       liftIO $ putStrLn $ CL.red "Warning: a new block has arrived before another block sync is in progress.  This block will be thrown away for now, and re-requested later."
     (_, Just _) -> do
       liftIO $ putStrLn "Submitting new blocks"
-      lift $ addBlocks False $ sortBy (compare `on` blockDataNumber . blockBlockData) blocks
+      lift $ addBlocks $ sortBy (compare `on` blockDataNumber . blockBlockData) blocks
       liftIO $ putStrLn $ show (length blocks) ++ " blocks have been submitted"
       askForSomeBlocks
