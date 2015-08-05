@@ -71,10 +71,10 @@ Just coinbasePrvKey = H.makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3d
 getNextBlock::Block->UTCTime->[Transaction]->ContextM Block
 getNextBlock b ts transactions = do
   let theCoinbase = prvKey2Address coinbasePrvKey
-  setStateDBStateRoot $ blockDataStateRoot bd
-  success <- addToBalance theCoinbase (1500*finney)
+  --setStateDBStateRoot $ blockDataStateRoot bd
+  --success <- addToBalance theCoinbase (1500*finney)
 
-  when (not success) $ error "coinbase overflow??  This should never happen."
+  --when (not success) $ error "coinbase overflow??  This should never happen."
 
   return Block{
                blockBlockData=testGetNextBlockData $ SHAPtr "", -- $ stateRoot $ stateDB dbs,
@@ -228,8 +228,8 @@ doit::EthCryptM ContextM ()
 doit = do
     liftIO $ putStrLn "Connected"
 
-    lift $ addCode B.empty --This is probably a bad place to do this, but I can't think of a more natural place to do it....  Empty code is used all over the place, and it needs to be in the database.
-    lift (setStateDBStateRoot . blockDataStateRoot . blockBlockData =<< getBestBlock)
+    --lift $ addCode B.empty --This is probably a bad place to do this, but I can't think of a more natural place to do it....  Empty code is used all over the place, and it needs to be in the database.
+    --lift (setStateDBStateRoot . blockDataStateRoot . blockBlockData =<< getBestBlock)
 
   --signedTx <- createTransaction simpleTX
   --signedTx <- createTransaction outOfGasTX
@@ -306,9 +306,7 @@ main = do
   runResourceT $ do
       dbs <- openDBs "h"
       _ <- flip runStateT (Context
-                           (stateDB' dbs)
                            (hashDB' dbs)
-                           (codeDB' dbs)
                            (sqlDB' dbs)
                            [] 0 [] dataset []) $
            runEthCryptM myPriv otherPubKey ipAddress (fromIntegral thePort) $ do
