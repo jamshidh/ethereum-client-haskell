@@ -21,6 +21,7 @@ import Blockchain.Data.BlockDB
 import Blockchain.Data.Wire
 import Blockchain.DB.BlockDB
 import Blockchain.ExtDBs
+import Blockchain.Format
 import Blockchain.Frame
 import Blockchain.SHA
 
@@ -79,7 +80,7 @@ handleNewBlockHashes blockHashes = do
                 lift $ put cxt{neededBlockHashes=reverse blockHashes ++ neededBlockHashes cxt}
                 sendMsg $ GetBlockHashes [last blockHashes] 0x500
     Just hashInDB -> do
-                liftIO $ putStrLn $ "Found a serverblock already in our database: " ++ show (pretty hashInDB)
+                liftIO $ putStrLn $ "Found a serverblock already in our database: " ++ format hashInDB
                 cxt <- lift get
                 --liftIO $ putStrLn $ show (pretty blockHashes)
                 lift $ put cxt{neededBlockHashes=reverse (takeWhile (/= hashInDB) blockHashes) ++ neededBlockHashes cxt}

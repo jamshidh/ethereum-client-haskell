@@ -135,8 +135,8 @@ instance Format Message where
       "    protocolVersion: " ++ show ver ++ "\n" ++
       "    networkID: " ++ show nID ++ "\n" ++
       "    totalDifficulty: " ++ show d ++ "\n" ++
-      "    latestHash: " ++ show (pretty lh) ++ "\n" ++
-      "    genesisHash: " ++ show (pretty gh)
+      "    latestHash: " ++ format lh ++ "\n" ++
+      "    genesisHash: " ++ format gh
   format (QqqqStatus ver) =
     CL.blue "QqqqStatus " ++
       "    protocolVersion: " ++ show ver
@@ -153,16 +153,16 @@ instance Format Message where
 
   format (GetBlocks shas) =
     CL.blue "GetBlocks:" ++ 
-    tab ("\n" ++ intercalate "\n    " (show . pretty <$> shas))
+    tab ("\n" ++ intercalate "\n    " (format <$> shas))
   format (Blocks blocks) = CL.blue "Blocks:" ++ tab("\n" ++ intercalate "\n    " (format <$> blocks))
   format (GetBlockHashes pSHAs numChild) =
     CL.blue "GetBlockHashes" ++ " (max: " ++ show numChild ++ "):\n    " ++
-    intercalate ",\n    " (show . pretty <$> pSHAs)
+    intercalate ",\n    " (format <$> pSHAs)
   format (NewBlockPacket block d) = CL.blue "NewBlockPacket" ++ " (" ++ show d ++ ")" ++ tab ("\n" ++ format block)
   format (PacketCount c) =
     CL.blue "PacketCount:" ++ show c
   format QqqqPacket = CL.blue "QqqqPacket"
-  format (GetTransactions transactions) = CL.blue "GetTransactions"  ++ tab("\n" ++ intercalate "\n    " (show . pretty <$> transactions))
+  format (GetTransactions transactions) = CL.blue "GetTransactions"  ++ tab("\n" ++ intercalate "\n    " (format <$> transactions))
   format (WhisperProtocolVersion ver) = CL.blue "WhisperProtocolVersion " ++ show ver
 
 
