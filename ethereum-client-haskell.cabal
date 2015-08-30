@@ -74,6 +74,7 @@ library
                  , directory
                  , either
                  , entropy
+                 , esqueleto
                  , ethereum-data-sql
                  , ethereum-encryption
                  , ethereum-merkle-patricia-db
@@ -90,6 +91,7 @@ library
                  , network
                  , nibblestring
                  , resourcet
+                 , safe
                  , SHA2
                  , time
                  , transformers

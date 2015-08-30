@@ -6,11 +6,14 @@ module Blockchain.BlockSynchronizer (
 
 import Control.Monad.IO.Class
 import Control.Monad.State
+import Control.Monad.Trans.Resource
 import qualified Data.Binary as Bin
 import qualified Data.ByteString.Lazy as BL
 import Data.Function
 import Data.List
 import Data.Maybe
+import qualified Database.Esqueleto as E
+import Safe
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Blockchain.BlockChain
@@ -18,8 +21,10 @@ import qualified Blockchain.Colors as CL
 import Blockchain.Communication
 import Blockchain.Context
 import Blockchain.Data.BlockDB
+import Blockchain.Data.DataDefs
 import Blockchain.Data.Wire
 import Blockchain.DB.BlockDB
+import Blockchain.DB.SQLDB
 import Blockchain.ExtDBs
 import Blockchain.Format
 import Blockchain.Frame
@@ -48,15 +53,18 @@ debug_blockDBGet hash' = do
         else return maybeBlockBytes
 -}
 
+getBlockExists :: (MonadResource m, HasSQLDB m)=>SHA->m Bool
+getBlockExists h = do
+  fmap (not . null) $
+      sqlQuery $
+      E.select $
+         E.from $ \bd -> do
+                     E.where_ (bd E.^. BlockDataRefHash E.==. E.val h)
+                     return $ bd E.^. BlockDataRefHash
+
 findFirstHashAlreadyInDB::[SHA]->ContextM (Maybe SHA)
-findFirstHashAlreadyInDB hashes = do
-  items <- filterM (fmap (not . isNothing) . getBlockLite) hashes
-  --items <- lift $ filterM (fmap (not . isNothing) . debug_blockDBGet . BL.toStrict . Bin.encode) hashes
-  return $ safeHead items
-  where
-    safeHead::[a]->Maybe a
-    safeHead [] = Nothing
-    safeHead (x:_) = Just x
+findFirstHashAlreadyInDB hashes =
+  fmap headMay $ filterM getBlockExists hashes
 
 handleNewBlockHashes::[SHA]->EthCryptM ContextM ()
 --handleNewBlockHashes _ list | trace ("########### handleNewBlockHashes: " ++ show list) $ False = undefined
