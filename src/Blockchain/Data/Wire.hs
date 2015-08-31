@@ -1,4 +1,7 @@
 
+--TODO : Take this next line out
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module Blockchain.Data.Wire (
   Message(..),
   Capability(..),
@@ -116,6 +119,7 @@ data Message =
 
 instance Format Point where
   format (Point x y) = padZeros 64 (showHex x "") ++ padZeros 64 (showHex y "")
+  format PointO = "PointO"
 
 instance Format Message where
   format Hello{version=ver, clientId=c, capability=cap, port=p, nodeId=n} =
@@ -169,6 +173,7 @@ instance Format Message where
 instance RLPSerializable Point where
   rlpEncode (Point x y) =
     rlpEncode $ B.pack $ (word256ToBytes $ fromInteger x) ++ (word256ToBytes $ fromInteger y)
+  rlpEncode PointO = error "rlpEncode for Point called for PointO"
   rlpDecode o =
     Point (toInteger $ bytesToWord256 $ B.unpack x) (toInteger $ bytesToWord256 $ B.unpack y)
     where

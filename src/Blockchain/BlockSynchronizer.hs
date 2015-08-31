@@ -1,4 +1,3 @@
-
 module Blockchain.BlockSynchronizer (
                           handleNewBlockHashes,
                           handleNewBlocks
@@ -7,14 +6,10 @@ module Blockchain.BlockSynchronizer (
 import Control.Monad.IO.Class
 import Control.Monad.State
 import Control.Monad.Trans.Resource
-import qualified Data.Binary as Bin
-import qualified Data.ByteString.Lazy as BL
 import Data.Function
 import Data.List
-import Data.Maybe
 import qualified Database.Esqueleto as E
 import Safe
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Blockchain.BlockChain
 import qualified Blockchain.Colors as CL
@@ -23,9 +18,7 @@ import Blockchain.Context
 import Blockchain.Data.BlockDB
 import Blockchain.Data.DataDefs
 import Blockchain.Data.Wire
-import Blockchain.DB.BlockDB
 import Blockchain.DB.SQLDB
-import Blockchain.ExtDBs
 import Blockchain.Format
 import Blockchain.Frame
 import Blockchain.SHA

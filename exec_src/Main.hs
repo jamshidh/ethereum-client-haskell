@@ -26,15 +26,12 @@ import Blockchain.Constants
 import Blockchain.Context
 import Blockchain.Data.Address
 import Blockchain.Data.BlockDB
-import Blockchain.Data.GenesisBlock
 --import Blockchain.Data.SignedTransaction
 import Blockchain.Data.Transaction
 import Blockchain.Data.Wire
 import Blockchain.Database.MerklePatricia
-import Blockchain.DB.CodeDB
 import Blockchain.DB.DetailsDB
-import Blockchain.DB.ModifyStateDB
-import Blockchain.DB.StateDB
+--import Blockchain.DB.ModifyStateDB
 import Blockchain.DBM
 import Blockchain.Display
 import Blockchain.PeerUrls
@@ -68,9 +65,10 @@ nextDifficulty oldDifficulty oldTime newTime = max nextDiff' minimumDifficulty
 coinbasePrvKey::H.PrvKey
 Just coinbasePrvKey = H.makePrvKey 0xac3e8ce2ef31c3f45d5da860bcd9aee4b37a05c5a3ddee40dd061620c3dab380
 
+
 getNextBlock::Block->UTCTime->[Transaction]->ContextM Block
 getNextBlock b ts transactions = do
-  let theCoinbase = prvKey2Address coinbasePrvKey
+  --let theCoinbase = prvKey2Address coinbasePrvKey
   --setStateDBStateRoot $ blockDataStateRoot bd
   --success <- addToBalance theCoinbase (1500*finney)
 

@@ -105,7 +105,6 @@ library
                    Blockchain.Data.Peer
 --                   Blockchain.Data.TransactionReceipt
                    Blockchain.Data.Wire
-                   Blockchain.DB.ModifyStateDB
                    Blockchain.Display
 --                   Blockchain.JCommand
                    Blockchain.Mining
