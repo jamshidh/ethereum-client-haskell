@@ -37,7 +37,7 @@ executable ethereumH
                  , directory
                  , either
                  , entropy
-                 , ethereum-data-sql
+                 , ethereum-data-leveldb
                  , ethereum-encryption
                  , ethereum-merkle-patricia-db
                  , ethereum-rlp
@@ -78,7 +78,7 @@ library
                  , directory
                  , either
                  , entropy
-                 , ethereum-data-sql
+                 , ethereum-data-leveldb
                  , ethereum-encryption
                  , ethereum-merkle-patricia-db
                  , ethereum-rlp
